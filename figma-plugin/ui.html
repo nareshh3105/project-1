@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OBS CodeBuilders UI Kit Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Inter, -apple-system, sans-serif;
+    background: #0B0B0F;
+    color: #FFFFFF;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 16px;
+    min-height: 420px;
+  }
+
+  header {
+    margin-bottom: 16px;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #8A5CFF 0%, #FF4FD8 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: #6C6C80;
+    font-size: 11px;
+    margin-left: 38px;
+  }
+
+  .divider {
+    height: 1px;
+    background: #2A2A3A;
+    margin: 12px 0;
+  }
+
+  /* Build sections */
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #6C6C80;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+
+  .checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #14141C;
+    font-size: 12px;
+    color: #B9B9C9;
+    border: 1px solid #2A2A3A;
+    transition: border-color 0.15s;
+  }
+
+  .check-item.active {
+    border-color: #8A5CFF;
+    color: #FFFFFF;
+    background: rgba(138,92,255,0.10);
+  }
+
+  .check-item.done {
+    border-color: #3DDC97;
+    color: #3DDC97;
+    background: rgba(61,220,151,0.06);
+  }
+
+  .check-item.error {
+    border-color: #FF5470;
+    color: #FF5470;
+    background: rgba(255,84,112,0.06);
+  }
+
+  .check-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #2A2A3A;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .check-item.active .check-dot  { background: #8A5CFF; box-shadow: 0 0 6px rgba(138,92,255,0.7); animation: pulse 1s infinite; }
+  .check-item.done  .check-dot   { background: #3DDC97; }
+  .check-item.error .check-dot   { background: #FF5470; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  /* Progress bar */
+  .progress-bar-track {
+    height: 4px;
+    background: #1C1C27;
+    border-radius: 999px;
+    margin-bottom: 4px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #8A5CFF 0%, #FF4FD8 100%);
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+
+  .progress-label {
+    font-size: 11px;
+    color: #6C6C80;
+    margin-bottom: 12px;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  button {
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0 16px;
+    height: 32px;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #8A5CFF 0%, #FF4FD8 100%);
+    color: #FFFFFF;
+    flex: 1;
+  }
+
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-ghost {
+    background: #1C1C27;
+    color: #B9B9C9;
+    border: 1px solid #2A2A3A;
+  }
+
+  .btn-ghost:hover:not(:disabled) { background: #22222F; color: #FFFFFF; }
+
+  /* Log area */
+  #log {
+    margin-top: 12px;
+    background: #14141C;
+    border: 1px solid #2A2A3A;
+    border-radius: 8px;
+    padding: 8px;
+    height: 80px;
+    overflow-y: auto;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 10px;
+    line-height: 1.6;
+    color: #6C6C80;
+  }
+
+  #log .log-info  { color: #B9B9C9; }
+  #log .log-ok    { color: #3DDC97; }
+  #log .log-warn  { color: #FFC857; }
+  #log .log-error { color: #FF5470; }
+
+  /* Done banner */
+  #done-banner {
+    display: none;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(61,220,151,0.10);
+    border: 1px solid #3DDC97;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #3DDC97;
+    text-align: center;
+  }
+
+  #done-banner strong { display: block; margin-bottom: 2px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">OB</div>
+    <h1>OBS CodeBuilders UI Kit</h1>
+  </div>
+  <div class="subtitle">Figma design system builder — v1.0.0</div>
+</header>
+
+<div class="divider"></div>
+
+<div class="section-label">Build steps</div>
+<div class="checklist" id="checklist">
+  <div class="check-item" id="step-pages">
+    <div class="check-dot"></div>
+    <span>Create page structure (8 pages)</span>
+  </div>
+  <div class="check-item" id="step-tokens">
+    <div class="check-dot"></div>
+    <span>Register color, typography &amp; effect styles</span>
+  </div>
+  <div class="check-item" id="step-primitives">
+    <div class="check-dot"></div>
+    <span>Build primitives — dividers, handles, overlays</span>
+  </div>
+  <div class="check-item" id="step-buttons">
+    <div class="check-dot"></div>
+    <span>Build button component set (5 variants × 5 states)</span>
+  </div>
+  <div class="check-item" id="step-inputs">
+    <div class="check-dot"></div>
+    <span>Build input component set — text, dropdown, toggle, slider</span>
+  </div>
+  <div class="check-item" id="step-list">
+    <div class="check-dot"></div>
+    <span>Build list/item component set</span>
+  </div>
+  <div class="check-item" id="step-variables">
+    <div class="check-dot"></div>
+    <span>Set up Figma Variables — Dark &amp; Light tokens</span>
+  </div>
+  <div class="check-item" id="step-icons">
+    <div class="check-dot"></div>
+    <span>Build icon component set (26 icons)</span>
+  </div>
+  <div class="check-item" id="step-states">
+    <div class="check-dot"></div>
+    <span>Build button &amp; input state variants</span>
+  </div>
+  <div class="check-item" id="step-panels">
+    <div class="check-dot"></div>
+    <span>Build dockable panel system (12 panels)</span>
+  </div>
+  <div class="check-item" id="step-modals">
+    <div class="check-dot"></div>
+    <span>Build modal &amp; dialog system (10 modals)</span>
+  </div>
+  <div class="check-item" id="step-menus">
+    <div class="check-dot"></div>
+    <span>Build menu bar, toolbars &amp; context menus</span>
+  </div>
+  <div class="check-item" id="step-frames">
+    <div class="check-dot"></div>
+    <span>Assemble 3 full 1440×900 app frames</span>
+  </div>
+</div>
+
+<div class="progress-bar-track">
+  <div class="progress-bar-fill" id="progress-fill"></div>
+</div>
+<div class="progress-label" id="progress-label">Ready to build</div>
+
+<div class="btn-row">
+  <button class="btn-primary" id="btn-build" onclick="startBuild()">Build UI Kit</button>
+  <button class="btn-ghost"   id="btn-cancel" onclick="cancelBuild()" disabled>Cancel</button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-missing" onclick="buildMissing()" style="flex:1;background:rgba(138,92,255,0.1);border-color:#8A5CFF;color:#8A5CFF">
+    + Add Missing Panels (hotkeys &amp; audio monitoring)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-polish" onclick="buildPolish()" style="flex:1;background:rgba(255,79,216,0.1);border-color:#FF4FD8;color:#FF4FD8">
+    ✦ Polish App Frames (accent bar, glow, badge)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-icons" onclick="buildIcons()" style="flex:1;background:rgba(61,220,151,0.08);border-color:#3DDC97;color:#3DDC97">
+    ⬡ Replace Icon Placeholders (Lucide SVG)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-orphans" onclick="cleanOrphans()" style="flex:1;background:rgba(255,84,112,0.10);border-color:#FF5470;color:#FF5470;font-weight:600">
+    🗑 Remove floating/mixer &amp; floating/stats
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-refframe" onclick="buildRefFrame()" style="flex:1;background:rgba(61,220,151,0.10);border-color:#3DDC97;color:#3DDC97;font-weight:600">
+    ⬛ Rebuild App Frame (reference layout)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-reorg" onclick="reorgPage()" style="flex:1;background:rgba(138,92,255,0.12);border-color:#8A5CFF;color:#8A5CFF;font-weight:600">
+    ⊞ Clean Up Page 01 Layout
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-enhance" onclick="buildEnhance()" style="flex:1;background:rgba(255,200,87,0.08);border-color:#FFC857;color:#FFC857">
+    ✶ Enhance Design (cover · icon showcase · labels)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-proto" onclick="buildProto()" style="flex:1;background:rgba(255,84,112,0.08);border-color:#FF5470;color:#FF5470">
+    ▶ Wire Prototype Interactions (7 flows)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-mproto" onclick="buildMProto()" style="flex:1;background:rgba(255,200,87,0.10);border-color:#FFC857;color:#FFC857;font-weight:600">
+    ⬡ Wire Modal Prototypes (5 flows · scrim scenes)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:4px">
+  <button class="btn-ghost" onclick="diagnoseReactions()" style="flex:1;background:rgba(100,100,140,0.12);border-color:#6C6C80;color:#B9B9C9;font-size:11px">
+    🔍 Diagnose Reactions (select any node with prototype link first)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-features" onclick="buildFeatures()" style="flex:1;background:rgba(138,92,255,0.14);border-color:#8A5CFF;color:#FFFFFF;font-weight:600;font-size:12px">
+    ⚙ Build Feature Components (15 modals · 9 OBS areas)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-polish2" onclick="buildPolish2()" style="flex:1;background:linear-gradient(135deg,rgba(255,200,87,0.15),rgba(255,79,216,0.15));border:1.5px solid #FFC857;color:#FFFFFF;font-weight:700;font-size:12px;height:40px">
+    ✦ Full Design Polish (preview · icons · meters · status bar · thumbnails)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-adv" onclick="buildAdv()" style="flex:1;background:linear-gradient(135deg,rgba(138,92,255,0.18),rgba(255,79,216,0.18));border-image:linear-gradient(135deg,#8A5CFF,#FF4FD8) 1;border-width:1.5px;border-style:solid;color:#FFFFFF;font-weight:700;font-size:12px">
+    ⚡ Build Advanced Flows (live states · settings · source chain)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:8px">
+  <button class="btn-ghost" id="btn-allwire" onclick="buildAllWire()" style="flex:1;background:linear-gradient(135deg,rgba(61,220,151,0.18),rgba(138,92,255,0.18));border:1.5px solid #3DDC97;color:#FFFFFF;font-weight:700;font-size:13px;height:38px">
+    ⚡ Wire All Buttons (every interactive element)
+  </button>
+</div>
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-completewire" onclick="buildCompleteWire()" style="flex:1;background:linear-gradient(135deg,rgba(255,79,216,0.22),rgba(138,92,255,0.22));border:2px solid #FF4FD8;color:#FFFFFF;font-weight:700;font-size:13px;height:42px;letter-spacing:0.01em">
+    ✦ Complete Wire — every button works (menus · scenes · fallback sweep)
+  </button>
+</div>
+
+<div class="btn-row" style="margin-top:6px">
+  <button class="btn-ghost" id="btn-pdf" onclick="buildPDF()" style="flex:1;background:linear-gradient(135deg,rgba(138,92,255,0.25),rgba(255,79,216,0.25));border:2px solid #8A5CFF;color:#FFFFFF;font-weight:700;font-size:13px;height:44px;letter-spacing:0.01em">
+    📄 Export Design PDF (screenshots + explanations of every section)
+  </button>
+</div>
+<div id="pdf-progress" style="display:none;margin-top:6px;font-size:11px;color:#B9B9C9;text-align:center"></div>
+
+<div id="log" aria-label="Build log"></div>
+<div id="done-banner">
+  <strong>UI Kit built successfully</strong>
+  All pages, components, and app frames are ready in your Figma file.
+</div>
+
+<script>
+  const STEPS = [
+    'step-pages', 'step-tokens', 'step-primitives',
+    'step-buttons', 'step-inputs', 'step-list',
+    'step-variables', 'step-icons', 'step-states',
+    'step-panels', 'step-modals', 'step-menus', 'step-frames'
+  ];
+
+  let cancelled = false;
+
+  function setStep(id, state) {
+    const el = document.getElementById(id);
+    el.className = 'check-item ' + state;
+  }
+
+  function setProgress(done, total, label) {
+    const pct = Math.round((done / total) * 100);
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = label || (pct + '%');
+  }
+
+  function log(msg, type = 'info') {
+    const el = document.getElementById('log');
+    const line = document.createElement('div');
+    line.className = 'log-' + type;
+    const ts = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    line.textContent = `[${ts}] ${msg}`;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function buildMissing() {
+    document.getElementById('btn-missing').disabled = true;
+    document.getElementById('btn-missing').textContent = 'Building…';
+    log('Adding missing panels to page 02…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_MISSING' } }, '*');
+  }
+
+  function buildPolish() {
+    document.getElementById('btn-polish').disabled = true;
+    document.getElementById('btn-polish').textContent = 'Polishing…';
+    log('Polishing app frames…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_POLISH' } }, '*');
+  }
+
+  function buildIcons() {
+    document.getElementById('btn-icons').disabled = true;
+    document.getElementById('btn-icons').textContent = 'Replacing icons…';
+    log('Replacing 26 icon placeholders with Lucide SVG…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_ICONS' } }, '*');
+  }
+
+  function cleanOrphans() {
+    document.getElementById('btn-orphans').disabled = true;
+    document.getElementById('btn-orphans').textContent = 'Removing…';
+    parent.postMessage({ pluginMessage: { type: 'CLEAN_ORPHANS' } }, '*');
+  }
+
+  function buildRefFrame() {
+    document.getElementById('btn-refframe').disabled = true;
+    document.getElementById('btn-refframe').textContent = 'Building…';
+    log('Rebuilding app/default with reference layout…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_REFFRAME' } }, '*');
+  }
+
+  function reorgPage() {
+    document.getElementById('btn-reorg').disabled = true;
+    document.getElementById('btn-reorg').textContent = 'Cleaning up…';
+    log('Reorganizing page 01 layout…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'REORG_PAGE01' } }, '*');
+  }
+
+  function buildProto() {
+    document.getElementById('btn-proto').disabled = true;
+    document.getElementById('btn-proto').textContent = 'Wiring interactions…';
+    log('Wiring prototype interactions on page 03…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_PROTO' } }, '*');
+  }
+
+  function buildMProto() {
+    document.getElementById('btn-mproto').disabled = true;
+    document.getElementById('btn-mproto').textContent = 'Building modal scenes…';
+    log('Creating modal prototype flows on page 03…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_MPROTO' } }, '*');
+  }
+
+  function diagnoseReactions() {
+    log('Reading reactions from selected node…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'DIAGNOSE_REACTIONS' } }, '*');
+  }
+
+  function buildFeatures() {
+    document.getElementById('btn-features').disabled = true;
+    document.getElementById('btn-features').textContent = 'Building feature components…';
+    log('Building 15 OBS feature modals on page 02…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_FEATURES' } }, '*');
+  }
+
+  function buildAdv() {
+    document.getElementById('btn-adv').disabled = true;
+    document.getElementById('btn-adv').textContent = 'Building advanced flows…';
+    log('Building live states, Settings dialog, source chain…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_ADV' } }, '*');
+  }
+
+  function buildEnhance() {
+    document.getElementById('btn-enhance').disabled = true;
+    document.getElementById('btn-enhance').textContent = 'Enhancing design…';
+    log('Running design enhancement pass…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_ENHANCE' } }, '*');
+  }
+
+  function buildAllWire() {
+    document.getElementById('btn-allwire').disabled = true;
+    document.getElementById('btn-allwire').textContent = 'Wiring all buttons…';
+    log('Wiring every interactive button across all frames…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_ALLWIRE' } }, '*');
+  }
+
+  function buildPDF() {
+    document.getElementById('btn-pdf').disabled = true;
+    document.getElementById('btn-pdf').textContent = '📄 Capturing screens…';
+    document.getElementById('pdf-progress').style.display = 'block';
+    document.getElementById('pdf-progress').textContent = 'Exporting frames…';
+    log('Exporting all frames for PDF…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_PDF' } }, '*');
+  }
+
+  function generatePDF(images) {
+    const DESCRIPTIONS = {
+      'app/default': {
+        overview: 'The main OBS CodeBuilders interface — a full 1440×900 desktop layout with the neon purple-to-magenta Code Builders theme. All primary streaming and recording controls are accessible from this single view.',
+        sections: [
+          { title: 'Menu Bar', desc: 'Top navigation bar with File, Edit, View, Profile, Scene Collection, Tools, and Help menus. Each menu opens a dropdown overlay with relevant actions.' },
+          { title: 'Toolbar', desc: '7 quick-access icon buttons: Studio Mode toggle, Fullscreen Preview, Screenshot, Stats (currently active — purple glow), Multiview, Recording Folder, and Settings.' },
+          { title: 'Scenes Panel (left)', desc: 'Manage multiple recording/streaming scenes. Active scene (Main Scene) is highlighted with purple accent. Switch instantly between Webcam Only, Screen Share, and Intermission scenes — each has its own source layout.' },
+          { title: 'Sources Panel (left)', desc: 'Add and manage video/audio sources for the active scene. Supports Display Capture, Webcam, Mic/AUX, Browser Source, Image, and more. The active source is highlighted. The red SCENES+ button opens the Add Source dialog.' },
+          { title: 'Preview Canvas (center)', desc: 'Live preview of the current output. Shows the current scene composition at 1920×1080. Dashed safe-area guides help frame content. The canvas header shows resolution and a LIVE pill when streaming.' },
+          { title: 'Audio Mixer (bottom center)', desc: 'Controls audio levels for Desktop, Mic/Aux, Browser, and Music channels. Each strip has a segmented meter (green → yellow → red), volume fader, and mute toggle. Mic/Aux is shown muted (red).' },
+          { title: 'Transitions Panel (bottom right)', desc: 'Configure scene transitions. The Cut button (gradient purple-to-magenta) triggers an immediate scene switch. Fade, Stinger, Swipe, and custom transitions can be added.' },
+          { title: 'Controls Panel (right)', desc: 'Primary streaming/recording controls: Start Streaming, Start Recording, Virtual Camera, Studio Mode, Settings. Start Streaming uses the gradient accent to indicate it is the primary CTA.' },
+          { title: 'Status Bar (bottom)', desc: 'Shows live system metrics: connection status (green dot), CPU%, FPS (green when healthy), dropped frames, disk space, REC timer, and LIVE timer — all color-coded by severity.' },
+        ]
+      },
+      'app/studio-mode': {
+        overview: 'Studio Mode splits the view into two canvases — Preview (what you are preparing) and Program (what is currently live). This lets you set up the next scene without disrupting the broadcast.',
+        sections: [
+          { title: 'Preview Canvas (left)', desc: 'Shows the scene you are preparing to go live. Make changes, adjust sources, and configure settings here without affecting what viewers see.' },
+          { title: 'Transition Column (center)', desc: 'The central Cut button pushes the Preview to Program. Additional transition types can be added here. The button uses the gradient accent to indicate it is the key action.' },
+          { title: 'Program Canvas (right)', desc: 'Shows what is currently live/recorded. Has a red LIVE pill in the header and a red border stroke to clearly distinguish it from Preview. Read-only — changes only apply when you transition.' },
+          { title: 'Studio Mode Label', desc: 'A purple-tinted banner at the top clearly indicates Studio Mode is active, preventing confusion between preview and live output.' },
+        ]
+      },
+      'app/streaming-live': {
+        overview: 'The interface state when live streaming is active. The Start Streaming button becomes Stop Streaming (red), and a LIVE badge with timer appears over the preview canvas.',
+        sections: [
+          { title: 'Stop Streaming Button', desc: 'Replaces Start Streaming when live. Red fill with white text makes it clearly a destructive/stop action. Clicking navigates back to the default state.' },
+          { title: 'LIVE Badge', desc: 'A red pill badge "⬤ LIVE 00:00" overlaid on the preview canvas shows elapsed streaming time. Positioned in the bottom-left of the canvas for visibility without obscuring content.' },
+          { title: 'All Other Controls', desc: 'Start Recording, Virtual Camera, Studio Mode, and Settings remain fully accessible during a live stream — allowing multi-tasking without stopping the broadcast.' },
+        ]
+      },
+      'app/recording-active': {
+        overview: 'The interface state when local recording is active. Similar to streaming-live but with a REC badge and Stop Recording button.',
+        sections: [
+          { title: 'Stop Recording Button', desc: 'Replaces Start Recording. Red fill indicates an active/destructive state. Clicking stops the recording and returns to the default state.' },
+          { title: 'REC Badge', desc: '"⬤ REC 00:00:00" badge with elapsed recording time. Positioned in the bottom-right of the preview canvas, separate from the LIVE badge position to support simultaneous streaming + recording.' },
+        ]
+      },
+      'app/scene-webcam-only': {
+        overview: 'Scene variant frame for the "Webcam Only" scene. Visually identical to the main interface but with a purple "WEBCAM ONLY" indicator badge, showing which scene is currently active.',
+        sections: [
+          { title: 'Scene Badge', desc: 'A purple gradient badge in the center of the canvas indicates the active scene. Color-coded: purple for Webcam Only, green for Screen Share, amber for Intermission.' },
+        ]
+      },
+      'app/scene-screen-share': {
+        overview: 'Scene variant for the "Screen Share" scene. Green "SCREEN SHARE" badge.',
+        sections: [{ title: 'Scene Badge', desc: 'Green gradient badge indicates Screen Share is the active scene. Pressing Screen Share in the Scenes panel navigates to this frame.' }]
+      },
+      'app/scene-intermission': {
+        overview: 'Scene variant for the "Intermission" scene. Amber "INTERMISSION" badge.',
+        sections: [{ title: 'Scene Badge', desc: 'Amber gradient badge indicates Intermission scene is active. Typically used between segments of a live stream.' }]
+      },
+      'scene/settings-general': {
+        overview: 'The Settings dialog — General tab. A 900×700 modal overlay with a 7-tab sidebar and content area. This is the first screen shown when clicking the Settings button.',
+        sections: [
+          { title: 'Settings Sidebar', desc: '7 tabs: General, Stream, Output, Audio, Video, Hotkeys, Advanced. Active tab highlighted with purple accent bar and background. Each tab is clickable and navigates to its own scene frame.' },
+          { title: 'General Content', desc: 'Application settings: Language, Theme (Dark/Light), auto-update toggle, confirmation dialog toggle, System Tray icon, minimise-to-tray option, Recording Path, and Filename Formatting.' },
+          { title: 'Footer Buttons', desc: 'Cancel (returns to app/default without saving) and Apply (saves and returns). Apply uses gradient accent fill.' },
+        ]
+      },
+      'scene/settings-stream': {
+        overview: 'Settings — Stream tab. Configure the streaming service, authentication, and encoder settings.',
+        sections: [
+          { title: 'Service Configuration', desc: 'Service dropdown (Twitch, YouTube, etc.), Server selection (Auto Recommended), and Stream Key field (masked with dots for security).' },
+          { title: 'Encoder Settings', desc: 'Video Encoder (NVIDIA NVENC H.264), Rate Control (CBR), Bitrate (6000 Kbps), Keyframe Interval (2s), and Preset (P5 – Slow / High Quality).' },
+        ]
+      },
+      'scene/settings-output': {
+        overview: 'Settings — Output tab. Configure local recording format and encoder.',
+        sections: [{ title: 'Recording Settings', desc: 'Format (MKV), Video Encoder, Audio Track, Output Path, and optional Replay Buffer with configurable duration.' }]
+      },
+      'scene/settings-audio': {
+        overview: 'Settings — Audio tab. Configure global audio devices.',
+        sections: [{ title: 'Audio Devices', desc: 'Desktop Audio (x2), Mic/Aux (x2) device dropdowns, Sample Rate (48 kHz), and Channels (Stereo).' }]
+      },
+      'scene/settings-video': {
+        overview: 'Settings — Video tab. Configure canvas and output resolution, FPS, and GPU.',
+        sections: [{ title: 'Video Settings', desc: 'Base Canvas Resolution (1920×1080), Output Scaled Resolution, Downscale Filter (Lanczos), FPS (60), GPU Encoder, and Hardware Decoding toggle.' }]
+      },
+      'scene/settings-hotkeys': {
+        overview: 'Settings — Hotkeys tab. View and edit keyboard shortcuts for all OBS actions.',
+        sections: [{ title: 'Hotkeys List', desc: 'Searchable list of all actions with their keyboard bindings: Start/Stop Streaming (Alt+S), Start/Stop Recording (Alt+R), Virtual Camera (Alt+V), Studio Mode (Alt+M), Screenshot (Alt+F10), Save Replay (Alt+F9).' }]
+      },
+      'scene/settings-advanced': {
+        overview: 'Settings — Advanced tab. Low-level process and rendering configuration.',
+        sections: [{ title: 'Advanced Settings', desc: 'Process Priority (Normal), Renderer (Direct3D 11), Color Format (NV12), Color Space (709), Color Range (Partial), and Network Optimisations toggle.' }]
+      },
+      'scene/add-source': {
+        overview: 'The Add Source dialog — a modal overlay showing a grid of all available source types. Opened by clicking the SCENES+ button (red dot in the Scenes panel header).',
+        sections: [
+          { title: 'Source Grid', desc: 'Visual grid of all source types: Display Capture, Window Capture, Game Capture, Browser Source, Video Capture Device, Audio Input Capture, Image, Text (FreeType 2), Media Source, Color Source. Each tile has a colored icon.' },
+          { title: 'Tile Interaction', desc: 'Clicking any source tile navigates to that source\'s configuration scene (e.g. Display Capture → scene/src-display-capture with its property form).' },
+          { title: 'Scrim Dismiss', desc: 'Clicking the dark overlay behind the modal navigates back to app/default — consistent dismiss behavior across all modals.' },
+        ]
+      },
+      'scene/streaming-settings': {
+        overview: 'Confirmation modal shown when clicking Start Streaming. Gives the user a final check on stream settings before going live.',
+        sections: [
+          { title: 'Stream Info', desc: 'Shows current service, server, and encoder. A Start button (gradient accent) confirms and transitions to app/streaming-live.' },
+          { title: 'Cancel', desc: 'Dismisses the modal and returns to app/default without starting the stream.' },
+        ]
+      },
+      'scene/recording-settings': {
+        overview: 'Confirmation modal shown when clicking Start Recording. Final check on recording format and path.',
+        sections: [{ title: 'Recording Info', desc: 'Shows output path, format, and encoder. Start button transitions to app/recording-active.' }]
+      },
+      'scene/virtual-camera': {
+        overview: 'Virtual Camera modal — configure and start the OBS virtual camera device, which makes OBS output appear as a webcam in video conferencing apps.',
+        sections: [
+          { title: 'Device Info', desc: 'Shows the virtual camera device name and output resolution.' },
+          { title: 'Start Button', desc: 'Activates the virtual camera. Returns to app/default to show the camera is now active.' },
+        ]
+      },
+      'scene/menu-file': {
+        overview: 'File menu dropdown overlay. Opens when clicking "File" in the menu bar. The semi-transparent scrim dismisses the menu when clicked.',
+        sections: [
+          { title: 'Menu Items', desc: 'New Scene Collection, Open, Save, Save As, Import, Export, Remux Recordings, Check File Integrity, Show Recordings Folder, Exit.' },
+          { title: 'Scrim', desc: 'Semi-transparent dark overlay behind the dropdown. Clicking it dismisses the menu and returns to app/default.' },
+        ]
+      },
+      'scene/menu-view': {
+        overview: 'View menu dropdown — toggle docks, panels, and layout options.',
+        sections: [{ title: 'Menu Items', desc: 'Docks, Stats, Log Viewer, Audio Mixer, Fullscreen, Lock Docks, Reset to Default Layout.' }]
+      },
+      'scene/menu-tools': {
+        overview: 'Tools menu dropdown — access advanced features and utilities.',
+        sections: [{ title: 'Menu Items', desc: 'Auto-Configuration Wizard, Output Timer, Captions, Script Editor, Hotkeys, Virtual Camera, QR Code.' }]
+      },
+    };
+
+    const TOKEN_COLORS = [
+      { name:'Background Base',   hex:'#0B0B0F', desc:'Page/window background' },
+      { name:'Surface',           hex:'#14141C', desc:'Panel interiors, dock backgrounds' },
+      { name:'Panel',             hex:'#1C1C27', desc:'Cards, controls, input fields' },
+      { name:'Divider',           hex:'#2A2A3A', desc:'Borders and separators' },
+      { name:'Text Primary',      hex:'#FFFFFF', desc:'Headings and active labels' },
+      { name:'Text Secondary',    hex:'#B9B9C9', desc:'Body text and descriptions' },
+      { name:'Text Muted',        hex:'#6C6C80', desc:'Placeholders and disabled text' },
+      { name:'Accent Start',      hex:'#8A5CFF', desc:'Gradient start — purple' },
+      { name:'Accent End',        hex:'#FF4FD8', desc:'Gradient end — magenta' },
+      { name:'Danger',            hex:'#FF5470', desc:'Stop buttons, error states' },
+      { name:'Success',           hex:'#3DDC97', desc:'Connected, FPS healthy, meter safe' },
+      { name:'Warning',           hex:'#FFC857', desc:'Meter caution, Intermission badge' },
+    ];
+
+    let sectionsHTML = '';
+    let pageNum = 3;
+
+    for (const img of images) {
+      const desc = DESCRIPTIONS[img.name] || { overview: 'Section of the OBS CodeBuilders UI Kit.', sections: [] };
+      const subsHTML = desc.sections.map(s => `
+        <div class="subsection">
+          <div class="sub-title">${s.title}</div>
+          <div class="sub-desc">${s.desc}</div>
+        </div>`).join('');
+
+      sectionsHTML += `
+      <div class="page section-page">
+        <div class="page-num">${pageNum++}</div>
+        <div class="section-header">
+          <div class="section-badge">${pageNum - 3 < 10 ? '0'+(pageNum-3) : pageNum-3}</div>
+          <div>
+            <div class="section-title">${img.label}</div>
+            <div class="section-name">${img.name}</div>
+          </div>
+        </div>
+        <div class="overview-text">${desc.overview}</div>
+        <div class="screenshot-wrap">
+          <img src="data:image/png;base64,${img.data}" alt="${img.label}" class="screenshot" />
+        </div>
+        <div class="subsections">${subsHTML}</div>
+      </div>`;
+    }
+
+    const tokenSwatches = TOKEN_COLORS.map(t => `
+      <div class="token-row">
+        <div class="swatch" style="background:${t.hex}"></div>
+        <div class="token-hex">${t.hex}</div>
+        <div class="token-name">${t.name}</div>
+        <div class="token-desc">${t.desc}</div>
+      </div>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>OBS CodeBuilders UI Kit — Design Documentation</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  body{font-family:Inter,system-ui,sans-serif;background:#0B0B0F;color:#FFFFFF;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .page{width:210mm;min-height:297mm;padding:16mm 14mm;position:relative;page-break-after:always;overflow:hidden;}
+  @media print{.page{page-break-after:always;}}
+
+  /* Cover */
+  .cover{background:linear-gradient(145deg,#0B0B0F 0%,#12091E 60%,#0B0B0F 100%);display:flex;flex-direction:column;justify-content:center;}
+  .cover-logo{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,#8A5CFF,#FF4FD8);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;margin-bottom:32px;}
+  .cover-title{font-size:36px;font-weight:700;letter-spacing:-0.02em;line-height:1.1;margin-bottom:12px;}
+  .cover-title span{background:linear-gradient(135deg,#8A5CFF,#FF4FD8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .cover-sub{font-size:16px;color:#B9B9C9;margin-bottom:48px;}
+  .cover-meta{display:flex;gap:32px;}
+  .cover-meta-item{display:flex;flex-direction:column;gap:4px;}
+  .cover-meta-label{font-size:10px;font-weight:600;color:#6C6C80;text-transform:uppercase;letter-spacing:0.08em;}
+  .cover-meta-value{font-size:13px;color:#B9B9C9;}
+  .cover-decoration{position:absolute;right:-60px;top:50%;transform:translateY(-50%);width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(138,92,255,0.12) 0%,transparent 70%);}
+
+  /* Design System Page */
+  .ds-page{background:#0B0B0F;}
+  .page-title{font-size:22px;font-weight:700;letter-spacing:-0.01em;margin-bottom:4px;}
+  .page-subtitle{font-size:12px;color:#6C6C80;margin-bottom:24px;}
+  .accent-bar{width:40px;height:3px;background:linear-gradient(90deg,#8A5CFF,#FF4FD8);border-radius:999px;margin-bottom:16px;}
+
+  /* Tokens */
+  .token-grid{display:flex;flex-direction:column;gap:6px;}
+  .token-row{display:flex;align-items:center;gap:12px;padding:6px 10px;background:#14141C;border-radius:6px;border:1px solid #2A2A3A;}
+  .swatch{width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);flex-shrink:0;}
+  .token-hex{font-size:11px;font-family:monospace;color:#8A5CFF;width:68px;flex-shrink:0;}
+  .token-name{font-size:11px;font-weight:600;color:#FFFFFF;width:110px;flex-shrink:0;}
+  .token-desc{font-size:10px;color:#6C6C80;}
+
+  /* Type scale */
+  .type-grid{display:flex;flex-direction:column;gap:8px;margin-top:20px;}
+  .type-row{display:flex;align-items:baseline;gap:16px;padding:8px 10px;background:#14141C;border-radius:6px;border:1px solid #2A2A3A;}
+  .type-sample-xl{font-size:22px;font-weight:600;background:linear-gradient(135deg,#8A5CFF,#FF4FD8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .type-sample-lg{font-size:18px;font-weight:500;color:#FFFFFF;}
+  .type-sample-md{font-size:15px;font-weight:500;color:#FFFFFF;}
+  .type-sample-body{font-size:13px;color:#B9B9C9;}
+  .type-sample-caption{font-size:11px;color:#6C6C80;}
+  .type-meta{font-size:10px;color:#6C6C80;margin-left:auto;}
+
+  /* Section pages */
+  .section-page{background:#0B0B0F;}
+  .page-num{position:absolute;top:12mm;right:14mm;font-size:10px;color:#6C6C80;}
+  .section-header{display:flex;align-items:center;gap:16px;margin-bottom:10px;}
+  .section-badge{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#8A5CFF,#FF4FD8);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+  .section-title{font-size:20px;font-weight:700;letter-spacing:-0.01em;}
+  .section-name{font-size:10px;color:#6C6C80;font-family:monospace;margin-top:2px;}
+  .overview-text{font-size:12px;color:#B9B9C9;line-height:1.6;margin-bottom:12px;padding:10px 12px;background:#14141C;border-left:3px solid #8A5CFF;border-radius:0 6px 6px 0;}
+  .screenshot-wrap{width:100%;margin-bottom:14px;border-radius:8px;overflow:hidden;border:1px solid #2A2A3A;}
+  .screenshot{width:100%;display:block;}
+  .subsections{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .subsection{padding:8px 10px;background:#14141C;border-radius:6px;border:1px solid #2A2A3A;}
+  .sub-title{font-size:11px;font-weight:600;color:#8A5CFF;margin-bottom:3px;}
+  .sub-desc{font-size:10px;color:#B9B9C9;line-height:1.5;}
+
+  /* Prototype flows page */
+  .flows-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;}
+  .flow-card{padding:12px;background:#14141C;border-radius:8px;border:1px solid #2A2A3A;}
+  .flow-title{font-size:12px;font-weight:600;color:#FFFFFF;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .flow-dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#8A5CFF,#FF4FD8);flex-shrink:0;}
+  .flow-step{font-size:10px;color:#B9B9C9;padding:3px 0;border-bottom:1px solid #1C1C27;display:flex;align-items:center;gap:6px;}
+  .flow-step:last-child{border-bottom:none;}
+  .flow-arrow{color:#8A5CFF;font-size:9px;}
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="page cover">
+  <div class="cover-decoration"></div>
+  <div class="cover-logo">OB</div>
+  <div class="cover-title">OBS <span>CodeBuilders</span><br/>UI Kit</div>
+  <div class="cover-sub">Complete Design System Documentation — All Panels, Flows & States</div>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Version</div>
+      <div class="cover-meta-value">1.0.0</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Date</div>
+      <div class="cover-meta-value">${new Date().toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'})}</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Screens</div>
+      <div class="cover-meta-value">${images.length} documented</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Theme</div>
+      <div class="cover-meta-value">Dark · Purple/Magenta Accent</div>
+    </div>
+  </div>
+</div>
+
+<!-- DESIGN SYSTEM PAGE -->
+<div class="page ds-page">
+  <div class="page-num">2</div>
+  <div class="accent-bar"></div>
+  <div class="page-title">Design System</div>
+  <div class="page-subtitle">Color tokens, typography scale, and spacing used throughout the UI Kit</div>
+  <div class="token-grid">${tokenSwatches}</div>
+  <div class="type-grid">
+    <div class="type-row"><span class="type-sample-xl">Heading XL</span><span class="type-meta">Inter Semi Bold · 24px / 32</span></div>
+    <div class="type-row"><span class="type-sample-lg">Heading Large</span><span class="type-meta">Inter Medium · 22px / 30</span></div>
+    <div class="type-row"><span class="type-sample-md">Panel Title</span><span class="type-meta">Inter Medium · 15px / 20</span></div>
+    <div class="type-row"><span class="type-sample-body">Body text — regular reading content across all panels and dialogs</span><span class="type-meta">Inter Regular · 13px / 18</span></div>
+    <div class="type-row"><span class="type-sample-caption">Caption — status bar, badges, metadata labels</span><span class="type-meta">Inter Regular · 11px / 16</span></div>
+  </div>
+</div>
+
+<!-- PROTOTYPE FLOWS PAGE -->
+<div class="page ds-page">
+  <div class="page-num">3</div>
+  <div class="accent-bar"></div>
+  <div class="page-title">Prototype Interaction Flows</div>
+  <div class="page-subtitle">Every wired navigation path in the design prototype</div>
+  <div class="flows-grid">
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Streaming Flow</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Start Streaming"</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Streaming Settings modal opens</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Start" → app/streaming-live</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>LIVE badge + Stop Streaming button</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Stop Streaming" → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Recording Flow</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Start Recording"</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Recording Settings modal opens</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Start" → app/recording-active</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>REC badge + Stop Recording button</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Stop Recording" → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Studio Mode Flow</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Studio Mode" button</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Slide-in → app/studio-mode</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Preview + Program split view</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Cut" → transitions scene</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Toggle off → back to app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Settings Flow</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Settings" button</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>scene/settings-general opens</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click sidebar tab → that tab's scene</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>7 tabs: General, Stream, Output…</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Apply / Cancel → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Add Source Flow</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click SCENES+ (red dot)</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>scene/add-source grid opens</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click source tile → config scene</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>OK → app/default (source added)</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Cancel / scrim → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Scene Switching</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Webcam Only" in Scenes panel</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>→ app/scene-webcam-only (purple badge)</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Screen Share" → green badge</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Intermission" → amber badge</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Main Scene" → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Menu Bar Flows</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "File" → scene/menu-file dropdown</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "View" → scene/menu-view</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click "Tools" → scene/menu-tools</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click menu item → app/default</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Click scrim → dismiss → app/default</div>
+    </div>
+    <div class="flow-card"><div class="flow-title"><div class="flow-dot"></div>Toolbar Shortcuts</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>btn 1 (Studio Mode icon) → studio mode</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>btn 4 (Stats — purple active) → settings</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>btn 7 (Settings icon) → settings</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>All unrecognised buttons → settings</div>
+      <div class="flow-step"><span class="flow-arrow">▶</span>Fallback: any button → navigates somewhere</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION PAGES -->
+${sectionsHTML}
+
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'OBS-CodeBuilders-UI-Kit-Documentation.html';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    log('HTML exported — open the file in Chrome then File → Print → Save as PDF', 'ok');
+  }
+
+  function buildPolish2() {
+    document.getElementById('btn-polish2').disabled = true;
+    document.getElementById('btn-polish2').textContent = '✦ Polishing design…';
+    log('Running full design polish — preview canvas, icons, meters, status bar, thumbnails…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_POLISH2' } }, '*');
+  }
+
+  function buildCompleteWire() {
+    document.getElementById('btn-completewire').disabled = true;
+    document.getElementById('btn-completewire').textContent = '✦ Running complete wire pass…';
+    log('Complete Wire: building missing scenes + wiring all buttons + fallback sweep…', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD_COMPLETEWIRE' } }, '*');
+  }
+
+  function startBuild() {
+    cancelled = false;
+    document.getElementById('btn-build').disabled = true;
+    document.getElementById('btn-cancel').disabled = false;
+    document.getElementById('done-banner').style.display = 'none';
+    STEPS.forEach(s => setStep(s, ''));
+    setProgress(0, STEPS.length, 'Starting…');
+    log('Build started', 'info');
+    parent.postMessage({ pluginMessage: { type: 'BUILD' } }, '*');
+  }
+
+  function cancelBuild() {
+    cancelled = true;
+    parent.postMessage({ pluginMessage: { type: 'CANCEL' } }, '*');
+    log('Cancellation requested', 'warn');
+  }
+
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    switch (msg.type) {
+      case 'STEP_START': {
+        const idx = STEPS.indexOf(msg.stepId);
+        setStep(msg.stepId, 'active');
+        setProgress(idx, STEPS.length, msg.label + '…');
+        log(msg.label, 'info');
+        break;
+      }
+      case 'STEP_DONE': {
+        const idx = STEPS.indexOf(msg.stepId);
+        setStep(msg.stepId, 'done');
+        setProgress(idx + 1, STEPS.length, msg.label + ' ✓');
+        log(msg.label + ' — done', 'ok');
+        break;
+      }
+      case 'STEP_ERROR': {
+        setStep(msg.stepId, 'error');
+        log('ERROR: ' + msg.error, 'error');
+        document.getElementById('btn-build').disabled = false;
+        document.getElementById('btn-cancel').disabled = true;
+        break;
+      }
+      case 'LOG':
+        log(msg.message, msg.level || 'info');
+        break;
+      case 'DONE':
+        setProgress(STEPS.length, STEPS.length, 'Complete');
+        document.getElementById('btn-build').disabled = false;
+        document.getElementById('btn-cancel').disabled = true;
+        document.getElementById('done-banner').style.display = 'block';
+        log('Build complete — ' + msg.summary, 'ok');
+        break;
+      case 'CANCELLED':
+        setProgress(0, STEPS.length, 'Cancelled');
+        document.getElementById('btn-build').disabled = false;
+        document.getElementById('btn-cancel').disabled = true;
+        log('Build cancelled', 'warn');
+        break;
+      case 'PANELS_DONE':
+        document.getElementById('btn-missing').disabled = false;
+        document.getElementById('btn-missing').textContent = '✓ Missing panels added';
+        document.getElementById('btn-missing').style.borderColor = '#3DDC97';
+        document.getElementById('btn-missing').style.color = '#3DDC97';
+        log('panel/hotkeys + panel/audio-monitoring added to page 02', 'ok');
+        break;
+      case 'MISSING_ERROR':
+        document.getElementById('btn-missing').disabled = false;
+        document.getElementById('btn-missing').textContent = '+ Add Missing Panels';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'POLISH_DONE':
+        document.getElementById('btn-polish').disabled = false;
+        document.getElementById('btn-polish').textContent = '✦ App frames polished';
+        document.getElementById('btn-polish').style.borderColor = '#3DDC97';
+        document.getElementById('btn-polish').style.color = '#3DDC97';
+        document.getElementById('btn-polish').style.background = 'rgba(61,220,151,0.08)';
+        log('App frames polished — accent bar, glow, badge, annotation added', 'ok');
+        break;
+      case 'POLISH_ERROR':
+        document.getElementById('btn-polish').disabled = false;
+        document.getElementById('btn-polish').textContent = '✦ Polish App Frames (accent bar, glow, badge)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'ICONS_DONE':
+        document.getElementById('btn-icons').disabled = false;
+        document.getElementById('btn-icons').textContent = '⬡ Icons replaced (' + (msg.count || 0) + '/26)';
+        document.getElementById('btn-icons').style.borderColor = '#3DDC97';
+        document.getElementById('btn-icons').style.color = '#3DDC97';
+        log((msg.count || 0) + '/26 icon placeholders replaced with Lucide SVG', 'ok');
+        break;
+      case 'ICONS_ERROR':
+        document.getElementById('btn-icons').disabled = false;
+        document.getElementById('btn-icons').textContent = '⬡ Replace Icon Placeholders (Lucide SVG)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'ENHANCE_DONE':
+        document.getElementById('btn-enhance').disabled = false;
+        document.getElementById('btn-enhance').textContent = '✶ Design enhanced';
+        document.getElementById('btn-enhance').style.borderColor = '#FFC857';
+        document.getElementById('btn-enhance').style.color = '#FFC857';
+        log('Enhancement complete — cover banner, icon showcase, section tags, frame labels', 'ok');
+        break;
+      case 'ORPHANS_DONE':
+        document.getElementById('btn-orphans').disabled = false;
+        document.getElementById('btn-orphans').textContent = '✓ Orphans removed (' + (msg.count||0) + ')';
+        document.getElementById('btn-orphans').style.borderColor = '#3DDC97';
+        document.getElementById('btn-orphans').style.color = '#3DDC97';
+        log('Removed ' + (msg.count||0) + ' orphan frames from canvas', 'ok');
+        break;
+      case 'ORPHANS_ERROR':
+        document.getElementById('btn-orphans').disabled = false;
+        document.getElementById('btn-orphans').textContent = '🗑 Remove floating/mixer & floating/stats';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'REFFRAME_DONE':
+        document.getElementById('btn-refframe').disabled = false;
+        document.getElementById('btn-refframe').textContent = '⬛ App frame rebuilt';
+        document.getElementById('btn-refframe').style.borderColor = '#3DDC97';
+        log('app/default rebuilt with reference layout', 'ok');
+        break;
+      case 'REFFRAME_ERROR':
+        document.getElementById('btn-refframe').disabled = false;
+        document.getElementById('btn-refframe').textContent = '⬛ Rebuild App Frame (reference layout)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'REORG_DONE':
+        document.getElementById('btn-reorg').disabled = false;
+        document.getElementById('btn-reorg').textContent = '⊞ Page 01 cleaned up';
+        document.getElementById('btn-reorg').style.borderColor = '#3DDC97';
+        document.getElementById('btn-reorg').style.color = '#3DDC97';
+        log('Page 01 reorganized — clean single-column layout', 'ok');
+        break;
+      case 'REORG_ERROR':
+        document.getElementById('btn-reorg').disabled = false;
+        document.getElementById('btn-reorg').textContent = '⊞ Clean Up Page 01 Layout';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'PROTO_DONE':
+        document.getElementById('btn-proto').disabled = false;
+        document.getElementById('btn-proto').textContent = '▶ ' + (msg.count || 0) + ' interactions wired';
+        document.getElementById('btn-proto').style.borderColor = '#3DDC97';
+        document.getElementById('btn-proto').style.color = '#3DDC97';
+        document.getElementById('btn-proto').style.background = 'rgba(61,220,151,0.08)';
+        log((msg.count||0) + ' flows wired — Prototype tab → ▶ to preview', 'ok');
+        break;
+      case 'PROTO_ERROR':
+        document.getElementById('btn-proto').disabled = false;
+        document.getElementById('btn-proto').textContent = '▶ Wire Prototype Interactions (7 flows)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'ENHANCE_ERROR':
+        document.getElementById('btn-enhance').disabled = false;
+        document.getElementById('btn-enhance').textContent = '✶ Enhance Design (cover · icon showcase · labels)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'DIAG_RESULT':
+        log('--- Reaction dump ---', 'info');
+        log(msg.result, 'info');
+        log('--- end ---', 'info');
+        break;
+      case 'MPROTO_DONE':
+        document.getElementById('btn-mproto').disabled = false;
+        document.getElementById('btn-mproto').textContent = '⬡ ' + (msg.count||0) + ' modal flows wired ✓';
+        document.getElementById('btn-mproto').style.borderColor = '#3DDC97';
+        document.getElementById('btn-mproto').style.color = '#3DDC97';
+        document.getElementById('btn-mproto').style.background = 'rgba(61,220,151,0.08)';
+        log((msg.count||0) + ' prototype connections — open Prototype tab → ▶ to test', 'ok');
+        break;
+      case 'MPROTO_ERROR':
+        document.getElementById('btn-mproto').disabled = false;
+        document.getElementById('btn-mproto').textContent = '⬡ Wire Modal Prototypes (5 flows · scrim scenes)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'ADV_DONE':
+        document.getElementById('btn-adv').disabled = false;
+        document.getElementById('btn-adv').textContent = '⚡ ' + (msg.count||0) + ' advanced flows wired ✓';
+        document.getElementById('btn-adv').style.background = 'rgba(61,220,151,0.08)';
+        document.getElementById('btn-adv').style.color = '#3DDC97';
+        log((msg.count||0) + ' connections — live states, settings tabs, source chain all wired', 'ok');
+        break;
+      case 'ADV_ERROR':
+        document.getElementById('btn-adv').disabled = false;
+        document.getElementById('btn-adv').textContent = '⚡ Build Advanced Flows (live states · settings · source chain)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'ALLWIRE_DONE':
+        document.getElementById('btn-allwire').disabled = false;
+        document.getElementById('btn-allwire').textContent = '✓ ' + (msg.count||0) + ' interactions wired ✓';
+        document.getElementById('btn-allwire').style.background = 'rgba(61,220,151,0.15)';
+        document.getElementById('btn-allwire').style.borderColor = '#3DDC97';
+        document.getElementById('btn-allwire').style.color = '#3DDC97';
+        log((msg.count||0) + ' prototype connections wired — every button now works in Prototype mode', 'ok');
+        break;
+      case 'ALLWIRE_ERROR':
+        document.getElementById('btn-allwire').disabled = false;
+        document.getElementById('btn-allwire').textContent = '⚡ Wire All Buttons (every interactive element)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'COMPLETEWIRE_DONE':
+        document.getElementById('btn-completewire').disabled = false;
+        document.getElementById('btn-completewire').textContent = '✦ ' + (msg.count||0) + ' wired (' + (msg.fallback||0) + ' via sweep) ✓';
+        document.getElementById('btn-completewire').style.background = 'rgba(61,220,151,0.15)';
+        document.getElementById('btn-completewire').style.borderColor = '#3DDC97';
+        document.getElementById('btn-completewire').style.color = '#3DDC97';
+        log((msg.count||0) + ' total connections — ' + (msg.fallback||0) + ' caught by fallback sweep — every button now works', 'ok');
+        break;
+      case 'PDF_PROGRESS':
+        document.getElementById('pdf-progress').textContent =
+          'Capturing ' + msg.done + ' / ' + msg.total + ' — ' + msg.label + '…';
+        break;
+      case 'PDF_READY':
+        document.getElementById('btn-pdf').disabled = false;
+        document.getElementById('btn-pdf').textContent = '📄 PDF exported (' + (msg.images||[]).length + ' screens) ✓';
+        document.getElementById('btn-pdf').style.borderColor = '#3DDC97';
+        document.getElementById('btn-pdf').style.color = '#3DDC97';
+        document.getElementById('pdf-progress').textContent = 'Done! Open the downloaded .html file → Print → Save as PDF';
+        generatePDF(msg.images || []);
+        break;
+      case 'PDF_ERROR':
+        document.getElementById('btn-pdf').disabled = false;
+        document.getElementById('btn-pdf').textContent = '📄 Export Design PDF (screenshots + explanations)';
+        document.getElementById('pdf-progress').style.display = 'none';
+        log('PDF ERROR: ' + msg.error, 'error');
+        break;
+      case 'POLISH2_DONE':
+        document.getElementById('btn-polish2').disabled = false;
+        document.getElementById('btn-polish2').textContent = '✦ ' + (msg.count||0) + ' elements polished ✓';
+        document.getElementById('btn-polish2').style.borderColor = '#3DDC97';
+        document.getElementById('btn-polish2').style.color = '#3DDC97';
+        document.getElementById('btn-polish2').style.background = 'rgba(61,220,151,0.12)';
+        log((msg.count||0) + ' elements polished — preview content, icons, meters, status bar, thumbnails', 'ok');
+        break;
+      case 'POLISH2_ERROR':
+        document.getElementById('btn-polish2').disabled = false;
+        document.getElementById('btn-polish2').textContent = '✦ Full Design Polish (preview · icons · meters · status bar · thumbnails)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'COMPLETEWIRE_ERROR':
+        document.getElementById('btn-completewire').disabled = false;
+        document.getElementById('btn-completewire').textContent = '✦ Complete Wire — every button works (menus · scenes · fallback sweep)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+      case 'FEATURES_DONE':
+        document.getElementById('btn-features').disabled = false;
+        document.getElementById('btn-features').textContent = '⚙ ' + (msg.count || 0) + ' feature components built ✓';
+        document.getElementById('btn-features').style.borderColor = '#3DDC97';
+        document.getElementById('btn-features').style.color = '#3DDC97';
+        document.getElementById('btn-features').style.background = 'rgba(61,220,151,0.08)';
+        log((msg.count || 0) + ' modals/panels added to page 02 — scroll to y≈2200 to see them', 'ok');
+        break;
+      case 'FEATURES_ERROR':
+        document.getElementById('btn-features').disabled = false;
+        document.getElementById('btn-features').textContent = '⚙ Build Feature Components (15 modals · 9 OBS areas)';
+        log('ERROR: ' + msg.error, 'error');
+        break;
+    }
+  };
+</script>
+</body>
+</html>

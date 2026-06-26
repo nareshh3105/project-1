@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>OBS CodeBuilders UI Kit — Project Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg:        #0B0B0F;
+    --surface:   #14141C;
+    --panel:     #1C1C27;
+    --divider:   #2A2A3A;
+    --txt:       #FFFFFF;
+    --txt2:      #B9B9C9;
+    --muted:     #6C6C80;
+    --acc1:      #8A5CFF;
+    --acc2:      #FF4FD8;
+    --danger:    #FF5470;
+    --success:   #3DDC97;
+    --warn:      #FFC857;
+    --grad:      linear-gradient(135deg, #8A5CFF 0%, #FF4FD8 100%);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #f4f4f6;
+    color: #1a1a2e;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ── PAGE LAYOUT ──────────────────────────────────────── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 20px;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; page-break-after: always; box-shadow: none; }
+    .no-print { display: none !important; }
+  }
+
+  /* ── COVER ────────────────────────────────────────────── */
+  .cover {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0;
+  }
+
+  .cover-top {
+    padding: 60px 56px 0;
+  }
+
+  .cover-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(138,92,255,0.15);
+    border: 1px solid rgba(138,92,255,0.4);
+    border-radius: 999px;
+    padding: 6px 16px;
+    margin-bottom: 40px;
+  }
+
+  .cover-badge-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--grad);
+  }
+
+  .cover-badge span {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--acc1);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .cover-logo {
+    width: 64px; height: 64px;
+    border-radius: 14px;
+    background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 700; color: #fff;
+    margin-bottom: 28px;
+    box-shadow: 0 0 40px rgba(138,92,255,0.5);
+  }
+
+  .cover h1 {
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--txt);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .cover h1 span {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .cover-sub {
+    font-size: 16px;
+    color: var(--txt2);
+    margin-bottom: 48px;
+    font-weight: 400;
+  }
+
+  .cover-divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--acc1), var(--acc2), transparent);
+    margin-bottom: 40px;
+  }
+
+  .cover-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 48px;
+  }
+
+  .cover-meta-item label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .cover-meta-item value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--txt);
+    display: block;
+  }
+
+  .cover-bottom {
+    background: var(--surface);
+    border-top: 1px solid var(--divider);
+    padding: 20px 56px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .cover-bottom-left { color: var(--muted); font-size: 11px; }
+  .cover-bottom-right {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(61,220,151,0.12);
+    border: 1px solid rgba(61,220,151,0.3);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--success);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .status-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--success);
+  }
+
+  /* ── COVER STATS BAR ─────────────────────────────────── */
+  .cover-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    background: var(--panel);
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 40px;
+  }
+
+  .cover-stat {
+    padding: 20px 24px;
+    border-right: 1px solid var(--divider);
+    text-align: center;
+  }
+  .cover-stat:last-child { border-right: none; }
+
+  .cover-stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    background: var(--grad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: block;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .cover-stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── INNER PAGES ─────────────────────────────────────── */
+  .page-inner {
+    padding: 48px 56px;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f4;
+  }
+
+  .page-section-num {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--acc1);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .page-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0d0d1a;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  .page-num-badge {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+
+  /* ── SECTION BLOCKS ──────────────────────────────────── */
+  .section {
+    margin-bottom: 28px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0d0d1a;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px; height: 14px;
+    background: var(--grad);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .section p {
+    color: #3a3a4a;
+    font-size: 12.5px;
+    line-height: 1.7;
+    margin-bottom: 8px;
+  }
+
+  /* ── CARDS / GRIDS ───────────────────────────────────── */
+  .card-grid {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .card-grid-2 { grid-template-columns: 1fr 1fr; }
+  .card-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: #f8f8fc;
+    border: 1px solid #e8e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #0d0d1a;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 11px;
+    color: #6c6c88;
+    line-height: 1.5;
+  }
+
+  .card-accent { border-left: 3px solid var(--acc1); }
+  .card-success { border-left: 3px solid var(--success); }
+  .card-warn    { border-left: 3px solid var(--warn); }
+  .card-danger  { border-left: 3px solid var(--danger); }
+
+  /* ── COLOR SWATCHES ──────────────────────────────────── */
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .swatch-item { text-align: center; }
+
+  .swatch-box {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    margin-bottom: 5px;
+    border: 1px solid rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.6);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .swatch-name {
+    font-size: 9px;
+    font-weight: 500;
+    color: #3a3a4a;
+    line-height: 1.3;
+  }
+
+  .swatch-hex {
+    font-size: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #8888a0;
+  }
+
+  /* ── TYPE SCALE ──────────────────────────────────────── */
+  .type-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f4;
+  }
+
+  .type-row:last-child { border-bottom: none; }
+
+  .type-sample { color: #0d0d1a; }
+  .type-meta {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #8888a0;
+    text-align: right;
+  }
+
+  /* ── PAGE / COMPONENT TABLES ─────────────────────────── */
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+
+  .info-table th {
+    background: #f4f4f8;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6666880;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 2px solid #e8e8f0;
+  }
+
+  .info-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #f0f0f4;
+    color: #3a3a4a;
+    vertical-align: top;
+  }
+
+  .info-table tr:last-child td { border-bottom: none; }
+  .info-table tr:hover td { background: #fafafd; }
+
+  .td-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--acc1);
+    white-space: nowrap;
+  }
+
+  .td-check { color: var(--success); font-weight: 700; font-size: 13px; }
+
+  /* ── PILL TAGS ───────────────────────────────────────── */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    margin: 2px 2px 2px 0;
+  }
+
+  .pill-purple  { background: rgba(138,92,255,0.12); color: #7a4eee; border: 1px solid rgba(138,92,255,0.25); }
+  .pill-green   { background: rgba(61,220,151,0.12); color: #2aad79; border: 1px solid rgba(61,220,151,0.25); }
+  .pill-red     { background: rgba(255,84,112,0.12); color: #dd3355; border: 1px solid rgba(255,84,112,0.25); }
+  .pill-yellow  { background: rgba(255,200,87,0.15); color: #b38800; border: 1px solid rgba(255,200,87,0.3); }
+  .pill-blue    { background: rgba(59,130,246,0.12); color: #2563eb; border: 1px solid rgba(59,130,246,0.25); }
+
+  /* ── FLOW DIAGRAM ────────────────────────────────────── */
+  .flow-diagram {
+    background: #f8f8fc;
+    border: 1px solid #e8e8f0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .flow-node {
+    background: var(--grad);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .flow-node-sec {
+    background: #e8e8f4;
+    color: #3a3a4a;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .flow-arrow {
+    font-size: 14px;
+    color: #9999bb;
+    flex-shrink: 0;
+  }
+
+  .flow-label {
+    font-size: 10px;
+    color: #8888a0;
+    white-space: nowrap;
+  }
+
+  /* ── PAGE FOOTER ─────────────────────────────────────── */
+  .page-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    height: 36px;
+    background: #f8f8fc;
+    border-top: 1px solid #e8e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 56px;
+  }
+
+  .page-footer span {
+    font-size: 10px;
+    color: #9999bb;
+  }
+
+  .footer-grad {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 600;
+  }
+
+  /* ── CALLOUT BOX ─────────────────────────────────────── */
+  .callout {
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    line-height: 1.6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .callout-info   { background: rgba(138,92,255,0.07); border-left: 3px solid var(--acc1); }
+  .callout-done   { background: rgba(61,220,151,0.07); border-left: 3px solid var(--success); }
+  .callout-warn   { background: rgba(255,200,87,0.1); border-left: 3px solid var(--warn); }
+
+  .callout-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .callout-text { color: #3a3a4a; }
+  .callout-text strong { color: #0d0d1a; }
+
+  /* ── GRADIENT ACCENT BAR ─────────────────────────────── */
+  .accent-bar {
+    height: 3px;
+    background: var(--grad);
+    border-radius: 999px;
+    margin-bottom: 20px;
+  }
+
+  /* ── TOC ─────────────────────────────────────────────── */
+  .toc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dashed #e0e0ec;
+  }
+
+  .toc-item:last-child { border-bottom: none; }
+
+  .toc-num {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: var(--grad);
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+
+  .toc-name { font-size: 13px; font-weight: 500; color: #0d0d1a; flex: 1; }
+  .toc-dots { flex: 1; border-bottom: 1px dotted #d0d0e0; margin: 0 12px; }
+  .toc-page { font-size: 11px; color: #9999bb; }
+
+  /* ── COMPONENT INVENTORY ROW ─────────────────────────── */
+  .inv-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f4;
+  }
+
+  .inv-row:last-child { border-bottom: none; }
+
+  .inv-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: #f0f0f8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .inv-name { font-size: 12px; font-weight: 600; color: #0d0d1a; margin-bottom: 2px; }
+  .inv-desc { font-size: 11px; color: #6666880; line-height: 1.4; color: #6c6c88; }
+  .inv-variants { margin-top: 4px; }
+
+  /* ── PRINT BUTTON ────────────────────────────────────── */
+  .print-bar {
+    text-align: center;
+    padding: 20px;
+    background: #1a1a2e;
+  }
+
+  .print-btn {
+    background: linear-gradient(135deg, #8A5CFF, #FF4FD8);
+    color: #fff;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+  .print-btn:hover { opacity: 0.9; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .highlight-box {
+    background: linear-gradient(135deg, rgba(138,92,255,0.06), rgba(255,79,216,0.06));
+    border: 1px solid rgba(138,92,255,0.2);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- PRINT BUTTON -->
+<div class="print-bar no-print">
+  <button class="print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+  <p style="color:#6c6c80;font-size:12px;margin-top:8px;font-family:Inter,sans-serif;">
+    Chrome: File → Print → Save as PDF &nbsp;|&nbsp; Set paper to A4, Margins: None, Background graphics: ON
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 1 — COVER
+══════════════════════════════════════════════════════════════ -->
+<div class="page cover">
+  <div class="cover-top">
+    <div class="cover-badge">
+      <div class="cover-badge-dot"></div>
+      <span>Confidential · Client Presentation</span>
+    </div>
+
+    <div class="cover-logo">◈</div>
+
+    <h1>OBS <span>CodeBuilders</span><br/>UI Kit</h1>
+    <p class="cover-sub">Figma Design System &amp; Interactive Prototype · Full Project Report</p>
+
+    <div class="cover-divider"></div>
+
+    <div class="cover-stats">
+      <div class="cover-stat">
+        <span class="cover-stat-num">8</span>
+        <span class="cover-stat-label">Figma Pages</span>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">60+</span>
+        <span class="cover-stat-label">Components</span>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">980+</span>
+        <span class="cover-stat-label">Wired Interactions</span>
+      </div>
+      <div class="cover-stat">
+        <span class="cover-stat-num">26</span>
+        <span class="cover-stat-label">Icon Components</span>
+      </div>
+    </div>
+
+    <div class="cover-meta-grid">
+      <div class="cover-meta-item">
+        <label>Project Name</label>
+        <value>OBS CodeBuilders UI Kit Builder</value>
+      </div>
+      <div class="cover-meta-item">
+        <label>Deliverable</label>
+        <value>Figma Design System + Clickable Prototype</value>
+      </div>
+      <div class="cover-meta-item">
+        <label>Design Tool</label>
+        <value>Figma (via custom plugin)</value>
+      </div>
+      <div class="cover-meta-item">
+        <label>Theme</label>
+        <value>OBS Studio · Neon Purple → Magenta</value>
+      </div>
+      <div class="cover-meta-item">
+        <label>Date</label>
+        <value>May 2026</value>
+      </div>
+      <div class="cover-meta-item">
+        <label>Status</label>
+        <value><span class="status-pill"><span class="status-dot"></span>Active · v1.0</span></value>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-left">
+      OBS CodeBuilders UI Kit — Proprietary &amp; Confidential<br/>
+      Generated by OBS CodeBuilders Figma Plugin
+    </div>
+    <div class="cover-bottom-right">
+      <span>Page 1 of 10</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 2 — TABLE OF CONTENTS
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Contents</span>
+        <h2 class="page-title">Table of Contents</h2>
+      </div>
+      <div class="page-num-badge">2</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="toc-item">
+      <span class="toc-num">1</span>
+      <span class="toc-name">Project Overview &amp; Objectives</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">3</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">2</span>
+      <span class="toc-name">Design System — Tokens &amp; Foundations</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">4</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">3</span>
+      <span class="toc-name">Figma File Structure (8 Pages)</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">5</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">4</span>
+      <span class="toc-name">Core Components Library</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">6</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">5</span>
+      <span class="toc-name">Dockable Panels &amp; Modals</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">7</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">6</span>
+      <span class="toc-name">App Frames — Assembled Screens</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">8</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">7</span>
+      <span class="toc-name">Prototype Interactions &amp; Wiring (980+ links)</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">9</span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-num">8</span>
+      <span class="toc-name">Figma Plugin — Automation &amp; Features</span>
+      <span class="toc-dots"></span>
+      <span class="toc-page">10</span>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Table of Contents · Page 2</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 3 — PROJECT OVERVIEW
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 01</span>
+        <h2 class="page-title">Project Overview &amp; Objectives</h2>
+      </div>
+      <div class="page-num-badge">3</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <div class="section-title">What We Built</div>
+      <p>The OBS CodeBuilders UI Kit is a <strong>production-ready Figma design system</strong> that replicates the complete OBS Studio desktop broadcasting interface, reimagined with a <strong>neon purple → magenta "Code Builders" developer aesthetic</strong>. The kit is delivered as a fully interactive Figma prototype with every button wired to a navigation destination.</p>
+      <p>The entire kit was generated and maintained by a <strong>custom Figma plugin</strong> ("OBS CodeBuilders UI Kit Builder"), which creates, polishes, and wires all design elements programmatically — ensuring pixel-perfect consistency and zero manual drift.</p>
+    </div>
+
+    <div class="highlight-box">
+      <div style="font-size:12px;font-weight:600;color:#5a35cc;margin-bottom:6px;">🎯 Client Brief Summary</div>
+      <div style="font-size:12px;color:#3a3a4a;line-height:1.7;">
+        Build a complete Figma UI kit for an OBS Studio-inspired interface — every dockable panel, modal dialog, context menu, toolbar, and interactive state — themed with a neon gradient developer brand. The kit must be component-driven, token-based, and fully clickable in Figma's prototype mode.
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Key Objectives</div>
+      <div class="card-grid card-grid-2">
+        <div class="card card-accent">
+          <div class="card-title">🎨 Design System</div>
+          <div class="card-desc">Full token suite (colors, typography, spacing, shadows) exported as tokens.json. All components reference tokens — zero hardcoded values.</div>
+        </div>
+        <div class="card card-accent">
+          <div class="card-title">🧩 Component Library</div>
+          <div class="card-desc">60+ reusable components covering every OBS interface element: panels, buttons, inputs, meters, menus, modals, and list items.</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-title">🖥 Assembled App Frames</div>
+          <div class="card-desc">Three full 1440×900 desktop frames showing Default, Studio Mode, and Floating Windows layouts — each a realistic, pixel-accurate mockup.</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-title">⚡ Clickable Prototype</div>
+          <div class="card-desc">980+ prototype links wired via Figma reactions API. Every button, menu, toolbar icon, and modal is navigable in the prototype player.</div>
+        </div>
+        <div class="card card-warn">
+          <div class="card-title">🔌 Plugin Automation</div>
+          <div class="card-desc">A custom Figma plugin builds the entire kit on demand, ensuring repeatable, consistent output with one click.</div>
+        </div>
+        <div class="card card-warn">
+          <div class="card-title">📦 Token Export</div>
+          <div class="card-desc">tokens.json in W3C DTCG format — ready for Tokens Studio, Style Dictionary, or any design-to-code pipeline.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Technology Stack</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="pill pill-purple">Figma Plugin API</span>
+        <span class="pill pill-purple">JavaScript (ES2020)</span>
+        <span class="pill pill-blue">Auto Layout</span>
+        <span class="pill pill-blue">Figma Variables / Tokens</span>
+        <span class="pill pill-blue">Figma Reactions API</span>
+        <span class="pill pill-green">Inter Typeface</span>
+        <span class="pill pill-green">JetBrains Mono</span>
+        <span class="pill pill-green">Lucide Icons (SVG)</span>
+        <span class="pill pill-yellow">W3C DTCG tokens.json</span>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Project Overview · Page 3</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 4 — DESIGN TOKENS
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 02</span>
+        <h2 class="page-title">Design System — Tokens &amp; Foundations</h2>
+      </div>
+      <div class="page-num-badge">4</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <div class="section-title">Color Tokens</div>
+      <div class="swatch-grid">
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#0B0B0F;">#0B0B0F</div>
+          <div class="swatch-name">bg/base</div>
+          <div class="swatch-hex">App background</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#14141C;">#14141C</div>
+          <div class="swatch-name">bg/surface</div>
+          <div class="swatch-hex">Panels &amp; docks</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#1C1C27;">#1C1C27</div>
+          <div class="swatch-name">bg/panel</div>
+          <div class="swatch-hex">Cards &amp; controls</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#2A2A3A;">#2A2A3A</div>
+          <div class="swatch-name">bg/divider</div>
+          <div class="swatch-hex">Borders</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#8A5CFF;">#8A5CFF</div>
+          <div class="swatch-name">accent/start</div>
+          <div class="swatch-hex">Gradient purple</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#FF4FD8;">#FF4FD8</div>
+          <div class="swatch-name">accent/end</div>
+          <div class="swatch-hex">Gradient magenta</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#FFFFFF; border:1px solid #ddd;">#FFFFFF</div>
+          <div class="swatch-name">text/primary</div>
+          <div class="swatch-hex">Headings</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#B9B9C9;">#B9B9C9</div>
+          <div class="swatch-name">text/secondary</div>
+          <div class="swatch-hex">Body text</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#6C6C80;">#6C6C80</div>
+          <div class="swatch-name">text/muted</div>
+          <div class="swatch-hex">Placeholders</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#3DDC97;">#3DDC97</div>
+          <div class="swatch-name">state/success</div>
+          <div class="swatch-hex">Connected · safe</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#FFC857;">#FFC857</div>
+          <div class="swatch-name">state/warning</div>
+          <div class="swatch-hex">Caution · -20dB</div>
+        </div>
+        <div class="swatch-item">
+          <div class="swatch-box" style="background:#FF5470;">#FF5470</div>
+          <div class="swatch-name">state/danger</div>
+          <div class="swatch-hex">Stop · error · clip</div>
+        </div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ</span>
+        <div class="callout-text">All color tokens are stored as <strong>Figma Variables</strong> (collection: "Tokens", mode: "Dark"). Every fill, stroke, and effect in the kit references these variables — changing a single variable updates the entire file instantly.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Typography Scale (Inter)</div>
+      <div style="background:#f8f8fc;border:1px solid #e8e8f0;border-radius:8px;padding:16px 20px;">
+        <div class="type-row">
+          <span class="type-sample" style="font-size:24px;font-weight:700;color:#0d0d1a;">Heading XL</span>
+          <span class="type-meta">Inter SemiBold · 24px / 32 · type/heading-xl</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:22px;font-weight:500;color:#0d0d1a;">Heading LG</span>
+          <span class="type-meta">Inter Medium · 22px / 30 · type/heading-lg</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:18px;font-weight:500;color:#0d0d1a;">Heading MD</span>
+          <span class="type-meta">Inter Medium · 18px / 26 · type/heading-md</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:15px;font-weight:500;color:#0d0d1a;">Panel Title</span>
+          <span class="type-meta">Inter Medium · 15px / 20 · type/panel-title</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:13px;color:#0d0d1a;">Body Text</span>
+          <span class="type-meta">Inter Regular · 13px / 18 · type/body</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:11px;color:#6c6c80;">Caption / Meta</span>
+          <span class="type-meta">Inter Regular · 11px / 16 · type/caption</span>
+        </div>
+        <div class="type-row">
+          <span class="type-sample" style="font-size:12px;font-family:'JetBrains Mono',monospace;color:#8a5cff;">Log output text</span>
+          <span class="type-meta">JetBrains Mono · 12px / 18 · type/mono</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Spacing, Radius &amp; Shadow Tokens</div>
+      <div class="two-col">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#6666880;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;color:#8888a0;">Spacing (4px grid)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span class="pill pill-blue">4px · space/1</span>
+            <span class="pill pill-blue">8px · space/2</span>
+            <span class="pill pill-blue">12px · space/3</span>
+            <span class="pill pill-blue">16px · space/4</span>
+            <span class="pill pill-blue">24px · space/6</span>
+            <span class="pill pill-blue">32px · space/8</span>
+            <span class="pill pill-blue">48px · space/12</span>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:#8888a0;text-transform:uppercase;letter-spacing:0.06em;margin:12px 0 8px;">Border Radius</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <span class="pill pill-purple">12px · panel</span>
+            <span class="pill pill-purple">8px · input</span>
+            <span class="pill pill-purple">6px · button</span>
+            <span class="pill pill-purple">999px · pill</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#8888a0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Shadow / Elevation</div>
+          <div class="card" style="margin-bottom:6px;">
+            <div class="card-title">elev/panel</div>
+            <div class="card-desc">0 1 2 · rgba(0,0,0,0.35) — subtle lift</div>
+          </div>
+          <div class="card" style="margin-bottom:6px;">
+            <div class="card-title">elev/float</div>
+            <div class="card-desc">0 12 32 · rgba(0,0,0,0.55) — floating windows</div>
+          </div>
+          <div class="card" style="margin-bottom:6px;">
+            <div class="card-title">elev/glow</div>
+            <div class="card-desc">0 0 18 · rgba(138,92,255,0.35) — accent glow</div>
+          </div>
+          <div class="card">
+            <div class="card-title">elev/modal</div>
+            <div class="card-desc">0 24 64 · rgba(0,0,0,0.65) — modal depth</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Design Tokens · Page 4</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 5 — FIGMA FILE STRUCTURE
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 03</span>
+        <h2 class="page-title">Figma File Structure — 8 Pages</h2>
+      </div>
+      <div class="page-num-badge">5</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <p>The Figma file is organized into <strong>8 purpose-specific pages</strong>, each serving a distinct role in the design system. Every page is populated by the plugin and follows strict naming conventions for easy navigation.</p>
+    </div>
+
+    <table class="info-table">
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Name</th>
+          <th>Contents</th>
+          <th>Done</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="td-name">00</td>
+          <td><strong>Cover</strong></td>
+          <td>Project title card, branding banner, gradient logo mark, version badge</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">01</td>
+          <td><strong>Tokens &amp; Primitives</strong></td>
+          <td>Color swatches, typography scale, spacing ruler, shadow specimens, Figma Variables, Lucide icon set (26 icons), button state matrix, input state matrix</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">02</td>
+          <td><strong>Core Components</strong></td>
+          <td>button/primary, button/secondary, button/ghost, button/danger, button/icon; inputs (text, dropdown, stepper, search, checkbox, radio, toggle, slider); list/item with all states; tab/bar; meter/audio; 11 dockable panel masters; hotkeys panel; audio monitoring panel</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">03</td>
+          <td><strong>App Frames</strong></td>
+          <td>app/default (1440×900), app/studio-mode (1440×900), app/floating-windows (1440×900). All prototype scenes: streaming, recording, virtual camera, settings tabs, source configs, menu overlays, modal overlays</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">04</td>
+          <td><strong>Modals &amp; Dialogs</strong></td>
+          <td>Settings modal (760×560 with sidebar), Filters modal, Properties modal, Confirm/Danger dialog, Rename input, Scene Collection manager, About modal</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">05</td>
+          <td><strong>Menus &amp; Context</strong></td>
+          <td>Menu bar, File/Edit/View/Tools dropdowns, 4 context menus (scene, source, mixer, dock), toolbar/main, statusbar, list item variants</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">06</td>
+          <td><strong>Feature Components</strong></td>
+          <td>9 OBS feature area frames: Webcam Only, Screen Share, Intermission, Source Filters, Source Properties, Scene Collection, Profile Manager, Multiview, Auto-Config Wizard</td>
+          <td class="td-check">✓</td>
+        </tr>
+        <tr>
+          <td class="td-name">07</td>
+          <td><strong>Studio Mode &amp; States</strong></td>
+          <td>Dock drop-zones, collapsed/expanded panel comparison, lock-docks state, all list/item states, all button/input states side-by-side, plugin slot placeholder</td>
+          <td class="td-check">✓</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-done">
+      <span class="callout-icon">✅</span>
+      <div class="callout-text"><strong>All 8 pages are fully populated.</strong> Page 03 (App Frames) is the primary prototype entry point — it contains all navigable screens linked together via Figma prototype reactions.</div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Figma File Structure · Page 5</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 6 — CORE COMPONENTS
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 04</span>
+        <h2 class="page-title">Core Components Library</h2>
+      </div>
+      <div class="page-num-badge">6</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <div class="section-title">Buttons</div>
+      <div class="card-grid card-grid-3">
+        <div class="card card-accent">
+          <div class="card-title">button/primary</div>
+          <div class="card-desc">Purple→Magenta gradient fill. 5 states × 3 sizes (sm·28, md·32, lg·40). Boolean icon-left, icon-right.</div>
+        </div>
+        <div class="card card-accent">
+          <div class="card-title">button/secondary</div>
+          <div class="card-desc">Dark fill + subtle border. Same state/size matrix as primary. Used for inactive controls.</div>
+        </div>
+        <div class="card card-danger">
+          <div class="card-title">button/danger</div>
+          <div class="card-desc">Red (#FF5470) fill. Used for Stop Streaming, Stop Recording, destructive modal confirms.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">button/ghost</div>
+          <div class="card-desc">Transparent fill, visible on hover. Used in panel headers and toolbar secondary actions.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">button/icon</div>
+          <div class="card-desc">32×32 square, radius 6. Toolbar buttons (tool-btn-0 through tool-btn-6). Icon-only variant.</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-title">States: All Variants</div>
+          <div class="card-desc">Default · Hover · Pressed · Active · Disabled — all five states built and documented.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Form Inputs</div>
+      <div class="card-grid card-grid-2">
+        <div class="inv-row">
+          <div class="inv-icon">✏️</div>
+          <div>
+            <div class="inv-name">input/text</div>
+            <div class="inv-desc">6 states (Default·Hover·Focus·Filled·Error·Disabled). Boolean label, helper text, icons left/right.</div>
+          </div>
+        </div>
+        <div class="inv-row">
+          <div class="inv-icon">▾</div>
+          <div>
+            <div class="inv-name">input/dropdown</div>
+            <div class="inv-desc">Closed and open states. Used in Settings, Transitions, audio device selectors.</div>
+          </div>
+        </div>
+        <div class="inv-row">
+          <div class="inv-icon">☑</div>
+          <div>
+            <div class="inv-name">input/checkbox + radio</div>
+            <div class="inv-desc">All states × checked/unchecked/indeterminate. Gradient accent on active state.</div>
+          </div>
+        </div>
+        <div class="inv-row">
+          <div class="inv-icon">⚡</div>
+          <div>
+            <div class="inv-name">input/toggle</div>
+            <div class="inv-desc">On/Off with gradient track. Used in Settings advanced tab, monitoring mode.</div>
+          </div>
+        </div>
+        <div class="inv-row">
+          <div class="inv-icon">⟷</div>
+          <div>
+            <div class="inv-name">input/slider</div>
+            <div class="inv-desc">Horizontal + vertical orientation. Gradient fill track, value chip variant. Used in Audio Mixer.</div>
+          </div>
+        </div>
+        <div class="inv-row">
+          <div class="inv-icon">🔢</div>
+          <div>
+            <div class="inv-name">input/stepper</div>
+            <div class="inv-desc">Number field with ±  increment buttons. Used in duration fields (Transition ms).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Specialized Components</div>
+      <div class="card-grid card-grid-3">
+        <div class="card card-accent">
+          <div class="card-title">meter/audio</div>
+          <div class="card-desc">Peak meter: green (&lt;-20 dBFS) → yellow (-20 to -6) → red (&gt;-6). Horizontal &amp; vertical variants with dBFS ruler and peak-hold indicator.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">list/item</div>
+          <div class="card-desc">7 states: Default·Hover·Selected·Active·Dragging·Disabled·Locked. Used in Scenes, Sources, Hotkeys, Filters lists.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">tab/bar + tab/item</div>
+          <div class="card-desc">Default·Hover·Active·Dragging. Tab bar supports overflow +N chip. Used in Settings pages and scene tabs.</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-title">Icons (26)</div>
+          <div class="card-desc">Lucide-compatible SVG icon components: plus, minus, x, check, chevrons, search, settings, eye, lock, trash, copy, mic, monitor, camera, image, video, music, drag + more.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Dividers &amp; Handles</div>
+          <div class="card-desc">divider/horizontal, divider/vertical, drag-handle/dots, resize-handle/corner, resize-handle/edge, rotation-handle.</div>
+        </div>
+        <div class="card card-warn">
+          <div class="card-title">Overlay Utilities</div>
+          <div class="card-desc">bounding-box/overlay, safe-margin/overlay, scrim (60% black modal backdrop), context-menu scrim.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Core Components · Page 6</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 7 — PANELS & MODALS
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 05</span>
+        <h2 class="page-title">Dockable Panels &amp; Modal Dialogs</h2>
+      </div>
+      <div class="page-num-badge">7</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <div class="section-title">Dockable Panels (11 panels)</div>
+      <table class="info-table">
+        <thead>
+          <tr><th>Component</th><th>Key Contents</th><th>In App/Default</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">panel/scenes</td>
+            <td>Scene list with active indicator, Lock/Visibility icons, Webcam · Screen Share · Intermission · Main Scene entries. Toolbar: add, remove, duplicate, up/down, search.</td>
+            <td class="td-check">✓ Left dock</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/sources</td>
+            <td>Source list with type icons (camera, mic, image, browser, text, display, window, game, media, color, group), visibility eye, lock. Toolbar: add, remove, duplicate, properties, filters.</td>
+            <td class="td-check">✓ Left dock</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/mixer</td>
+            <td>4 audio channel strips (Desktop, Mic/Aux, Browser, Music). Each strip: name label, peak meter (green/yellow/red), volume slider, mute toggle with icon. Full-width in bottom row.</td>
+            <td class="td-check">✓ Bottom center</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/controls</td>
+            <td>Vertical button stack: Start Streaming (gradient), Start Recording, Virtual Camera, Studio Mode, Settings, Exit. Active state uses gradient fill; idle uses secondary style.</td>
+            <td class="td-check">✓ Right dock</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/stats</td>
+            <td>Metric cards grid: CPU %, Memory, Disk Space, Avg Frame Time, Encoding Lag, Rendering Lag, Skipped Frames, Dropped Frames. Sparkline stub per metric.</td>
+            <td>Page 02 only</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/log-viewer</td>
+            <td>Mono font list with INFO/WARN/ERROR/DEBUG level chips, filter toolbar, clear/copy/save buttons. 5 sample log entries with color-coded severity.</td>
+            <td>Page 02 only</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/hotkeys</td>
+            <td>Two-column table: Action vs Binding. Edit/Clear/Record-key inline states. Entries: Start/Stop Streaming, Recording, Virtual Camera, Studio Mode, Screenshot, Save Replay.</td>
+            <td>Page 02 only</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/audio-monitoring</td>
+            <td>Per-source monitoring mode table: Off / Monitor Only / Monitor + Output. Radio group per source channel.</td>
+            <td>Page 02 only</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/preview</td>
+            <td>Canvas with dashed safe-margin overlay, 1920×1080 resolution badge, Preview label. Black canvas background.</td>
+            <td class="td-check">✓ Center</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/studio-mode</td>
+            <td>Side-by-side Preview + Program canvases with central transition column (Cut button). Used in app/studio-mode frame.</td>
+            <td class="td-check">✓ Studio Mode</td>
+          </tr>
+          <tr>
+            <td class="td-name">panel/plugin-slot</td>
+            <td>Dashed gradient border placeholder frame for third-party plugin docks. Labeled "Plugin Dock" with extension-point note.</td>
+            <td>Page 02 only</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Modal Dialogs (7 modals)</div>
+      <div class="card-grid card-grid-2">
+        <div class="card card-accent">
+          <div class="card-title">modal/settings (760×560)</div>
+          <div class="card-desc">Full Settings window with 8-tab sidebar: General, Stream, Output, Audio, Video, Hotkeys, Accessibility, Advanced. Each tab shows representative controls.</div>
+        </div>
+        <div class="card card-accent">
+          <div class="card-title">modal/filters</div>
+          <div class="card-desc">Applied filters list on left, properties form on right. Supports Audio Filters and Video/Effect Filters tabs. Add/remove/reorder actions.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">modal/properties</div>
+          <div class="card-desc">Source transform: position X/Y, scale, rotation, alignment grid (3×3 picker), bounding-box type, crop L/R/T/B, blend mode, color correction sliders.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">modal/scene-collection</div>
+          <div class="card-desc">Create / Rename / Duplicate / Delete / Import / Export. List of saved collections with action buttons.</div>
+        </div>
+        <div class="card card-warn">
+          <div class="card-title">modal/confirm (danger variant)</div>
+          <div class="card-desc">Icon + title + message + Cancel / Confirm. Danger variant uses red Confirm button for destructive actions.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">modal/input + modal/about</div>
+          <div class="card-desc">Single-field rename prompt. About: logo, version string, links. Both use the standard modal/frame shell with elev/modal shadow.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Panels &amp; Modals · Page 7</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 8 — APP FRAMES
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 06</span>
+        <h2 class="page-title">App Frames — Assembled Screens</h2>
+      </div>
+      <div class="page-num-badge">8</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <p>Three full <strong>1440×900 desktop frames</strong> on Page 03 demonstrate real-world composition. Each frame uses Auto Layout throughout — panels resize responsively when the frame width is changed.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">app/default — Main OBS Window</div>
+      <div class="highlight-box">
+        <div style="font-size:11px;color:#5a35cc;font-weight:600;margin-bottom:8px;">1440 × 900px · 5-zone Auto Layout</div>
+        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:4px;background:#0B0B0F;border-radius:6px;padding:10px;font-size:10px;font-family:'JetBrains Mono',monospace;color:#B9B9C9;">
+          <div style="background:#2A2A3A;border-radius:3px;padding:3px 8px;grid-column:1/-1;text-align:center;color:#6C6C80;">Menu Bar (File · Edit · View · Profile · Scene Collection · Tools · Help)</div>
+          <div style="background:#2A2A3A;border-radius:3px;padding:3px 8px;grid-column:1/-1;text-align:center;color:#6C6C80;margin-top:2px;">Toolbar (7 icon buttons: Studio Mode · Fullscreen · Screenshot · Stats · Multiview · Folder · Settings)</div>
+          <div style="background:#1C1C27;border-radius:3px;padding:6px 8px;text-align:center;min-height:40px;display:flex;align-items:center;justify-content:center;margin-top:2px;">Left Dock<br/><span style="color:#6C6C80">220px<br/>Scenes<br/>Sources</span></div>
+          <div style="background:#0B0B0F;border-radius:3px;padding:6px 8px;text-align:center;margin:2px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+            <span>Preview Canvas (879×540)</span>
+            <span style="color:#6C6C80;font-size:9px;">16:9 · safe-margin dashes · LIVE badge</span>
+            <div style="background:#14141C;border-radius:3px;padding:3px 6px;">Audio Mixer · full width · 4 channels</div>
+          </div>
+          <div style="background:#1C1C27;border-radius:3px;padding:6px 8px;text-align:center;min-height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:2px;gap:2px;">Right Dock<br/><span style="color:#6C6C80;font-size:9px;">220px</span><br/><span style="color:#8A5CFF;font-size:9px;">Start Streaming</span><br/><span style="color:#6C6C80;font-size:9px;">Recording</span><br/><span style="color:#6C6C80;font-size:9px;">Virtual Camera</span><br/><span style="color:#6C6C80;font-size:9px;">Studio Mode</span></div>
+          <div style="background:#14141C;border-radius:3px;padding:3px 8px;grid-column:1/-1;text-align:center;color:#6C6C80;margin-top:2px;">Status Bar · CPU · FPS · Network · ●REC ●LIVE timer</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">app/studio-mode — Dual Canvas Mode</div>
+      <div class="card-grid card-grid-3">
+        <div class="card card-accent">
+          <div class="card-title">Studio Mode Banner</div>
+          <div class="card-desc">Purple-tinted "STUDIO MODE" label bar at the top of the canvas area, clearly indicating the active mode.</div>
+        </div>
+        <div class="card card-accent">
+          <div class="card-title">Dual Canvas (418px each)</div>
+          <div class="card-desc">Preview canvas (left) + Program canvas (right, red LIVE badge). Central 48px column with Cut transition button.</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-title">5-Channel Mixer</div>
+          <div class="card-desc">Studio Mode has an expanded mixer row: Desktop, Mic/Aux, Browser, Music, VoIP — one extra VoIP channel vs. default.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">app/floating-windows — Detached Panels</div>
+      <div class="two-col">
+        <div class="card card-warn">
+          <div class="card-title">floating/mixer (460×160)</div>
+          <div class="card-desc">Detached mixer panel floating over the main app. Purple accent border (1.5px, #8A5CFF) + glow effect. Positioned at x:400, y:200.</div>
+        </div>
+        <div class="card card-warn">
+          <div class="card-title">floating/stats (320×220)</div>
+          <div class="card-desc">Detached stats panel. Same purple accent border + glow. Demonstrates the floating window system used by power users. Positioned at x:900, y:150.</div>
+        </div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ</span>
+        <div class="callout-text"><strong>Layout annotation frame</strong> is included on Page 03 — a color-coded diagram labeling each zone (Menu Bar, Toolbar, Left Dock, Center Canvas, Right Controls, Status Bar) with dimensions and descriptions for developer handoff.</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>App Frames · Page 8</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 9 — PROTOTYPE INTERACTIONS
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 07</span>
+        <h2 class="page-title">Prototype Interactions — 980+ Links</h2>
+      </div>
+      <div class="page-num-badge">9</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="callout callout-done">
+      <span class="callout-icon">✅</span>
+      <div class="callout-text">The plugin's <strong>Wire All Buttons</strong> function successfully wired <strong>981 interactions</strong> (88 via fallback sweep) across all frames on Page 03. Every named button, toolbar icon, menu item, and modal trigger is clickable in Figma Prototype mode.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Primary Navigation Flows</div>
+      <div class="flow-diagram">
+        <div class="flow-row">
+          <div class="flow-node">app/default</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Start Streaming</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">scene/streaming-settings</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Confirm Start</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">app/streaming-live</div>
+        </div>
+        <div class="flow-row">
+          <div class="flow-node">app/default</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Start Recording</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">scene/recording-settings</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">app/recording-active</div>
+        </div>
+        <div class="flow-row">
+          <div class="flow-node">app/default</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Studio Mode</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">app/studio-mode</div>
+          <div class="flow-label">(MOVE_IN slide)</div>
+        </div>
+        <div class="flow-row">
+          <div class="flow-node">app/default</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Settings</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">scene/settings-general</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Tab clicks</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">scene/settings-stream…</div>
+        </div>
+        <div class="flow-row">
+          <div class="flow-node">app/default</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node-sec">Virtual Camera</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">scene/virtual-camera</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Menu &amp; Modal Flows</div>
+      <div class="card-grid card-grid-2">
+        <div class="card">
+          <div class="card-title">Menu Bar Dropdowns</div>
+          <div class="card-desc">File → scene/menu-file · View → scene/menu-view · Tools → scene/menu-tools. Each menu has a scrim that returns to app/default when clicked.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Add Source Modal</div>
+          <div class="card-desc">Clicking the + button on the Scenes panel opens scene/add-source. Each source tile (Display, Window, Game, Browser, Video, Audio, Image, Text, Media, Color) navigates to its specific configuration scene.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Settings Tabs (7 tabs)</div>
+          <div class="card-desc">General → Stream → Output → Audio → Video → Hotkeys → Advanced. Each tab is a separate scene frame. Tab clicks navigate between them; Close/Cancel returns to app/default.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Toolbar Buttons (7 icons)</div>
+          <div class="card-desc">tool-btn-0 (Studio Mode) → app/studio-mode · tool-btn-3 (Stats) → settings · tool-btn-6 (Settings) → settings. All 7 toolbar buttons wired.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Transition Types Used</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="card" style="flex:1;min-width:140px;">
+          <div class="card-title">DISSOLVE (0.25s)</div>
+          <div class="card-desc">Default for most screen transitions. Smooth crossfade between frames.</div>
+        </div>
+        <div class="card" style="flex:1;min-width:140px;">
+          <div class="card-title">MOVE_IN · LEFT (0.3s)</div>
+          <div class="card-desc">Used for Studio Mode toggle — slides the new frame in from the right for a directional feel.</div>
+        </div>
+        <div class="card" style="flex:1;min-width:140px;">
+          <div class="card-title">Instant (0s)</div>
+          <div class="card-desc">Used for scrim/modal dismissals where instant return is expected.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Prototype Interactions · Page 9</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 10 — PLUGIN FEATURES
+══════════════════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-inner" style="padding-bottom:60px;">
+    <div class="page-header">
+      <div>
+        <span class="page-section-num">Section 08</span>
+        <h2 class="page-title">Figma Plugin — Automation &amp; Delivery</h2>
+      </div>
+      <div class="page-num-badge">10</div>
+    </div>
+
+    <div class="accent-bar"></div>
+
+    <div class="section">
+      <div class="section-title">What the Plugin Does</div>
+      <p>The <strong>OBS CodeBuilders UI Kit Builder</strong> is a custom Figma plugin (manifest: <code style="font-family:monospace;font-size:11px;background:#f0f0f8;padding:1px 5px;border-radius:3px;">obs-codebuilders-uikit</code>) that automates the entire design system. Instead of manually placing every frame, it generates, polishes, and wires all components programmatically — ensuring <strong>zero drift between runs</strong> and <strong>complete reproducibility</strong>.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Plugin Buttons — What Each Does</div>
+      <table class="info-table">
+        <thead>
+          <tr><th>Button</th><th>What It Does</th><th>Output</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">Build UI Kit</td>
+            <td>Full build from scratch: creates all 8 pages, all components, all app frames, tokens, icons, modals, menus. Complete ~5 min run.</td>
+            <td>Entire Figma file</td>
+          </tr>
+          <tr>
+            <td class="td-name">Wire Prototype (7 flows)</td>
+            <td>Wires the 7 core navigation flows between the 3 main app frames using Figma reactions API with DISSOLVE + MOVE_IN transitions.</td>
+            <td>7 prototype links</td>
+          </tr>
+          <tr>
+            <td class="td-name">Wire Modal Prototypes</td>
+            <td>Wires 10 modal/overlay scenes including settings, streaming confirmation, recording, virtual camera, and all menu overlays with scrim dismiss.</td>
+            <td>~10 modal links</td>
+          </tr>
+          <tr>
+            <td class="td-name">Build Feature Components</td>
+            <td>Builds 9 OBS feature area frames (Webcam Only, Screen Share, Intermission, Source Filters, Properties, Scene Collection, Profile Manager, Multiview, Auto-Config Wizard) on Page 06.</td>
+            <td>9 feature frames</td>
+          </tr>
+          <tr>
+            <td class="td-name">Full Design Polish</td>
+            <td>Enhances all app frames: fills preview canvas with gradient + desktop mockup, draws toolbar icon shapes, adds scene thumbnails with color badges, polishes audio meter segments, enriches status bar metrics, adds empty-state placeholders.</td>
+            <td>199+ polished elements</td>
+          </tr>
+          <tr>
+            <td class="td-name">Build Advanced Flows</td>
+            <td>Wires 116 advanced prototype links: settings tab navigation (7 tabs), add-source grid (10 source tiles → config scenes), streaming/recording/virtual-camera modal chains.</td>
+            <td>116 links</td>
+          </tr>
+          <tr>
+            <td class="td-name">⚡ Wire All Buttons</td>
+            <td>Comprehensive button wiring across all Page 03 frames. Explicit named wires + per-frame control panel loops + per-frame toolbar loops + fallback sweep (catches any unnamed interactive elements). Self-loop guard prevents a button wiring to its own parent frame.</td>
+            <td>981 wired (88 via sweep)</td>
+          </tr>
+          <tr>
+            <td class="td-name">Export Design PDF</td>
+            <td>Exports every named frame as a 0.5× PNG screenshot (via Figma exportAsync), encodes to base64, and downloads a complete HTML→PDF document with screenshots and descriptions of every section.</td>
+            <td>Downloadable PDF</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Project File Structure</div>
+      <div style="background:#f8f8fc;border:1px solid #e8e8f0;border-radius:8px;padding:16px 20px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#3a3a4a;line-height:1.8;">
+        <span style="color:#8a5cff;">project 1/</span><br/>
+        &nbsp;&nbsp;<span style="color:#2aad79;">figma-plugin/</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#0d0d1a;">manifest.json</span> <span style="color:#9999bb;">— Plugin metadata (id: obs-codebuilders-uikit)</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#0d0d1a;">code.js</span> <span style="color:#9999bb;">— Main plugin logic (~5,200 lines, all build functions)</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#0d0d1a;">ui.html</span> <span style="color:#9999bb;">— Plugin panel UI (buttons, log viewer, PDF generator)</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#6c6c80;">src/components/</span> <span style="color:#9999bb;">— Source modules (bundled into code.js)</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#9999bb;">buttons.js · inputs.js · panels.js · modals.js · menus.js · appFrames.js</span><br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#6c6c80;">src/helpers.js</span> <span style="color:#9999bb;">— Shared utilities (hexToRgb, solidPaint, applyAutoLayout)</span><br/>
+        &nbsp;&nbsp;<span style="color:#2aad79;">tokens.json</span> <span style="color:#9999bb;">— W3C DTCG design tokens export (colors, type, spacing, shadows)</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Completion Summary</div>
+      <div class="card-grid card-grid-2">
+        <div class="callout callout-done" style="margin-bottom:0;">
+          <span class="callout-icon">✅</span>
+          <div class="callout-text">
+            <strong>Fully Complete</strong><br/>
+            Design tokens · Typography scale · Color system · 8 Figma pages · 60+ components · 11 panels · 7 modals · 3 app frames · 7 menus · 980+ prototype links · 26 icons · tokens.json export
+          </div>
+        </div>
+        <div class="callout callout-info" style="margin-bottom:0;">
+          <span class="callout-icon">🚀</span>
+          <div class="callout-text">
+            <strong>Ready For</strong><br/>
+            Client design review · Developer handoff (Dev Mode) · Prototype presentation · Component library publishing · Code generation via Tokens Studio
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span class="footer-grad">OBS CodeBuilders UI Kit</span>
+    <span>Plugin &amp; Delivery · Page 10 of 10</span>
+  </div>
+</div>
+
+</body>
+</html>

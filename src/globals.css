@@ -1,0 +1,240 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens (source: tokens.json) ───────────────────────────────── */
+:root {
+  /* Background layers */
+  --color-bg-base:    #0B0B0F;
+  --color-bg-surface: #14141C;
+  --color-bg-panel:   #1C1C27;
+  --color-bg-divider: #2A2A3A;
+
+  /* Text */
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: #B9B9C9;
+  --color-text-muted:     #6C6C80;
+
+  /* Accent */
+  --color-accent-start: #8A5CFF;
+  --color-accent-end:   #FF4FD8;
+
+  /* States */
+  --color-state-hover:   rgba(255, 255, 255, 0.06);
+  --color-state-active:  rgba(138, 92, 255, 0.18);
+  --color-state-danger:  #FF5470;
+  --color-state-warning: #FFC857;
+  --color-state-success: #3DDC97;
+
+  /* Audio meter zones */
+  --color-meter-safe:    #3DDC97;
+  --color-meter-caution: #FFC857;
+  --color-meter-clip:    #FF5470;
+
+  /* Border radius */
+  --radius-panel:  12px;
+  --radius-input:  8px;
+  --radius-button: 6px;
+  --radius-pill:   999px;
+  --radius: 6px;
+
+  /* Size constants */
+  --size-menubar-height:   32px;
+  --size-toolbar-height:   40px;
+  --size-statusbar-height: 24px;
+  --size-panel-header:     36px;
+  --size-dock-min-width:   200px;
+
+  /* Gradients */
+  --gradient-accent:        linear-gradient(135deg, #8A5CFF 0%, #FF4FD8 100%);
+  --gradient-accent-subtle: linear-gradient(135deg, rgba(138,92,255,0.15) 0%, rgba(255,79,216,0.15) 100%);
+
+  /* shadcn/ui HSL compatibility */
+  --background:          224 25% 5%;
+  --foreground:          0 0% 100%;
+  --card:                231 22% 10%;
+  --card-foreground:     0 0% 100%;
+  --popover:             231 22% 13%;
+  --popover-foreground:  0 0% 100%;
+  --primary:             262 100% 68%;
+  --primary-foreground:  0 0% 100%;
+  --secondary:           231 22% 15%;
+  --secondary-foreground: 240 10% 73%;
+  --muted:               231 22% 10%;
+  --muted-foreground:    240 6% 45%;
+  --accent:              231 22% 15%;
+  --accent-foreground:   0 0% 100%;
+  --destructive:         349 100% 64%;
+  --destructive-foreground: 0 0% 100%;
+  --border:              240 16% 20%;
+  --input:               240 16% 20%;
+  --ring:                262 100% 68%;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Allow text selection in log viewers, input fields, etc. */
+.selectable,
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-bg-divider); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* ── Focus ring ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 1.5px solid var(--color-accent-start);
+  outline-offset: 1px;
+}
+
+/* ── Gradient utilities ─────────────────────────────────────────────────── */
+.bg-accent-gradient  { background: var(--gradient-accent); }
+.bg-accent-subtle    { background: var(--gradient-accent-subtle); }
+
+.text-accent-gradient {
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Panel header shared style ──────────────────────────────────────────── */
+@layer components {
+  .panel-header {
+    @apply h-9 flex items-center justify-between px-3 bg-bg-surface border-b border-bg-divider flex-shrink-0;
+  }
+
+  .panel-header-title {
+    @apply text-caption font-medium text-text-secondary uppercase tracking-wider;
+  }
+
+  .icon-btn {
+    @apply w-7 h-7 flex items-center justify-center rounded-button text-text-muted
+           hover:text-text-primary hover:bg-state-hover transition-colors duration-100
+           focus-visible:ring-1 focus-visible:ring-accent-start;
+  }
+
+  .icon-btn-active {
+    @apply text-accent-start bg-state-active;
+  }
+}
+
+/* ── Context menu ───────────────────────────────────────────────────────── */
+@layer components {
+  .context-menu-content {
+    @apply min-w-[160px] bg-bg-panel border border-bg-divider rounded-input shadow-float
+           p-1 z-[100] animate-fade-in;
+  }
+
+  .context-menu-item {
+    @apply flex items-center gap-2 px-2 h-7 rounded-sm text-caption text-text-secondary
+           cursor-pointer select-none outline-none
+           hover:bg-state-active hover:text-text-primary
+           focus:bg-state-active focus:text-text-primary
+           transition-colors;
+  }
+}
+
+/* ── FlexLayout overrides ───────────────────────────────────────────────── */
+.flexlayout__layout {
+  background: var(--color-bg-base);
+}
+
+.flexlayout__tab {
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+}
+
+.flexlayout__tab_button {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  padding: 0 12px;
+  font-size: 11px;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: color 0.1s;
+}
+
+.flexlayout__tab_button--selected {
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-accent-start);
+}
+
+.flexlayout__tab_button:hover {
+  background: var(--color-state-hover);
+  color: var(--color-text-primary);
+}
+
+.flexlayout__tabset {
+  border: 1px solid var(--color-bg-divider);
+}
+
+.flexlayout__tabset_tabbar_outer {
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-bg-divider);
+  height: 30px;
+  min-height: 30px;
+}
+
+.flexlayout__tabset_tabbar_inner_tab_container {
+  height: 100%;
+}
+
+.flexlayout__splitter {
+  background: var(--color-bg-divider);
+  opacity: 0.7;
+}
+
+.flexlayout__splitter:hover,
+.flexlayout__splitter_drag {
+  background: var(--color-accent-start);
+  opacity: 1;
+}
+
+.flexlayout__tab_toolbar_button {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.flexlayout__tab_toolbar_button:hover {
+  color: var(--color-text-primary);
+}
+
+.flexlayout__edge_rect {
+  background: var(--color-accent-start);
+  opacity: 0.3;
+}
+
+.flexlayout__drag_rect {
+  background: var(--color-state-active);
+  border: 1px solid var(--color-accent-start);
+}
