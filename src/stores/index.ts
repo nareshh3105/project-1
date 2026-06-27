@@ -32,3 +32,5 @@ export type { ProfileItem } from './profileStore'
 
 export { usePluginStore } from './pluginStore'
 export type { PluginItem } from './pluginStore'
+
+export { useCaptureStore, isCaptureType, CAPTURE_SOURCE_TYPES } from './captureStore'

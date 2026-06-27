@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Plus, Minus, Eye, EyeOff, Lock, Unlock, Trash2, Edit2,
-  ChevronUp, ChevronDown, SlidersHorizontal,
+  ChevronUp, ChevronDown, SlidersHorizontal, RefreshCw,
   Monitor, AppWindow, Gamepad2, Camera, Speaker, Mic,
   Image, Film, Globe, Palette, Type, Layers,
 } from 'lucide-react'
@@ -15,6 +15,7 @@ import { RenameModal } from '@/components/modals/RenameModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import type { SourceType } from '@/types'
 import { cn } from '@/lib/utils'
+import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
 
 function sourceIcon(type: SourceType) {
   const props = { size: 12, className: 'flex-shrink-0' }
@@ -49,8 +50,11 @@ export function SourcesPanel() {
       moveDown:     s.moveDown,
     }))
 
-  const openModal      = useUIStore((s) => s.openModal)
-  const filtersBySource = useFilterStore((s) => s.filtersBySource)
+  const openModal        = useUIStore((s) => s.openModal)
+  const filtersBySource  = useFilterStore((s) => s.filtersBySource)
+  const captureActiveIds = useCaptureStore((s) => s.activeIds)
+  const startCapture     = useCaptureStore((s) => s.startCapture)
+  const stopCapture      = useCaptureStore((s) => s.stopCapture)
 
   const sources = (activeSceneId ? byScene[activeSceneId] : []) ?? []
   const reversedSources = [...sources].reverse() // top layer first in UI
@@ -63,6 +67,11 @@ export function SourcesPanel() {
   async function handleAdd(type: SourceType, name: string) {
     if (!activeSceneId) return
     await addSource(activeSceneId, name, type)
+    if (isCaptureType(type)) {
+      const sceneSources = useSourceStore.getState().byScene[activeSceneId] ?? []
+      const newSrc = sceneSources[sceneSources.length - 1]
+      if (newSrc) startCapture(newSrc.id, type).catch(console.warn)
+    }
   }
 
   function openFilters(src: SourceItem) {
@@ -115,6 +124,8 @@ export function SourcesPanel() {
               onMoveUp={() => moveUp(src.sceneId, src.id)}
               onMoveDown={() => moveDown(src.sceneId, src.id)}
               onFilters={() => openFilters(src)}
+              isCapturing={captureActiveIds.includes(src.id)}
+              onRestartCapture={() => startCapture(src.id, src.sourceType).catch(console.warn)}
             />
           ))
         )}
@@ -167,7 +178,12 @@ export function SourcesPanel() {
         message={`Remove "${deleteTarget?.name}" from the scene?`}
         confirmLabel="Remove"
         danger
-        onConfirm={() => deleteTarget && removeSource(deleteTarget.sceneId, deleteTarget.id)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            stopCapture(deleteTarget.id)
+            removeSource(deleteTarget.sceneId, deleteTarget.id)
+          }
+        }}
         onClose={() => setDeleteTarget(null)}
       />
     </div>
@@ -178,6 +194,7 @@ interface SourceRowProps {
   source: SourceItem
   selected: boolean
   hasFilters: boolean
+  isCapturing: boolean
   onSelect: () => void
   onToggleVisible: () => void
   onToggleLocked: () => void
@@ -186,11 +203,12 @@ interface SourceRowProps {
   onMoveUp: () => void
   onMoveDown: () => void
   onFilters: () => void
+  onRestartCapture: () => void
 }
 
 function SourceRow({
-  source, selected, hasFilters, onSelect, onToggleVisible, onToggleLocked,
-  onRename, onDelete, onMoveUp, onMoveDown, onFilters,
+  source, selected, hasFilters, isCapturing, onSelect, onToggleVisible, onToggleLocked,
+  onRename, onDelete, onMoveUp, onMoveDown, onFilters, onRestartCapture,
 }: SourceRowProps) {
   return (
     <ContextMenu.Root>
@@ -229,6 +247,14 @@ function SourceRow({
           {/* Name */}
           <span className="flex-1 text-caption truncate">{source.name}</span>
 
+          {/* Live capture dot */}
+          {isCapturing && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 animate-pulse"
+              title="Capturing"
+            />
+          )}
+
           {/* Filters button — dot indicator when filters exist, always visible on hover */}
           <button
             onClick={(e) => { e.stopPropagation(); onFilters() }}
@@ -254,6 +280,11 @@ function SourceRow({
           <ContextMenu.Item className="context-menu-item" onSelect={onFilters}>
             <SlidersHorizontal size={12} /> Filters…
           </ContextMenu.Item>
+          {isCaptureType(source.sourceType) && (
+            <ContextMenu.Item className="context-menu-item" onSelect={onRestartCapture}>
+              <RefreshCw size={12} /> Restart Capture
+            </ContextMenu.Item>
+          )}
           <ContextMenu.Separator className="h-px bg-bg-divider my-1" />
           <ContextMenu.Item className="context-menu-item" onSelect={onRename}>
             <Edit2 size={12} /> Rename
