@@ -94,6 +94,9 @@ pub fn run() {
             commands::plugin_commands::read_plugin_script,
             commands::plugin_commands::uninstall_plugin,
             commands::stats_commands::start_stats_polling,
+            commands::output_commands::start_replay_buffer,
+            commands::output_commands::stop_replay_buffer,
+            commands::output_commands::save_replay,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

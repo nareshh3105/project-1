@@ -4,6 +4,7 @@ use serde::Serialize;
 
 pub const RECORDING_STATUS_EVENT: &str = "output:recording-status";
 pub const STREAMING_STATUS_EVENT: &str = "output:streaming-status";
+pub const REPLAY_STATUS_EVENT:    &str = "output:replay-status";
 pub const STATS_UPDATE_EVENT:     &str = "stats:update";
 
 // ── Event payloads ────────────────────────────────────────────────────────────
@@ -18,6 +19,12 @@ pub struct RecordingStatusPayload {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamingStatusPayload {
+    pub active: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayStatusPayload {
     pub active: bool,
 }
 
@@ -47,11 +54,18 @@ pub struct StreamingSession {
     pub child: Child,
 }
 
+pub struct ReplaySession {
+    pub child:       Child,
+    pub segment_dir: std::path::PathBuf,
+    pub buffer_secs: u32,
+}
+
 // ── Output state (shared via AppState) ───────────────────────────────────────
 
 pub struct OutputState {
     pub recording:     Arc<Mutex<Option<RecordingSession>>>,
     pub streaming:     Arc<Mutex<Option<StreamingSession>>>,
+    pub replay:        Arc<Mutex<Option<ReplaySession>>>,
     pub stats_running: Arc<AtomicBool>,
 }
 
@@ -60,6 +74,7 @@ impl OutputState {
         OutputState {
             recording:     Arc::new(Mutex::new(None)),
             streaming:     Arc::new(Mutex::new(None)),
+            replay:        Arc::new(Mutex::new(None)),
             stats_running: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -70,6 +85,10 @@ impl OutputState {
 
     pub fn is_streaming(&self) -> bool {
         self.streaming.lock().map(|g| g.is_some()).unwrap_or(false)
+    }
+
+    pub fn is_replay_active(&self) -> bool {
+        self.replay.lock().map(|g| g.is_some()).unwrap_or(false)
     }
 }
 
@@ -90,6 +109,5 @@ pub fn default_recording_path() -> String {
         .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| ".".to_string()));
 
     let ts = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-    // MKV is resilient to abrupt termination (no moov-atom dependency)
     format!("{}/Videos/CodeBuilders_{}.mkv", home, ts)
 }

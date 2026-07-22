@@ -144,6 +144,12 @@ export const ipc = {
     startPolling: () => cmd<void>('start_stats_polling'),
   },
 
+  replay: {
+    start:  (bufferSecs?: number) => cmd<void>('start_replay_buffer', { bufferSecs: bufferSecs ?? null }),
+    stop:   () => cmd<void>('stop_replay_buffer'),
+    save:   (outputPath?: string) => cmd<string>('save_replay', { outputPath: outputPath ?? null }),
+  },
+
   plugin: {
     list:       () =>
       cmd<PluginDto[]>('list_plugins'),
@@ -205,6 +211,7 @@ export function onAudioLevels(cb: (levels: ChannelLevelPayload[]) => void): Prom
 
 export interface RecordingStatusPayload { active: boolean; filePath: string | null }
 export interface StreamingStatusPayload { active: boolean }
+export interface ReplayStatusPayload    { active: boolean }
 
 export function onRecordingStatus(cb: (p: RecordingStatusPayload) => void): Promise<UnlistenFn> {
   return listen<RecordingStatusPayload>(IPC_EVENTS.RECORDING_STATUS, (e) => cb(e.payload))
@@ -212,6 +219,10 @@ export function onRecordingStatus(cb: (p: RecordingStatusPayload) => void): Prom
 
 export function onStreamingStatus(cb: (p: StreamingStatusPayload) => void): Promise<UnlistenFn> {
   return listen<StreamingStatusPayload>(IPC_EVENTS.STREAM_STATUS, (e) => cb(e.payload))
+}
+
+export function onReplayStatus(cb: (p: ReplayStatusPayload) => void): Promise<UnlistenFn> {
+  return listen<ReplayStatusPayload>('output:replay-status', (e) => cb(e.payload))
 }
 
 export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {

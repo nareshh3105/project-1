@@ -20,6 +20,7 @@ import {
   onRecordingStatus,
   onStreamingStatus,
   onStatsUpdate,
+  onReplayStatus,
 } from '@/ipc'
 
 export function AppShell() {
@@ -34,11 +35,13 @@ export function AppShell() {
     setRecordingStatus,
     setStreamingStatus,
     setFfmpegAvailable,
+    setReplayActive,
     tickElapsed,
   } = useOutputStore((s) => ({
     setRecordingStatus:  s.setRecordingStatus,
     setStreamingStatus:  s.setStreamingStatus,
     setFfmpegAvailable:  s.setFfmpegAvailable,
+    setReplayActive:     s.setReplayActive,
     tickElapsed:         s.tickElapsed,
   }))
 
@@ -65,6 +68,7 @@ export function AppShell() {
     let unlistenRec:    (() => void) | null = null
     let unlistenStream: (() => void) | null = null
     let unlistenStats:  (() => void) | null = null
+    let unlistenReplay: (() => void) | null = null
 
     onRecordingStatus((p) => setRecordingStatus(p.active, p.filePath))
       .then((u) => { unlistenRec = u })
@@ -75,12 +79,16 @@ export function AppShell() {
     onStatsUpdate((stats) => setStats(stats))
       .then((u) => { unlistenStats = u })
 
+    onReplayStatus((p) => setReplayActive(p.active))
+      .then((u) => { unlistenReplay = u })
+
     return () => {
       unlistenRec?.()
       unlistenStream?.()
       unlistenStats?.()
+      unlistenReplay?.()
     }
-  }, [setRecordingStatus, setStreamingStatus, setStats])
+  }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive])
 
   // Elapsed timer — ticks every second when recording/streaming is active
   useEffect(() => {

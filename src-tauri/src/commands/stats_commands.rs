@@ -39,7 +39,7 @@ pub async fn start_stats_polling(app: AppHandle) {
             sys.refresh_memory();
 
             let stats = RuntimeStats {
-                cpu_percent:           sys.global_cpu_usage() as f64,
+                cpu_percent:           sys.global_cpu_info().cpu_usage() as f64,
                 memory_mb:             sys.used_memory() as f64 / (1024.0 * 1024.0),
                 gpu_percent:           0.0,
                 render_fps:            30.0,

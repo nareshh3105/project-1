@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square } from 'lucide-react'
+import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
@@ -14,9 +14,12 @@ export function ControlsPanel() {
     stream:       s.stream,
   }))
 
-  const [recError,    setRecError]    = useState<string | null>(null)
-  const [streamError, setStreamError] = useState<string | null>(null)
-  const [recLoading,  setRecLoading]  = useState(false)
+  const [recError,     setRecError]     = useState<string | null>(null)
+  const [streamError,  setStreamError]  = useState<string | null>(null)
+  const [replayError,  setReplayError]  = useState<string | null>(null)
+  const [replaySaved,  setReplaySaved]  = useState<string | null>(null)
+  const [recLoading,   setRecLoading]   = useState(false)
+  const [replayLoading, setReplayLoading] = useState(false)
 
   async function handleRecording() {
     setRecError(null)
@@ -31,6 +34,35 @@ export function ControlsPanel() {
       setRecError(String(e))
     } finally {
       setRecLoading(false)
+    }
+  }
+
+  async function handleReplay() {
+    setReplayError(null)
+    setReplaySaved(null)
+    setReplayLoading(true)
+    try {
+      if (replayBuffer.active) {
+        await ipc.replay.stop()
+      } else {
+        await ipc.replay.start(30)
+      }
+    } catch (e) {
+      setReplayError(String(e))
+    } finally {
+      setReplayLoading(false)
+    }
+  }
+
+  async function handleSaveReplay() {
+    setReplayError(null)
+    setReplaySaved(null)
+    try {
+      const path = await ipc.replay.save()
+      setReplaySaved(path)
+      setTimeout(() => setReplaySaved(null), 5000)
+    } catch (e) {
+      setReplayError(String(e))
     }
   }
 
@@ -83,10 +115,33 @@ export function ControlsPanel() {
         {/* Replay Buffer */}
         <ControlButton
           icon={<RotateCcw size={14} />}
-          label={replayBuffer.active ? 'Stop Replay Buffer' : 'Start Replay Buffer'}
+          label={
+            replayLoading
+              ? (replayBuffer.active ? 'Stopping…' : 'Starting…')
+              : replayBuffer.active
+              ? 'Stop Replay Buffer'
+              : 'Start Replay Buffer'
+          }
           variant={replayBuffer.active ? 'danger' : 'default'}
-          disabled
+          onClick={handleReplay}
+          disabled={replayLoading}
         />
+        {replayBuffer.active && (
+          <ControlButton
+            icon={<Save size={14} />}
+            label="Save Replay"
+            variant="default"
+            onClick={handleSaveReplay}
+          />
+        )}
+        {replayError && (
+          <p className="text-[10px] text-state-danger px-2 -mt-1 leading-tight">{replayError}</p>
+        )}
+        {replaySaved && (
+          <p className="text-[10px] text-state-success px-2 -mt-1 leading-tight truncate" title={replaySaved}>
+            Saved: {replaySaved.split(/[/\\]/).pop()}
+          </p>
+        )}
 
         {/* Virtual Camera */}
         <ControlButton
