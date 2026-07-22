@@ -4,7 +4,8 @@ use serde::Serialize;
 
 pub const RECORDING_STATUS_EVENT: &str = "output:recording-status";
 pub const STREAMING_STATUS_EVENT: &str = "output:streaming-status";
-pub const REPLAY_STATUS_EVENT:    &str = "output:replay-status";
+pub const REPLAY_STATUS_EVENT:         &str = "output:replay-status";
+pub const VIRTUAL_CAMERA_STATUS_EVENT: &str = "output:virtual-camera-status";
 pub const STATS_UPDATE_EVENT:     &str = "stats:update";
 
 // ── Event payloads ────────────────────────────────────────────────────────────
@@ -26,6 +27,13 @@ pub struct StreamingStatusPayload {
 #[serde(rename_all = "camelCase")]
 pub struct ReplayStatusPayload {
     pub active: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VirtualCameraStatusPayload {
+    pub active: bool,
+    pub url:    Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -60,22 +68,29 @@ pub struct ReplaySession {
     pub buffer_secs: u32,
 }
 
+pub struct VirtualCameraSession {
+    pub child: Child,
+    pub url:   String,
+}
+
 // ── Output state (shared via AppState) ───────────────────────────────────────
 
 pub struct OutputState {
-    pub recording:     Arc<Mutex<Option<RecordingSession>>>,
-    pub streaming:     Arc<Mutex<Option<StreamingSession>>>,
-    pub replay:        Arc<Mutex<Option<ReplaySession>>>,
-    pub stats_running: Arc<AtomicBool>,
+    pub recording:      Arc<Mutex<Option<RecordingSession>>>,
+    pub streaming:      Arc<Mutex<Option<StreamingSession>>>,
+    pub replay:         Arc<Mutex<Option<ReplaySession>>>,
+    pub virtual_camera: Arc<Mutex<Option<VirtualCameraSession>>>,
+    pub stats_running:  Arc<AtomicBool>,
 }
 
 impl OutputState {
     pub fn new() -> Self {
         OutputState {
-            recording:     Arc::new(Mutex::new(None)),
-            streaming:     Arc::new(Mutex::new(None)),
-            replay:        Arc::new(Mutex::new(None)),
-            stats_running: Arc::new(AtomicBool::new(false)),
+            recording:      Arc::new(Mutex::new(None)),
+            streaming:      Arc::new(Mutex::new(None)),
+            replay:         Arc::new(Mutex::new(None)),
+            virtual_camera: Arc::new(Mutex::new(None)),
+            stats_running:  Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -89,6 +104,10 @@ impl OutputState {
 
     pub fn is_replay_active(&self) -> bool {
         self.replay.lock().map(|g| g.is_some()).unwrap_or(false)
+    }
+
+    pub fn is_virtual_camera_active(&self) -> bool {
+        self.virtual_camera.lock().map(|g| g.is_some()).unwrap_or(false)
     }
 }
 

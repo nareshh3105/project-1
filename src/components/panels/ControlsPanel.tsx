@@ -7,11 +7,12 @@ import { ipc } from '@/ipc'
 
 export function ControlsPanel() {
   const openModal     = useUIStore((s) => s.openModal)
-  const { recording, streaming, replayBuffer, stream } = useOutputStore((s) => ({
-    recording:    s.recording,
-    streaming:    s.streaming,
-    replayBuffer: s.replayBuffer,
-    stream:       s.stream,
+  const { recording, streaming, replayBuffer, virtualCamera, stream } = useOutputStore((s) => ({
+    recording:     s.recording,
+    streaming:     s.streaming,
+    replayBuffer:  s.replayBuffer,
+    virtualCamera: s.virtualCamera,
+    stream:        s.stream,
   }))
 
   const [recError,     setRecError]     = useState<string | null>(null)
@@ -19,7 +20,9 @@ export function ControlsPanel() {
   const [replayError,  setReplayError]  = useState<string | null>(null)
   const [replaySaved,  setReplaySaved]  = useState<string | null>(null)
   const [recLoading,   setRecLoading]   = useState(false)
-  const [replayLoading, setReplayLoading] = useState(false)
+  const [replayLoading,  setReplayLoading]  = useState(false)
+  const [vcamError,      setVcamError]      = useState<string | null>(null)
+  const [vcamLoading,    setVcamLoading]    = useState(false)
 
   async function handleRecording() {
     setRecError(null)
@@ -63,6 +66,22 @@ export function ControlsPanel() {
       setTimeout(() => setReplaySaved(null), 5000)
     } catch (e) {
       setReplayError(String(e))
+    }
+  }
+
+  async function handleVirtualCamera() {
+    setVcamError(null)
+    setVcamLoading(true)
+    try {
+      if (virtualCamera.active) {
+        await ipc.output.stopVirtualCamera()
+      } else {
+        await ipc.output.startVirtualCamera()
+      }
+    } catch (e) {
+      setVcamError(String(e))
+    } finally {
+      setVcamLoading(false)
     }
   }
 
@@ -146,10 +165,25 @@ export function ControlsPanel() {
         {/* Virtual Camera */}
         <ControlButton
           icon={<Video size={14} />}
-          label="Start Virtual Camera"
-          variant="default"
-          disabled
+          label={
+            vcamLoading
+              ? (virtualCamera.active ? 'Stopping…' : 'Starting…')
+              : virtualCamera.active
+              ? 'Stop Virtual Camera'
+              : 'Start Virtual Camera'
+          }
+          variant={virtualCamera.active ? 'danger' : 'default'}
+          onClick={handleVirtualCamera}
+          disabled={vcamLoading}
         />
+        {virtualCamera.active && virtualCamera.url && (
+          <p className="text-[10px] text-text-muted px-2 -mt-1 leading-tight truncate" title={virtualCamera.url}>
+            {virtualCamera.url}
+          </p>
+        )}
+        {vcamError && (
+          <p className="text-[10px] text-state-danger px-2 -mt-1 leading-tight">{vcamError}</p>
+        )}
 
         <div className="h-px bg-bg-divider my-1" />
 

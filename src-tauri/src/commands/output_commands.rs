@@ -5,9 +5,9 @@ use crate::state::AppState;
 use crate::error::CommandResult;
 use crate::output::{
     ffmpeg_available, default_recording_path,
-    RecordingSession, StreamingSession, ReplaySession,
-    RecordingStatusPayload, StreamingStatusPayload, ReplayStatusPayload,
-    RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT, REPLAY_STATUS_EVENT,
+    RecordingSession, StreamingSession, ReplaySession, VirtualCameraSession,
+    RecordingStatusPayload, StreamingStatusPayload, ReplayStatusPayload, VirtualCameraStatusPayload,
+    RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT, REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT,
 };
 
 #[tauri::command]
@@ -352,4 +352,84 @@ pub async fn save_replay(
     }
 
     Ok(dest)
+}
+
+// ── Virtual Camera ─────────────────────────────────────────────────────────────
+
+const VIRTUAL_CAMERA_PORT: u16 = 12345;
+
+#[tauri::command]
+pub async fn start_virtual_camera(
+    app:   AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<String> {
+    if state.output.is_virtual_camera_active() {
+        return Err("Virtual camera is already active".to_string());
+    }
+
+    if !ffmpeg_available() {
+        return Err(
+            "ffmpeg not found in PATH. Download ffmpeg from https://ffmpeg.org and add it to PATH."
+                .to_string(),
+        );
+    }
+
+    let url = format!("udp://127.0.0.1:{}", VIRTUAL_CAMERA_PORT);
+
+    let child = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-f",          "gdigrab",
+            "-framerate",  "30",
+            "-draw_mouse", "1",
+            "-i",          "desktop",
+            "-c:v",        "libx264",
+            "-preset",     "ultrafast",
+            "-tune",       "zerolatency",
+            "-pix_fmt",    "yuv420p",
+            "-g",          "30",
+            "-f",          "mpegts",
+            &url,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to launch ffmpeg: {}", e))?;
+
+    *state.output.virtual_camera.lock().map_err(|e| e.to_string())? =
+        Some(VirtualCameraSession { child, url: url.clone() });
+
+    let _ = app.emit(VIRTUAL_CAMERA_STATUS_EVENT, VirtualCameraStatusPayload {
+        active: true,
+        url:    Some(url.clone()),
+    });
+
+    Ok(url)
+}
+
+#[tauri::command]
+pub async fn stop_virtual_camera(
+    app:   AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    let session = state.output.virtual_camera.lock()
+        .map_err(|e| e.to_string())?
+        .take();
+
+    if let Some(mut s) = session {
+        drop(s.child.stdin.take());
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = s.child.kill();
+            let _ = s.child.wait();
+        });
+    }
+
+    let _ = app.emit(VIRTUAL_CAMERA_STATUS_EVENT, VirtualCameraStatusPayload {
+        active: false,
+        url:    None,
+    });
+
+    Ok(())
 }

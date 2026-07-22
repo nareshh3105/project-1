@@ -138,6 +138,8 @@ export const ipc = {
     startStreaming:   (rtmpUrl: string, streamKey: string) =>
       cmd<void>('start_streaming', { rtmpUrl, streamKey }),
     stopStreaming:    () => cmd<void>('stop_streaming'),
+    startVirtualCamera: () => cmd<string>('start_virtual_camera'),
+    stopVirtualCamera:  () => cmd<void>('stop_virtual_camera'),
   },
 
   stats: {
@@ -244,6 +246,15 @@ export interface DownloadProgressPayload {
 
 export function onUpdateDownloadProgress(cb: (p: DownloadProgressPayload) => void): Promise<UnlistenFn> {
   return listen<DownloadProgressPayload>('updater:download-progress', (e) => cb(e.payload))
+}
+
+export interface VirtualCameraStatusPayload {
+  active: boolean
+  url:    string | null
+}
+
+export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
+  return listen<VirtualCameraStatusPayload>('output:virtual-camera-status', (e) => cb(e.payload))
 }
 
 export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {

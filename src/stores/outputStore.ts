@@ -35,6 +35,10 @@ export interface OutputState {
   replayBuffer: {
     active: boolean
   }
+  virtualCamera: {
+    active: boolean
+    url:    string | null
+  }
   stream:          StreamSettings
   ffmpegAvailable: boolean | null  // null = unchecked
 }
@@ -42,7 +46,8 @@ export interface OutputState {
 interface OutputActions {
   setRecordingStatus:  (active: boolean, filePath: string | null) => void
   setStreamingStatus:  (active: boolean) => void
-  setReplayActive:     (active: boolean) => void
+  setReplayActive:          (active: boolean) => void
+  setVirtualCameraStatus:   (active: boolean, url: string | null) => void
   tickElapsed:         () => void
   setFfmpegAvailable:  (v: boolean) => void
   setStreamSettings:   (rtmpUrl: string, streamKey: string) => void
@@ -53,6 +58,7 @@ export const useOutputStore = create<OutputState & OutputActions>()(
     recording:       { active: false, filePath: null, startedAt: null, elapsed: 0 },
     streaming:       { active: false, startedAt: null, elapsed: 0 },
     replayBuffer:    { active: false },
+    virtualCamera:   { active: false, url: null },
     stream:          loadStream(),
     ffmpegAvailable: null,
 
@@ -70,6 +76,11 @@ export const useOutputStore = create<OutputState & OutputActions>()(
     }),
 
     setReplayActive: (active) => set((s) => { s.replayBuffer.active = active }),
+
+    setVirtualCameraStatus: (active, url) => set((s) => {
+      s.virtualCamera.active = active
+      s.virtualCamera.url    = url
+    }),
 
     tickElapsed: () => set((s) => {
       if (s.recording.active && s.recording.startedAt) {

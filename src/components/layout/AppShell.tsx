@@ -22,6 +22,7 @@ import {
   onStreamingStatus,
   onStatsUpdate,
   onReplayStatus,
+  onVirtualCameraStatus,
 } from '@/ipc'
 
 export function AppShell() {
@@ -37,13 +38,15 @@ export function AppShell() {
     setStreamingStatus,
     setFfmpegAvailable,
     setReplayActive,
+    setVirtualCameraStatus,
     tickElapsed,
   } = useOutputStore((s) => ({
-    setRecordingStatus:  s.setRecordingStatus,
-    setStreamingStatus:  s.setStreamingStatus,
-    setFfmpegAvailable:  s.setFfmpegAvailable,
-    setReplayActive:     s.setReplayActive,
-    tickElapsed:         s.tickElapsed,
+    setRecordingStatus:     s.setRecordingStatus,
+    setStreamingStatus:     s.setStreamingStatus,
+    setFfmpegAvailable:     s.setFfmpegAvailable,
+    setReplayActive:        s.setReplayActive,
+    setVirtualCameraStatus: s.setVirtualCameraStatus,
+    tickElapsed:            s.tickElapsed,
   }))
 
   // App init
@@ -70,6 +73,7 @@ export function AppShell() {
     let unlistenStream: (() => void) | null = null
     let unlistenStats:  (() => void) | null = null
     let unlistenReplay: (() => void) | null = null
+    let unlistenVcam:   (() => void) | null = null
 
     onRecordingStatus((p) => setRecordingStatus(p.active, p.filePath))
       .then((u) => { unlistenRec = u })
@@ -83,13 +87,17 @@ export function AppShell() {
     onReplayStatus((p) => setReplayActive(p.active))
       .then((u) => { unlistenReplay = u })
 
+    onVirtualCameraStatus((p) => setVirtualCameraStatus(p.active, p.url))
+      .then((u) => { unlistenVcam = u })
+
     return () => {
       unlistenRec?.()
       unlistenStream?.()
       unlistenStats?.()
       unlistenReplay?.()
+      unlistenVcam?.()
     }
-  }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive])
+  }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 
   // Elapsed timer — ticks every second when recording/streaming is active
   useEffect(() => {
