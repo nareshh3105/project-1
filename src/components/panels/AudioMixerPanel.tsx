@@ -127,10 +127,11 @@ interface ChannelStripProps {
   channel:  AudioChannel
   onVolume: (id: string, v: number) => void
   onMute:   (id: string, muted: boolean) => void
+  onNS:     (id: string, enabled: boolean) => void
 }
 
-function ChannelStrip({ channel, onVolume, onMute }: ChannelStripProps) {
-  const { id, name, volume, muted, levels } = channel
+function ChannelStrip({ channel, onVolume, onMute, onNS }: ChannelStripProps) {
+  const { id, name, volume, muted, noiseSuppression, levels } = channel
   const { peakL, peakR, rmsL, rmsR } = levels
 
   // Peak hold: retain peak for 1.5 s then decay
@@ -174,6 +175,7 @@ function ChannelStrip({ channel, onVolume, onMute }: ChannelStripProps) {
       {/* Mute button */}
       <button
         onClick={() => onMute(id, !muted)}
+        title="Mute"
         style={{
           width: 28,
           height: 20,
@@ -190,6 +192,27 @@ function ChannelStrip({ channel, onVolume, onMute }: ChannelStripProps) {
         M
       </button>
 
+      {/* Noise Suppression button */}
+      <button
+        onClick={() => onNS(id, !noiseSuppression)}
+        title={noiseSuppression ? 'Noise suppression ON (click to disable)' : 'Noise suppression OFF (click to enable)'}
+        style={{
+          width: 28,
+          height: 20,
+          borderRadius: 4,
+          fontSize: 9,
+          fontWeight: 700,
+          cursor: 'pointer',
+          border: 'none',
+          background: noiseSuppression ? COLOR.accent.start : COLOR.bg.base,
+          color:      noiseSuppression ? '#fff' : COLOR.text.muted,
+          transition: 'background 0.1s',
+          letterSpacing: '-0.5px',
+        }}
+      >
+        NS
+      </button>
+
       {/* Label */}
       <span style={{ fontSize: 9, color: COLOR.text.muted, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {name}
@@ -201,10 +224,11 @@ function ChannelStrip({ channel, onVolume, onMute }: ChannelStripProps) {
 // ── Panel ──────────────────────────────────────────────────────────────────
 
 export function AudioMixerPanel() {
-  const channels     = useAudioStore((s) => s.channels)
-  const setVolume    = useAudioStore((s) => s.setVolume)
-  const setMuted     = useAudioStore((s) => s.setMuted)
-  const updateLevels = useAudioStore((s) => s.updateLevels)
+  const channels           = useAudioStore((s) => s.channels)
+  const setVolume          = useAudioStore((s) => s.setVolume)
+  const setMuted           = useAudioStore((s) => s.setMuted)
+  const setNoiseSuppression = useAudioStore((s) => s.setNoiseSuppression)
+  const updateLevels       = useAudioStore((s) => s.updateLevels)
 
   // Wire up Tauri audio levels event
   useEffect(() => {
@@ -231,6 +255,10 @@ export function AudioMixerPanel() {
     ipc.audio.setMuted(id, muted).catch(() => {})
   }, [setMuted])
 
+  const handleNS = useCallback((id: string, enabled: boolean) => {
+    setNoiseSuppression(id, enabled)
+  }, [setNoiseSuppression])
+
   return (
     <div className="flex flex-col h-full bg-bg-surface overflow-hidden">
       <div className="panel-header">
@@ -244,6 +272,7 @@ export function AudioMixerPanel() {
             channel={ch}
             onVolume={handleVolume}
             onMute={handleMute}
+            onNS={handleNS}
           />
         ))}
       </div>

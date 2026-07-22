@@ -4,11 +4,13 @@ import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useAudioStore } from '@/stores/audioStore'
 import { ipc } from '@/ipc'
 
 export function ControlsPanel() {
   const openModal         = useUIStore((s) => s.openModal)
   const recordingConfig   = useSettingsStore((s) => s.recording)
+  const audioChannels     = useAudioStore((s) => s.channels)
   const { recording, streaming, replayBuffer, virtualCamera, stream } = useOutputStore((s) => ({
     recording:     s.recording,
     streaming:     s.streaming,
@@ -36,7 +38,10 @@ export function ControlsPanel() {
         await ipc.output.stopRecording()
       } else {
         const tracks = recordingConfig.audioTracks.length > 0 ? recordingConfig.audioTracks : undefined
-        await ipc.output.startRecording(undefined, tracks)
+        // Map device index → noise suppression using mic channel state for all aux tracks
+        const micNS = audioChannels.find((c) => c.id === 'mic')?.noiseSuppression ?? false
+        const nsFlags = tracks ? tracks.map(() => micNS) : undefined
+        await ipc.output.startRecording(undefined, tracks, nsFlags)
       }
     } catch (e) {
       setRecError(String(e))

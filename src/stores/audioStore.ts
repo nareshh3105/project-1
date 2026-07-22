@@ -9,11 +9,12 @@ export interface ChannelLevels {
 }
 
 export interface AudioChannel {
-  id:     string
-  name:   string
-  volume: number   // 0.0 – 1.0
-  muted:  boolean
-  levels: ChannelLevels
+  id:               string
+  name:             string
+  volume:           number   // 0.0 – 1.0
+  muted:            boolean
+  noiseSuppression: boolean
+  levels:           ChannelLevels
 }
 
 const CHANNEL_DEFS: { id: string; name: string }[] = [
@@ -28,7 +29,7 @@ function silentLevels(): ChannelLevels {
 }
 
 function makeChannel(id: string, name: string): AudioChannel {
-  return { id, name, volume: 1, muted: false, levels: silentLevels() }
+  return { id, name, volume: 1, muted: false, noiseSuppression: false, levels: silentLevels() }
 }
 
 interface AudioState {
@@ -36,9 +37,10 @@ interface AudioState {
 }
 
 interface AudioActions {
-  setVolume:    (id: string, volume: number) => void
-  setMuted:     (id: string, muted: boolean) => void
-  updateLevels: (id: string, levels: ChannelLevels) => void
+  setVolume:           (id: string, volume: number) => void
+  setMuted:            (id: string, muted: boolean) => void
+  setNoiseSuppression: (id: string, enabled: boolean) => void
+  updateLevels:        (id: string, levels: ChannelLevels) => void
 }
 
 export const useAudioStore = create<AudioState & AudioActions>()(
@@ -55,6 +57,12 @@ export const useAudioStore = create<AudioState & AudioActions>()(
       set((s) => {
         const ch = s.channels.find((c) => c.id === id)
         if (ch) ch.muted = muted
+      }),
+
+    setNoiseSuppression: (id, enabled) =>
+      set((s) => {
+        const ch = s.channels.find((c) => c.id === id)
+        if (ch) ch.noiseSuppression = enabled
       }),
 
     updateLevels: (id, levels) =>

@@ -132,8 +132,8 @@ export const ipc = {
   output: {
     checkFfmpeg:      () => cmd<boolean>('check_ffmpeg'),
     getRecordingPath: () => cmd<string>('get_recording_path'),
-    startRecording:   (outputPath?: string, audioTracks?: string[]) =>
-      cmd<string>('start_recording', { outputPath: outputPath ?? null, audioTracks: audioTracks ?? null }),
+    startRecording:   (outputPath?: string, audioTracks?: string[], noiseSuppression?: boolean[]) =>
+      cmd<string>('start_recording', { outputPath: outputPath ?? null, audioTracks: audioTracks ?? null, noiseSuppression: noiseSuppression ?? null }),
     stopRecording:    () => cmd<void>('stop_recording'),
     startStreaming:   (rtmpUrl: string, streamKey: string) =>
       cmd<void>('start_streaming', { rtmpUrl, streamKey }),

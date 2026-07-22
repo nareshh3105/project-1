@@ -22,10 +22,11 @@ pub async fn get_recording_path() -> CommandResult<String> {
 
 #[tauri::command]
 pub async fn start_recording(
-    app:          AppHandle,
-    state:        State<'_, AppState>,
-    output_path:  Option<String>,
-    audio_tracks: Option<Vec<String>>,
+    app:               AppHandle,
+    state:             State<'_, AppState>,
+    output_path:       Option<String>,
+    audio_tracks:      Option<Vec<String>>,
+    noise_suppression: Option<Vec<bool>>,
 ) -> CommandResult<String> {
     if state.output.is_recording() {
         return Err("Recording is already active".to_string());
@@ -45,6 +46,7 @@ pub async fn start_recording(
     }
 
     let tracks = audio_tracks.unwrap_or_default();
+    let ns     = noise_suppression.unwrap_or_default();
 
     // Build args dynamically to support multi-track audio
     let mut args: Vec<String> = vec![
@@ -72,20 +74,60 @@ pub async fn start_recording(
         "-pix_fmt".into(), "yuv420p".into(),
     ]);
 
-    // Audio encoders — one AAC stream per track
-    for (i, _) in tracks.iter().enumerate() {
-        args.push(format!("-c:a:{}", i));
-        args.push("aac".into());
-        args.push(format!("-b:a:{}", i));
-        args.push("192k".into());
-    }
+    // If any track has noise suppression, use filter_complex; otherwise use simple mapping
+    let any_ns = ns.iter().any(|&b| b);
 
-    // Map video (input 0) + each audio input
-    args.push("-map".into());
-    args.push("0:v:0".into());
-    for i in 0..tracks.len() {
+    if !tracks.is_empty() && any_ns {
+        // Build filter_complex: apply afftdn to selected streams, pass others through
+        let mut filter_parts: Vec<String> = Vec::new();
+        let mut output_labels: Vec<String> = Vec::new();
+
+        for (i, _device) in tracks.iter().enumerate() {
+            let input_label = format!("[{}:a:0]", i + 1);
+            let output_label = format!("[a{}]", i);
+            if *ns.get(i).unwrap_or(&false) {
+                filter_parts.push(format!("{}afftdn=nf=-25{}", input_label, output_label));
+            } else {
+                filter_parts.push(format!("{}acopy{}", input_label, output_label));
+            }
+            output_labels.push(output_label);
+        }
+
+        args.push("-filter_complex".into());
+        args.push(filter_parts.join(";"));
+
+        // Map video + filtered audio
         args.push("-map".into());
-        args.push(format!("{}:a:0", i + 1));
+        args.push("0:v:0".into());
+        for label in &output_labels {
+            args.push("-map".into());
+            args.push(label.clone());
+        }
+
+        // Audio encoders
+        for (i, _) in tracks.iter().enumerate() {
+            args.push(format!("-c:a:{}", i));
+            args.push("aac".into());
+            args.push(format!("-b:a:{}", i));
+            args.push("192k".into());
+        }
+    } else {
+        // Simple path — no filter_complex needed
+        // Audio encoders — one AAC stream per track
+        for (i, _) in tracks.iter().enumerate() {
+            args.push(format!("-c:a:{}", i));
+            args.push("aac".into());
+            args.push(format!("-b:a:{}", i));
+            args.push("192k".into());
+        }
+
+        // Map video (input 0) + each audio input
+        args.push("-map".into());
+        args.push("0:v:0".into());
+        for i in 0..tracks.len() {
+            args.push("-map".into());
+            args.push(format!("{}:a:0", i + 1));
+        }
     }
 
     args.push(file_path.clone());
