@@ -103,6 +103,7 @@ pub fn run() {
             commands::updater_commands::install_update,
             commands::output_commands::start_virtual_camera,
             commands::output_commands::stop_virtual_camera,
+            commands::screenshot_commands::take_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

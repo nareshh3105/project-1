@@ -157,6 +157,10 @@ export const ipc = {
     install: () => cmd<void>('install_update'),
   },
 
+  screenshot: {
+    take: (outputPath?: string) => cmd<string>('take_screenshot', { outputPath: outputPath ?? null }),
+  },
+
   plugin: {
     list:       () =>
       cmd<PluginDto[]>('list_plugins'),

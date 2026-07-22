@@ -74,9 +74,42 @@ async function dispatchAction(action: string): Promise<void> {
         await ipc.output.stopRecording().catch(console.warn)
       break
 
+    case 'start_streaming':
+      if (!output.streaming.active) {
+        const { rtmpUrl, streamKey } = output.stream
+        if (rtmpUrl) await ipc.output.startStreaming(rtmpUrl, streamKey).catch(console.warn)
+      }
+      break
+
     case 'stop_streaming':
       if (output.streaming.active)
         await ipc.output.stopStreaming().catch(console.warn)
+      break
+
+    case 'start_replay_buffer':
+      if (!output.replayBuffer.active)
+        await ipc.replay.start(30).catch(console.warn)
+      break
+
+    case 'stop_replay_buffer':
+      if (output.replayBuffer.active)
+        await ipc.replay.stop().catch(console.warn)
+      break
+
+    case 'save_replay_buffer':
+      if (output.replayBuffer.active)
+        await ipc.replay.save().catch(console.warn)
+      break
+
+    case 'toggle_virtual_camera':
+      if (output.virtualCamera.active)
+        await ipc.output.stopVirtualCamera().catch(console.warn)
+      else
+        await ipc.output.startVirtualCamera().catch(console.warn)
+      break
+
+    case 'take_screenshot':
+      await ipc.screenshot.take().catch(console.warn)
       break
 
     case 'toggle_studio_mode':

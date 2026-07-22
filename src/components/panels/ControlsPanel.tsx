@@ -23,6 +23,8 @@ export function ControlsPanel() {
   const [replayLoading,  setReplayLoading]  = useState(false)
   const [vcamError,      setVcamError]      = useState<string | null>(null)
   const [vcamLoading,    setVcamLoading]    = useState(false)
+  const [screenshotMsg,  setScreenshotMsg]  = useState<string | null>(null)
+  const [screenshotErr,  setScreenshotErr]  = useState<string | null>(null)
 
   async function handleRecording() {
     setRecError(null)
@@ -82,6 +84,19 @@ export function ControlsPanel() {
       setVcamError(String(e))
     } finally {
       setVcamLoading(false)
+    }
+  }
+
+  async function handleScreenshot() {
+    setScreenshotMsg(null)
+    setScreenshotErr(null)
+    try {
+      const path = await ipc.screenshot.take()
+      setScreenshotMsg(path.split(/[/\\]/).pop() ?? 'Saved')
+      setTimeout(() => setScreenshotMsg(null), 4000)
+    } catch (e) {
+      setScreenshotErr(String(e))
+      setTimeout(() => setScreenshotErr(null), 4000)
     }
   }
 
@@ -192,8 +207,16 @@ export function ControlsPanel() {
           icon={<Camera size={14} />}
           label="Screenshot"
           variant="ghost"
-          disabled
+          onClick={handleScreenshot}
         />
+        {screenshotMsg && (
+          <p className="text-[10px] text-state-success px-2 -mt-1 leading-tight truncate" title={screenshotMsg}>
+            Saved: {screenshotMsg}
+          </p>
+        )}
+        {screenshotErr && (
+          <p className="text-[10px] text-state-danger px-2 -mt-1 leading-tight">{screenshotErr}</p>
+        )}
 
         {/* Settings */}
         <ControlButton
