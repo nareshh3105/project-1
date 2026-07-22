@@ -22,9 +22,10 @@ pub async fn get_recording_path() -> CommandResult<String> {
 
 #[tauri::command]
 pub async fn start_recording(
-    app:         AppHandle,
-    state:       State<'_, AppState>,
-    output_path: Option<String>,
+    app:          AppHandle,
+    state:        State<'_, AppState>,
+    output_path:  Option<String>,
+    audio_tracks: Option<Vec<String>>,
 ) -> CommandResult<String> {
     if state.output.is_recording() {
         return Err("Recording is already active".to_string());
@@ -43,19 +44,54 @@ pub async fn start_recording(
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
+    let tracks = audio_tracks.unwrap_or_default();
+
+    // Build args dynamically to support multi-track audio
+    let mut args: Vec<String> = vec![
+        "-y".into(),
+        "-f".into(),         "gdigrab".into(),
+        "-framerate".into(), "30".into(),
+        "-draw_mouse".into(),"1".into(),
+        "-i".into(),         "desktop".into(),
+    ];
+
+    // Add one dshow audio input per track
+    for device in &tracks {
+        let dshow_input = format!("audio={}", device);
+        args.push("-f".into());
+        args.push("dshow".into());
+        args.push("-i".into());
+        args.push(dshow_input);
+    }
+
+    // Video encoder
+    args.extend_from_slice(&[
+        "-c:v".into(), "libx264".into(),
+        "-preset".into(), "ultrafast".into(),
+        "-crf".into(), "23".into(),
+        "-pix_fmt".into(), "yuv420p".into(),
+    ]);
+
+    // Audio encoders — one AAC stream per track
+    for (i, _) in tracks.iter().enumerate() {
+        args.push(format!("-c:a:{}", i));
+        args.push("aac".into());
+        args.push(format!("-b:a:{}", i));
+        args.push("192k".into());
+    }
+
+    // Map video (input 0) + each audio input
+    args.push("-map".into());
+    args.push("0:v:0".into());
+    for i in 0..tracks.len() {
+        args.push("-map".into());
+        args.push(format!("{}:a:0", i + 1));
+    }
+
+    args.push(file_path.clone());
+
     let child = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-f",          "gdigrab",
-            "-framerate",  "30",
-            "-draw_mouse", "1",
-            "-i",          "desktop",
-            "-c:v",        "libx264",
-            "-preset",     "ultrafast",
-            "-crf",        "23",
-            "-pix_fmt",    "yuv420p",
-            &file_path,
-        ])
+        .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

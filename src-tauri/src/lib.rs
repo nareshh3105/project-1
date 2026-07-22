@@ -104,6 +104,7 @@ pub fn run() {
             commands::output_commands::start_virtual_camera,
             commands::output_commands::stop_virtual_camera,
             commands::screenshot_commands::take_screenshot,
+            commands::audio_device_commands::list_audio_devices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

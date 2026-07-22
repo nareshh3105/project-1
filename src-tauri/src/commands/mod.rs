@@ -1,6 +1,7 @@
 pub mod app_commands;
 pub mod updater_commands;
 pub mod screenshot_commands;
+pub mod audio_device_commands;
 pub mod stats_commands;
 pub mod audio_commands;
 pub mod collection_commands;

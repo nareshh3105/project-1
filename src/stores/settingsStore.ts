@@ -6,6 +6,12 @@ import { STANDARD_RESOLUTIONS, FRAME_RATES } from '@/types/common'
 
 const STORAGE_KEY = 'cb:settings'
 
+export interface RecordingConfig {
+  format:       'mkv' | 'mp4'
+  audioTracks:  string[]   // dshow audio device names to embed as separate tracks
+  outputFolder: string     // empty = default ~/Videos
+}
+
 export const DEFAULT_GENERAL: GeneralSettings = {
   theme:                 'dark',
   language:              'en-US',
@@ -29,6 +35,12 @@ export const DEFAULT_VIDEO: VideoSettings = {
   gpuConversion:     true,
 }
 
+export const DEFAULT_RECORDING: RecordingConfig = {
+  format:       'mkv',
+  audioTracks:  [],
+  outputFolder: '',
+}
+
 export const DEFAULT_AUDIO: AudioSettings = {
   sampleRate:      48000,
   channels:        2,
@@ -40,16 +52,18 @@ export const DEFAULT_AUDIO: AudioSettings = {
 }
 
 export interface SettingsState {
-  general: GeneralSettings
-  video:   VideoSettings
-  audio:   AudioSettings
+  general:   GeneralSettings
+  video:     VideoSettings
+  audio:     AudioSettings
+  recording: RecordingConfig
 }
 
 interface SettingsActions {
-  updateGeneral: (patch: Partial<GeneralSettings>) => void
-  updateVideo:   (patch: Partial<VideoSettings>)   => void
-  updateAudio:   (patch: Partial<AudioSettings>)   => void
-  applyAll:      (draft: SettingsState) => void
+  updateGeneral:    (patch: Partial<GeneralSettings>)  => void
+  updateVideo:      (patch: Partial<VideoSettings>)    => void
+  updateAudio:      (patch: Partial<AudioSettings>)    => void
+  updateRecording:  (patch: Partial<RecordingConfig>)  => void
+  applyAll:         (draft: SettingsState) => void
 }
 
 function load(): Partial<SettingsState> {
@@ -69,29 +83,36 @@ const persisted = load()
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
   immer((set, get) => ({
-    general: { ...DEFAULT_GENERAL, ...(persisted.general ?? {}) },
-    video:   { ...DEFAULT_VIDEO,   ...(persisted.video   ?? {}) },
-    audio:   { ...DEFAULT_AUDIO,   ...(persisted.audio   ?? {}) },
+    general:   { ...DEFAULT_GENERAL,   ...(persisted.general   ?? {}) },
+    video:     { ...DEFAULT_VIDEO,     ...(persisted.video     ?? {}) },
+    audio:     { ...DEFAULT_AUDIO,     ...(persisted.audio     ?? {}) },
+    recording: { ...DEFAULT_RECORDING, ...(persisted.recording ?? {}) },
 
     updateGeneral: (patch) => set((s) => {
       Object.assign(s.general, patch)
-      save({ general: s.general, video: s.video, audio: s.audio })
+      save({ general: s.general, video: s.video, audio: s.audio, recording: s.recording })
     }),
 
     updateVideo: (patch) => set((s) => {
       Object.assign(s.video, patch)
-      save({ general: s.general, video: s.video, audio: s.audio })
+      save({ general: s.general, video: s.video, audio: s.audio, recording: s.recording })
     }),
 
     updateAudio: (patch) => set((s) => {
       Object.assign(s.audio, patch)
-      save({ general: s.general, video: s.video, audio: s.audio })
+      save({ general: s.general, video: s.video, audio: s.audio, recording: s.recording })
+    }),
+
+    updateRecording: (patch) => set((s) => {
+      Object.assign(s.recording, patch)
+      save({ general: s.general, video: s.video, audio: s.audio, recording: s.recording })
     }),
 
     applyAll: (draft) => set((s) => {
-      s.general = draft.general
-      s.video   = draft.video
-      s.audio   = draft.audio
+      s.general   = draft.general
+      s.video     = draft.video
+      s.audio     = draft.audio
+      s.recording = draft.recording
       save(draft)
     }),
   }))

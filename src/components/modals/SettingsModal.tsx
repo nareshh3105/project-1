@@ -5,9 +5,9 @@ import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import {
   useSettingsStore,
-  DEFAULT_GENERAL, DEFAULT_VIDEO, DEFAULT_AUDIO,
+  DEFAULT_GENERAL, DEFAULT_VIDEO, DEFAULT_AUDIO, DEFAULT_RECORDING,
   STANDARD_RESOLUTIONS, FRAME_RATES,
-  type SettingsState,
+  type SettingsState, type RecordingConfig,
 } from '@/stores/settingsStore'
 import {
   useHotkeyStore,
@@ -16,6 +16,7 @@ import {
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
 import type { KeyBinding } from '@/types/hotkey'
+import { ipc } from '@/ipc'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
@@ -280,6 +281,96 @@ function AudioTab({
   )
 }
 
+// ── Tab: Output ─────────────────────────────────────────────────────────────
+
+function OutputTab({
+  draft, set,
+}: {
+  draft: RecordingConfig
+  set:   (patch: Partial<RecordingConfig>) => void
+}) {
+  const [devices,  setDevices]  = useState<string[]>([])
+  const [loading,  setLoading]  = useState(false)
+  const [devError, setDevError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    ipc.output.listAudioDevices()
+      .then(setDevices)
+      .catch((e) => setDevError(String(e)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function toggleTrack(device: string) {
+    const next = draft.audioTracks.includes(device)
+      ? draft.audioTracks.filter((d) => d !== device)
+      : [...draft.audioTracks, device]
+    set({ audioTracks: next })
+  }
+
+  return (
+    <div>
+      <SectionHeader title="Recording" />
+      <Row label="Recording Format">
+        <Sel
+          value={draft.format}
+          onChange={(v) => set({ format: v as RecordingConfig['format'] })}
+          options={[
+            { value: 'mkv', label: 'Matroska Video (.mkv)' },
+            { value: 'mp4', label: 'MPEG-4 (.mp4)' },
+          ]}
+        />
+      </Row>
+
+      <SectionHeader title="Audio Tracks" />
+      <p className="text-caption text-text-muted mb-2">
+        Select audio devices to embed as separate tracks in the recording.
+        Leave empty to record without audio.
+      </p>
+
+      {loading && (
+        <p className="text-caption text-text-muted py-2">Loading audio devices…</p>
+      )}
+      {devError && (
+        <p className="text-caption text-state-danger py-2">{devError}</p>
+      )}
+      {!loading && !devError && devices.length === 0 && (
+        <p className="text-caption text-text-muted py-2">
+          No audio devices found. Make sure ffmpeg is installed and audio devices are available.
+        </p>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        {devices.map((device) => {
+          const checked = draft.audioTracks.includes(device)
+          return (
+            <label
+              key={device}
+              className="flex items-center gap-2.5 py-1.5 border-b border-bg-divider/40 last:border-0 cursor-pointer group"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleTrack(device)}
+                className="w-4 h-4 rounded accent-accent-primary cursor-pointer"
+              />
+              <span className="text-body text-text-secondary group-hover:text-text-primary transition-colors">
+                {device}
+              </span>
+            </label>
+          )
+        })}
+      </div>
+
+      {draft.audioTracks.length > 0 && (
+        <p className="text-caption text-text-muted mt-3">
+          {draft.audioTracks.length} track{draft.audioTracks.length > 1 ? 's' : ''} will be embedded: each can be independently adjusted in post-production.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Tab: Hotkeys ────────────────────────────────────────────────────────────
 
 function HotkeysTab() {
@@ -357,27 +448,28 @@ function HotkeysTab() {
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 
-type TabId = 'general' | 'video' | 'audio' | 'hotkeys'
+type TabId = 'general' | 'video' | 'audio' | 'output' | 'hotkeys'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'video',   label: 'Video' },
   { id: 'audio',   label: 'Audio' },
+  { id: 'output',  label: 'Output' },
   { id: 'hotkeys', label: 'Hotkeys' },
 ]
 
 export function SettingsModal() {
   const { modal, closeModal } = useUIStore((s) => ({ modal: s.modal, closeModal: s.closeModal }))
-  const { general, video, audio, applyAll } = useSettingsStore()
+  const { general, video, audio, recording, applyAll } = useSettingsStore()
   const open = modal?.type === 'settings'
 
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   // Local draft — reset when modal opens
-  const [draft, setDraft] = useState<SettingsState>({ general, video, audio })
+  const [draft, setDraft] = useState<SettingsState>({ general, video, audio, recording })
 
   useEffect(() => {
-    if (open) setDraft({ general, video, audio })
+    if (open) setDraft({ general, video, audio, recording })
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function patchGeneral(patch: Partial<GeneralSettings>) {
@@ -388,6 +480,9 @@ export function SettingsModal() {
   }
   function patchAudio(patch: Partial<AudioSettings>) {
     setDraft((d) => ({ ...d, audio: { ...d.audio, ...patch } }))
+  }
+  function patchRecording(patch: Partial<RecordingConfig>) {
+    setDraft((d) => ({ ...d, recording: { ...d.recording, ...patch } }))
   }
 
   function apply() { applyAll(draft) }
@@ -443,6 +538,9 @@ export function SettingsModal() {
               )}
               {activeTab === 'audio' && (
                 <AudioTab draft={draft.audio} set={patchAudio} />
+              )}
+              {activeTab === 'output' && (
+                <OutputTab draft={draft.recording} set={patchRecording} />
               )}
               {activeTab === 'hotkeys' && <HotkeysTab />}
             </div>

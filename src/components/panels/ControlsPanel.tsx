@@ -3,10 +3,12 @@ import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square, Save } from 
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { ipc } from '@/ipc'
 
 export function ControlsPanel() {
-  const openModal     = useUIStore((s) => s.openModal)
+  const openModal         = useUIStore((s) => s.openModal)
+  const recordingConfig   = useSettingsStore((s) => s.recording)
   const { recording, streaming, replayBuffer, virtualCamera, stream } = useOutputStore((s) => ({
     recording:     s.recording,
     streaming:     s.streaming,
@@ -33,7 +35,8 @@ export function ControlsPanel() {
       if (recording.active) {
         await ipc.output.stopRecording()
       } else {
-        await ipc.output.startRecording()
+        const tracks = recordingConfig.audioTracks.length > 0 ? recordingConfig.audioTracks : undefined
+        await ipc.output.startRecording(undefined, tracks)
       }
     } catch (e) {
       setRecError(String(e))

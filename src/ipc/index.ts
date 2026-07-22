@@ -132,14 +132,15 @@ export const ipc = {
   output: {
     checkFfmpeg:      () => cmd<boolean>('check_ffmpeg'),
     getRecordingPath: () => cmd<string>('get_recording_path'),
-    startRecording:   (outputPath?: string) =>
-      cmd<string>('start_recording', { outputPath: outputPath ?? null }),
+    startRecording:   (outputPath?: string, audioTracks?: string[]) =>
+      cmd<string>('start_recording', { outputPath: outputPath ?? null, audioTracks: audioTracks ?? null }),
     stopRecording:    () => cmd<void>('stop_recording'),
     startStreaming:   (rtmpUrl: string, streamKey: string) =>
       cmd<void>('start_streaming', { rtmpUrl, streamKey }),
     stopStreaming:    () => cmd<void>('stop_streaming'),
-    startVirtualCamera: () => cmd<string>('start_virtual_camera'),
-    stopVirtualCamera:  () => cmd<void>('stop_virtual_camera'),
+    startVirtualCamera:  () => cmd<string>('start_virtual_camera'),
+    stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
+    listAudioDevices:    () => cmd<string[]>('list_audio_devices'),
   },
 
   stats: {
