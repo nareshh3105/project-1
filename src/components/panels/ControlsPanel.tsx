@@ -11,12 +11,11 @@ export function ControlsPanel() {
   const openModal         = useUIStore((s) => s.openModal)
   const recordingConfig   = useSettingsStore((s) => s.recording)
   const audioChannels     = useAudioStore((s) => s.channels)
-  const { recording, streaming, replayBuffer, virtualCamera, stream } = useOutputStore((s) => ({
+  const { recording, streaming, replayBuffer, virtualCamera } = useOutputStore((s) => ({
     recording:     s.recording,
     streaming:     s.streaming,
     replayBuffer:  s.replayBuffer,
     virtualCamera: s.virtualCamera,
-    stream:        s.stream,
   }))
 
   const [recError,     setRecError]     = useState<string | null>(null)

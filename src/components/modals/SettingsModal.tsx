@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import {
   useSettingsStore,
-  DEFAULT_GENERAL, DEFAULT_VIDEO, DEFAULT_AUDIO, DEFAULT_RECORDING,
   STANDARD_RESOLUTIONS, FRAME_RATES,
   type SettingsState, type RecordingConfig,
 } from '@/stores/settingsStore'
@@ -15,7 +14,6 @@ import {
 } from '@/stores/hotkeyStore'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
-import type { KeyBinding } from '@/types/hotkey'
 import { ipc } from '@/ipc'
 
 // ── Primitives ──────────────────────────────────────────────────────────────

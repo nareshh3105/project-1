@@ -127,8 +127,6 @@ function SceneRow({
   scene, isProgram, isPreview, studioMode,
   onSelect, onRename, onDuplicate, onDelete,
 }: SceneRowProps) {
-  const isActive = isProgram || (!studioMode && isProgram)
-
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>

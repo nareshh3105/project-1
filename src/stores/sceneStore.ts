@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { ipc, type SceneDto, type SourceDto } from '@/ipc'
+import { ipc, type SceneDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
 import type { ID } from '@/types'
 
@@ -141,7 +141,7 @@ export const useSceneStore = create<SceneState & SceneActions>()(
     },
 
     deleteScene: async (id) => {
-      const { scenes, activeSceneId } = get()
+      const { scenes } = get()
       const remaining = scenes.filter((s) => s.id !== id)
 
       set((s) => {

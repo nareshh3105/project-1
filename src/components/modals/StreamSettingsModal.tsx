@@ -11,10 +11,9 @@ export function StreamSettingsModal() {
     modal:      s.modal,
     closeModal: s.closeModal,
   }))
-  const { stream, setStreamSettings, setStreamingStatus } = useOutputStore((s) => ({
+  const { stream, setStreamSettings } = useOutputStore((s) => ({
     stream:               s.stream,
     setStreamSettings:    s.setStreamSettings,
-    setStreamingStatus:   s.setStreamingStatus,
   }))
 
   const open = modal?.type === 'stream-settings'

@@ -23,9 +23,7 @@ export interface SourceItem {
 
 function fromDto(dto: SourceDto): SourceItem {
   let settings: Record<string, unknown> = {}
-  let _transform = {}
   try { settings = JSON.parse(dto.settings) } catch { /* keep empty */ }
-  try { _transform = JSON.parse(dto.transform) } catch { /* keep default */ }
   return {
     id:         dto.id,
     sceneId:    dto.sceneId,

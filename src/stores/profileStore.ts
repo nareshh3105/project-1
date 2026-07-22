@@ -6,6 +6,7 @@ import {
   DEFAULT_GENERAL,
   DEFAULT_VIDEO,
   DEFAULT_AUDIO,
+  DEFAULT_RECORDING,
   type SettingsState,
 } from './settingsStore'
 
@@ -20,15 +21,15 @@ export interface ProfileItem {
 }
 
 function captureSettings(): SettingsState {
-  const { general, video, audio } = useSettingsStore.getState()
-  return { general, video, audio }
+  const { general, video, audio, recording } = useSettingsStore.getState()
+  return { general, video, audio, recording }
 }
 
 function defaultProfile(): ProfileItem {
   return {
     id:       generateId(),
     name:     'Default',
-    settings: { general: DEFAULT_GENERAL, video: DEFAULT_VIDEO, audio: DEFAULT_AUDIO },
+    settings: { general: DEFAULT_GENERAL, video: DEFAULT_VIDEO, audio: DEFAULT_AUDIO, recording: DEFAULT_RECORDING },
     createdAt: Date.now(),
   }
 }

@@ -82,7 +82,7 @@ function save(state: SettingsState) {
 const persisted = load()
 
 export const useSettingsStore = create<SettingsState & SettingsActions>()(
-  immer((set, get) => ({
+  immer((set) => ({
     general:   { ...DEFAULT_GENERAL,   ...(persisted.general   ?? {}) },
     video:     { ...DEFAULT_VIDEO,     ...(persisted.video     ?? {}) },
     audio:     { ...DEFAULT_AUDIO,     ...(persisted.audio     ?? {}) },
