@@ -1,4 +1,5 @@
 pub mod app_commands;
+pub mod stats_commands;
 pub mod audio_commands;
 pub mod collection_commands;
 pub mod output_commands;

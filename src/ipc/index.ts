@@ -140,6 +140,10 @@ export const ipc = {
     stopStreaming:    () => cmd<void>('stop_streaming'),
   },
 
+  stats: {
+    startPolling: () => cmd<void>('start_stats_polling'),
+  },
+
   plugin: {
     list:       () =>
       cmd<PluginDto[]>('list_plugins'),

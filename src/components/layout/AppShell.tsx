@@ -49,6 +49,7 @@ export function AppShell() {
       loadCollections()
       loadPlugins()
       syncGlobalShortcuts()
+      ipc.stats.startPolling().catch(console.warn)
     })
   }, [initApp, setAppReady, loadCollections, loadPlugins, syncGlobalShortcuts])
 

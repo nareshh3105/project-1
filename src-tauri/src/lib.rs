@@ -93,6 +93,7 @@ pub fn run() {
             commands::plugin_commands::open_plugins_folder,
             commands::plugin_commands::read_plugin_script,
             commands::plugin_commands::uninstall_plugin,
+            commands::stats_commands::start_stats_polling,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
