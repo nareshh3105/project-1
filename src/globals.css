@@ -238,3 +238,25 @@ textarea {
   background: var(--color-state-active);
   border: 1px solid var(--color-accent-start);
 }
+
+/* ── Studio Mode scene transition keyframes ─────────────────────────────── */
+/* Applied via inline animationName style on ProgramCanvas (duration is dynamic) */
+
+@keyframes program-fade {
+  0%   { opacity: 1; }
+  50%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes program-slide {
+  0%   { opacity: 1; transform: translateX(0); }
+  35%  { opacity: 0; transform: translateX(-6%); }
+  65%  { opacity: 0; transform: translateX(6%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes program-wipe {
+  0%   { clip-path: inset(0 0% 0 0); }
+  50%  { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0% 0 0); }
+}
