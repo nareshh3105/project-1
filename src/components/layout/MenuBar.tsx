@@ -19,6 +19,8 @@ export function MenuBar() {
       openModal('profile-manager')
     } else if (item === 'Scene Collection') {
       openModal('scene-collection')
+    } else if (item === 'Help') {
+      openModal('updater')
     }
   }
 

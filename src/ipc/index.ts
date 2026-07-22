@@ -150,6 +150,11 @@ export const ipc = {
     save:   (outputPath?: string) => cmd<string>('save_replay', { outputPath: outputPath ?? null }),
   },
 
+  updater: {
+    check:   () => cmd<UpdateInfoPayload | null>('check_for_updates'),
+    install: () => cmd<void>('install_update'),
+  },
+
   plugin: {
     list:       () =>
       cmd<PluginDto[]>('list_plugins'),
@@ -223,6 +228,22 @@ export function onStreamingStatus(cb: (p: StreamingStatusPayload) => void): Prom
 
 export function onReplayStatus(cb: (p: ReplayStatusPayload) => void): Promise<UnlistenFn> {
   return listen<ReplayStatusPayload>('output:replay-status', (e) => cb(e.payload))
+}
+
+export interface UpdateInfoPayload {
+  version:        string
+  currentVersion: string
+  notes:          string | null
+  pubDate:        string | null
+}
+
+export interface DownloadProgressPayload {
+  downloaded: number        // usize from Rust
+  total:      number | null
+}
+
+export function onUpdateDownloadProgress(cb: (p: DownloadProgressPayload) => void): Promise<UnlistenFn> {
+  return listen<DownloadProgressPayload>('updater:download-progress', (e) => cb(e.payload))
 }
 
 export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {

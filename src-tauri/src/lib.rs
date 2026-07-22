@@ -24,6 +24,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let db_path = app
                 .path()
@@ -97,6 +99,8 @@ pub fn run() {
             commands::output_commands::start_replay_buffer,
             commands::output_commands::stop_replay_buffer,
             commands::output_commands::save_replay,
+            commands::updater_commands::check_for_updates,
+            commands::updater_commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

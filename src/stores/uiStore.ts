@@ -19,6 +19,7 @@ export type ModalType =
   | 'auto-config'
   | 'multiview'
   | 'stats'
+  | 'updater'
 
 export interface ModalState {
   type: ModalType
