@@ -11,12 +11,14 @@ export function ControlsPanel() {
   const openModal         = useUIStore((s) => s.openModal)
   const recordingConfig   = useSettingsStore((s) => s.recording)
   const audioChannels     = useAudioStore((s) => s.channels)
-  const { recording, streaming, replayBuffer, virtualCamera } = useOutputStore((s) => ({
-    recording:     s.recording,
-    streaming:     s.streaming,
-    replayBuffer:  s.replayBuffer,
-    virtualCamera: s.virtualCamera,
+  const { recording, streaming, replayBuffer, virtualCamera, ffmpegAvailable } = useOutputStore((s) => ({
+    recording:       s.recording,
+    streaming:       s.streaming,
+    replayBuffer:    s.replayBuffer,
+    virtualCamera:   s.virtualCamera,
+    ffmpegAvailable: s.ffmpegAvailable,
   }))
+  const noFfmpeg = ffmpegAvailable === false
 
   const [recError,     setRecError]     = useState<string | null>(null)
   const [streamError,  setStreamError]  = useState<string | null>(null)
@@ -124,12 +126,24 @@ export function ControlsPanel() {
       </div>
 
       <div className="flex-1 flex flex-col p-3 gap-2 overflow-y-auto">
+        {/* FFmpeg missing warning */}
+        {noFfmpeg && (
+          <div className="flex items-start gap-2 px-2 py-2 rounded-button bg-state-danger/10 border border-state-danger/30">
+            <span className="text-state-danger mt-px flex-shrink-0">⚠</span>
+            <p className="text-[10px] text-state-danger leading-tight">
+              FFmpeg not found. Recording and streaming are disabled.
+            </p>
+          </div>
+        )}
+
         {/* Streaming */}
         <ControlButton
           icon={streaming.active ? <Square size={14} /> : <Radio size={14} />}
           label={streaming.active ? 'Stop Streaming' : 'Start Streaming'}
           variant={streaming.active ? 'danger' : 'default'}
           onClick={handleStreaming}
+          disabled={noFfmpeg && !streaming.active}
+          title={noFfmpeg ? 'FFmpeg not found — install FFmpeg to enable streaming' : undefined}
         />
         {streamError && (
           <p className="text-[10px] text-state-danger px-2 -mt-1 leading-tight">{streamError}</p>
@@ -147,7 +161,8 @@ export function ControlsPanel() {
           }
           variant={recording.active ? 'danger' : 'default'}
           onClick={handleRecording}
-          disabled={recLoading}
+          disabled={recLoading || (noFfmpeg && !recording.active)}
+          title={noFfmpeg && !recording.active ? 'FFmpeg not found — install FFmpeg to enable recording' : undefined}
         />
         {recError && (
           <p className="text-[10px] text-state-danger px-2 -mt-1 leading-tight">{recError}</p>
@@ -165,7 +180,8 @@ export function ControlsPanel() {
           }
           variant={replayBuffer.active ? 'danger' : 'default'}
           onClick={handleReplay}
-          disabled={replayLoading}
+          disabled={replayLoading || (noFfmpeg && !replayBuffer.active)}
+          title={noFfmpeg && !replayBuffer.active ? 'FFmpeg not found — install FFmpeg to enable replay buffer' : undefined}
         />
         {replayBuffer.active && (
           <ControlButton
@@ -196,7 +212,8 @@ export function ControlsPanel() {
           }
           variant={virtualCamera.active ? 'danger' : 'default'}
           onClick={handleVirtualCamera}
-          disabled={vcamLoading}
+          disabled={vcamLoading || (noFfmpeg && !virtualCamera.active)}
+          title={noFfmpeg && !virtualCamera.active ? 'FFmpeg not found — install FFmpeg to enable virtual camera' : undefined}
         />
         {virtualCamera.active && virtualCamera.url && (
           <p className="text-[10px] text-text-muted px-2 -mt-1 leading-tight truncate" title={virtualCamera.url}>
@@ -242,14 +259,16 @@ interface ControlButtonProps {
   label:     string
   variant:   'default' | 'danger' | 'ghost'
   disabled?: boolean
+  title?:    string
   onClick?:  () => void
 }
 
-function ControlButton({ icon, label, variant, disabled, onClick }: ControlButtonProps) {
+function ControlButton({ icon, label, variant, disabled, title, onClick }: ControlButtonProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         'w-full flex items-center gap-2 px-3 h-8 rounded-button text-body font-medium',
         'transition-colors duration-100 disabled:opacity-40 disabled:cursor-not-allowed',

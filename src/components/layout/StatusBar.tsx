@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils'
 
 export function StatusBar() {
   const stats = useUIStore((s) => s.stats)
-  const { recording, streaming } = useOutputStore((s) => ({
-    recording: s.recording,
-    streaming: s.streaming,
+  const { recording, streaming, ffmpegAvailable } = useOutputStore((s) => ({
+    recording:       s.recording,
+    streaming:       s.streaming,
+    ffmpegAvailable: s.ffmpegAvailable,
   }))
 
   const isLive = streaming.active
@@ -28,6 +29,17 @@ export function StatusBar() {
         value={isRec ? formatDuration(recording.elapsed) : 'Stopped'}
         color={isRec ? 'recording' : 'muted'}
       />
+
+      {/* FFmpeg missing indicator */}
+      {ffmpegAvailable === false && (
+        <div
+          className="flex items-center gap-1 px-2 py-0.5 rounded bg-state-danger/15 border border-state-danger/30"
+          title="FFmpeg not found — recording and streaming disabled"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-state-danger" />
+          <span className="text-[10px] font-medium text-state-danger">FFmpeg missing</span>
+        </div>
+      )}
 
       <div className="flex-1" />
 
