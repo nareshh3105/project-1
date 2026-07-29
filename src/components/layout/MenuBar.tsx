@@ -20,7 +20,7 @@ export function MenuBar() {
     } else if (item === 'Scene Collection') {
       openModal('scene-collection')
     } else if (item === 'Help') {
-      openModal('updater')
+      openModal('about')
     }
   }
 

@@ -14,6 +14,7 @@ import { ProfileModal }          from '@/components/modals/ProfileModal'
 import { PluginsModal }          from '@/components/modals/PluginsModal'
 import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
+import { AboutModal }           from '@/components/modals/AboutModal'
 import { useCollectionStore } from '@/stores/collectionStore'
 import { usePluginStore }     from '@/stores/pluginStore'
 import { useHotkeyStore }     from '@/stores/hotkeyStore'
@@ -122,6 +123,7 @@ export function AppShell() {
       <ProfileModal />
       <PluginsModal />
       <UpdaterModal />
+      <AboutModal />
       <FfmpegMissingModal />
     </div>
   )
