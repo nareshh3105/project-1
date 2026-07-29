@@ -4,7 +4,7 @@ import { generateId } from '@/lib/utils'
 
 // ── Filter types ──────────────────────────────────────────────────────────────
 
-export type FilterType = 'color-correction' | 'crop' | 'chroma-key'
+export type FilterType = 'color-correction' | 'crop' | 'chroma-key' | 'blur' | 'sharpen'
 
 interface FilterBase {
   id: string
@@ -38,13 +38,25 @@ export interface ChromaKeyFilter extends FilterBase {
   opacity: number     // 0 to 1
 }
 
-export type SourceFilter = ColorCorrectionFilter | CropFilter | ChromaKeyFilter
+export interface BlurFilter extends FilterBase {
+  type: 'blur'
+  radius: number      // 0 to 40 (Gaussian radius)
+}
+
+export interface SharpenFilter extends FilterBase {
+  type: 'sharpen'
+  strength: number    // 0 to 2
+}
+
+export type SourceFilter = ColorCorrectionFilter | CropFilter | ChromaKeyFilter | BlurFilter | SharpenFilter
 
 export function filterLabel(type: FilterType): string {
   switch (type) {
     case 'color-correction': return 'Color Correction'
     case 'crop':             return 'Crop / Pad'
     case 'chroma-key':       return 'Chroma Key'
+    case 'blur':             return 'Gaussian Blur'
+    case 'sharpen':          return 'Sharpen'
   }
 }
 
@@ -57,6 +69,10 @@ function defaultFilter(type: FilterType): SourceFilter {
       return { ...base, type: 'crop', left: 0, right: 0, top: 0, bottom: 0 }
     case 'chroma-key':
       return { ...base, type: 'chroma-key', keyColor: '#00ff00', similarity: 80, smoothness: 50, opacity: 1 }
+    case 'blur':
+      return { ...base, type: 'blur', radius: 5 }
+    case 'sharpen':
+      return { ...base, type: 'sharpen', strength: 0.5 }
   }
 }
 

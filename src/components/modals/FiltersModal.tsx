@@ -10,10 +10,12 @@ import {
   type ColorCorrectionFilter,
   type CropFilter,
   type ChromaKeyFilter,
+  type BlurFilter,
+  type SharpenFilter,
 } from '@/stores/filterStore'
 import { cn } from '@/lib/utils'
 
-const FILTER_TYPES: FilterType[] = ['color-correction', 'crop', 'chroma-key']
+const FILTER_TYPES: FilterType[] = ['color-correction', 'crop', 'chroma-key', 'blur', 'sharpen']
 
 export function FiltersModal() {
   const modal      = useUIStore((s) => s.modal)
@@ -222,6 +224,10 @@ function FilterSettings({ filter, onUpdate }: {
       return <CropSettings filter={filter} onUpdate={onUpdate as (p: Partial<CropFilter>) => void} />
     case 'chroma-key':
       return <ChromaKeySettings filter={filter} onUpdate={onUpdate as (p: Partial<ChromaKeyFilter>) => void} />
+    case 'blur':
+      return <BlurSettings filter={filter} onUpdate={onUpdate as (p: Partial<BlurFilter>) => void} />
+    case 'sharpen':
+      return <SharpenSettings filter={filter} onUpdate={onUpdate as (p: Partial<SharpenFilter>) => void} />
   }
 }
 
@@ -289,6 +295,52 @@ function ChromaKeySettings({ filter, onUpdate }: {
       <SliderRow label="Similarity"  value={filter.similarity}  min={1}  max={1000} step={1}    format={(v) => String(v)}    onChange={(v) => onUpdate({ similarity: v })} />
       <SliderRow label="Smoothness"  value={filter.smoothness}  min={1}  max={1000} step={1}    format={(v) => String(v)}    onChange={(v) => onUpdate({ smoothness: v })} />
       <SliderRow label="Opacity"     value={filter.opacity}     min={0}  max={1}    step={0.01} format={(v) => v.toFixed(2)} onChange={(v) => onUpdate({ opacity: v })} />
+    </div>
+  )
+}
+
+// ── Gaussian Blur ─────────────────────────────────────────────────────────────
+
+function BlurSettings({ filter, onUpdate }: {
+  filter: BlurFilter
+  onUpdate: (patch: Partial<BlurFilter>) => void
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      <SectionTitle>Gaussian Blur</SectionTitle>
+      <p className="text-[11px] text-text-muted -mt-3">
+        Applies a Gaussian blur kernel to the source. Radius 0 = no blur.
+      </p>
+      <SliderRow
+        label="Radius"
+        value={filter.radius}
+        min={0} max={40} step={1}
+        format={(v) => `${v}px`}
+        onChange={(v) => onUpdate({ radius: v })}
+      />
+    </div>
+  )
+}
+
+// ── Sharpen ───────────────────────────────────────────────────────────────────
+
+function SharpenSettings({ filter, onUpdate }: {
+  filter: SharpenFilter
+  onUpdate: (patch: Partial<SharpenFilter>) => void
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      <SectionTitle>Sharpen</SectionTitle>
+      <p className="text-[11px] text-text-muted -mt-3">
+        Enhances edge definition. Strength 0 = no sharpening, 2 = maximum.
+      </p>
+      <SliderRow
+        label="Strength"
+        value={filter.strength}
+        min={0} max={2} step={0.05}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => onUpdate({ strength: v })}
+      />
     </div>
   )
 }
