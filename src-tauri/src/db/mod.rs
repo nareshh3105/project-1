@@ -3,7 +3,8 @@ pub mod plugin_repo;
 pub mod scene_repo;
 pub mod source_repo;
 
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::{Pool, Sqlite};
 use std::path::Path;
 
 pub type Db = Pool<Sqlite>;
@@ -13,19 +14,24 @@ pub async fn init(db_path: &Path) -> Result<Db, sqlx::Error> {
         tokio::fs::create_dir_all(parent).await.ok();
     }
 
-    let url = format!("sqlite:{}?mode=rwc", db_path.display());
-    let pool = SqlitePool::connect(&url).await?;
+    // foreign_keys is a PER-CONNECTION pragma and SQLite defaults it to OFF.
+    // Setting it through the connect options applies it to every connection the
+    // pool opens; running it as a one-off query only ever configured whichever
+    // single pooled connection happened to serve it, so ON DELETE CASCADE
+    // silently never fired and deletes left orphaned rows behind.
+    let opts = SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true)
+        .foreign_keys(true)
+        .journal_mode(SqliteJournalMode::Wal);
+
+    let pool = SqlitePoolOptions::new().connect_with(opts).await?;
 
     migrate(&pool).await?;
     Ok(pool)
 }
 
 async fn migrate(pool: &Db) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;",
-    )
-    .execute(pool)
-    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS scene_collections (
@@ -91,6 +97,52 @@ async fn migrate(pool: &Db) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    cleanup_orphans(pool).await?;
+
+    Ok(())
+}
+
+/// Removes rows stranded by deletes that happened while foreign keys were not
+/// being enforced. These rows are unreachable from the UI — a scene whose
+/// collection is gone can never be listed — so they would otherwise accumulate
+/// in the database forever.
+///
+/// Order matters: sources are cleared first so that scenes deleted in the
+/// second statement cannot themselves strand more sources.
+async fn cleanup_orphans(pool: &Db) -> Result<(), sqlx::Error> {
+    let sources = sqlx::query(
+        "DELETE FROM sources
+         WHERE scene_id NOT IN (SELECT id FROM scenes)",
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    let scenes = sqlx::query(
+        "DELETE FROM scenes
+         WHERE collection_id NOT IN (SELECT id FROM scene_collections)",
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    // Sources orphaned by the scenes just removed.
+    let cascaded = sqlx::query(
+        "DELETE FROM sources
+         WHERE scene_id NOT IN (SELECT id FROM scenes)",
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if sources + scenes + cascaded > 0 {
+        tracing::info!(
+            scenes,
+            sources = sources + cascaded,
+            "removed orphaned rows left by unenforced foreign keys"
+        );
+    }
 
     Ok(())
 }
