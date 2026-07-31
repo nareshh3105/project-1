@@ -16,6 +16,7 @@ import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
+import { MultiviewModal }       from '@/components/modals/MultiviewModal'
 import { useCollectionStore } from '@/stores/collectionStore'
 import { usePluginStore }     from '@/stores/pluginStore'
 import { useHotkeyStore }     from '@/stores/hotkeyStore'
@@ -128,6 +129,7 @@ export function AppShell() {
       <PluginsModal />
       <UpdaterModal />
       <AboutModal />
+      <MultiviewModal />
       <FfmpegMissingModal />
     </div>
   )
