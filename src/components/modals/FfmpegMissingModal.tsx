@@ -19,12 +19,13 @@ const CHOCO_CMD  = 'choco install ffmpeg'
 
 export function FfmpegMissingModal() {
   const ffmpegAvailable = useOutputStore((s) => s.ffmpegAvailable)
-  const [open, setOpen]       = useState(true)
+  // Dismissing must not unmount the Dialog while it is open — Radix would then
+  // skip its cleanup and leave aria-hidden stranded on the app root.
+  const [open, setOpen]       = useState(() => !wasDismissedThisSession())
   const [copied, setCopied]   = useState<'winget' | 'choco' | null>(null)
 
   // Only show when explicitly false (null = still checking)
   if (ffmpegAvailable !== false) return null
-  if (wasDismissedThisSession() && !open) return null
 
   function handleDismiss() {
     dismissForSession()

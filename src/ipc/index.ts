@@ -138,6 +138,8 @@ export const ipc = {
     startStreaming:   (rtmpUrl: string, streamKey: string) =>
       cmd<void>('start_streaming', { rtmpUrl, streamKey }),
     stopStreaming:    () => cmd<void>('stop_streaming'),
+    openRecordingsFolder:  () => cmd<void>('open_recordings_folder'),
+    openScreenshotsFolder: () => cmd<void>('open_screenshots_folder'),
     startVirtualCamera:  () => cmd<string>('start_virtual_camera'),
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
     listAudioDevices:    () => cmd<string[]>('list_audio_devices'),

@@ -91,6 +91,8 @@ interface UIActions {
   setStats: (stats: RuntimeStats) => void
 
   setAppReady: (ready: boolean) => void
+
+  resetLayout: () => void
 }
 
 function loadPersistedLayout(): string | null {
@@ -143,5 +145,11 @@ export const useUIStore = create<UIState & UIActions>()(
 
     setAppReady: (ready) =>
       set((s) => { s.appReady = ready }),
+
+    resetLayout: () =>
+      set((s) => {
+        s.layoutJson = null
+        try { localStorage.removeItem(STORAGE_KEYS.LAYOUT) } catch { /* ignore */ }
+      }),
   }))
 )

@@ -84,6 +84,8 @@ pub fn run() {
             commands::audio_commands::set_channel_muted,
             commands::output_commands::check_ffmpeg,
             commands::output_commands::get_recording_path,
+            commands::output_commands::open_recordings_folder,
+            commands::output_commands::open_screenshots_folder,
             commands::output_commands::start_recording,
             commands::output_commands::stop_recording,
             commands::output_commands::start_streaming,

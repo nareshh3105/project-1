@@ -22,6 +22,10 @@
     "updater:allow-download-and-install",
     "process:allow-restart",
     "window-state:allow-restore-state",
-    "window-state:allow-save-window-state"
+    "window-state:allow-save-window-state",
+    "core:window:allow-close",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen"
   ]
 }

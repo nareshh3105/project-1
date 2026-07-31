@@ -1,6 +1,7 @@
 use std::io::Write as IoWrite;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_shell::ShellExt;
 use crate::state::AppState;
 use crate::error::CommandResult;
 use crate::output::{
@@ -18,6 +19,27 @@ pub async fn check_ffmpeg() -> CommandResult<bool> {
 #[tauri::command]
 pub async fn get_recording_path() -> CommandResult<String> {
     Ok(default_recording_path())
+}
+
+fn user_home() -> String {
+    std::env::var("USERPROFILE")
+        .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
+}
+
+fn open_folder(app: &AppHandle, dir: String) -> CommandResult<()> {
+    std::fs::create_dir_all(&dir).ok();
+    #[allow(deprecated)]
+    app.shell().open(dir, None).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn open_recordings_folder(app: AppHandle) -> CommandResult<()> {
+    open_folder(&app, format!("{}/Videos", user_home()))
+}
+
+#[tauri::command]
+pub async fn open_screenshots_folder(app: AppHandle) -> CommandResult<()> {
+    open_folder(&app, format!("{}/Pictures", user_home()))
 }
 
 #[tauri::command]
