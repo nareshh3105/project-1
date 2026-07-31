@@ -38,3 +38,8 @@ coverage/
 # but not the installer binaries (~15 MB per release).
 versions/**/*.msi
 versions/**/*.exe
+
+# Updater signing keys — must never be committed
+*.key
+*.key.pub
+.tauri/

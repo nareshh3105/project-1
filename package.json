@@ -1,6 +1,6 @@
 {
   "name": "codebuilders",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "release": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "publish": "powershell -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
     "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest",

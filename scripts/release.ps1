@@ -34,6 +34,10 @@ if ((Test-Path $destDir) -and -not $Force) {
 }
 
 if (-not $SkipBuild) {
+    if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+        Write-Host "`nTAURI_SIGNING_PRIVATE_KEY is not set - this build will NOT be signed," -ForegroundColor Yellow
+        Write-Host "so the in-app updater cannot verify it. See scripts/SIGNING.md." -ForegroundColor Yellow
+    }
     Write-Host "`nBuilding release bundle..." -ForegroundColor Cyan
     # Cap parallel rustc processes; the full-parallelism release build OOMs.
     $env:CARGO_BUILD_JOBS = '2'
@@ -67,6 +71,12 @@ foreach ($f in @($msi, $exe)) {
         $copied += [pscustomobject]@{
             File   = $f.Name
             SizeMB = [math]::Round($f.Length / 1MB, 1)
+        }
+        # Updater signature, present only when the build was signed
+        $sig = "$($f.FullName).sig"
+        if (Test-Path $sig) {
+            Copy-Item $sig -Destination $destDir -Force
+            $copied += [pscustomobject]@{ File = "$($f.Name).sig"; SizeMB = 0 }
         }
     }
 }
