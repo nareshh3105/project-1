@@ -1,0 +1,15 @@
+﻿{
+    "version":  "0.2.0",
+    "builtAt":  "2026-07-31T12:53:27.9674086+05:30",
+    "gitCommit":  "2bde59c",
+    "artifacts":  [
+                      {
+                          "File":  "CodeBuilders_0.2.0_x64_en-US.msi",
+                          "SizeMB":  8.4
+                      },
+                      {
+                          "File":  "CodeBuilders_0.2.0_x64-setup.exe",
+                          "SizeMB":  6.1
+                      }
+                  ]
+}

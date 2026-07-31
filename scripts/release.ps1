@@ -47,10 +47,16 @@ if (-not $SkipBuild) {
 }
 
 $bundle = Join-Path $root 'src-tauri\target\release\bundle'
-$msi = Get-ChildItem (Join-Path $bundle 'msi')  -Filter *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
-$exe = Get-ChildItem (Join-Path $bundle 'nsis') -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
 
-if (-not $msi -and -not $exe) { throw "No installers found under $bundle" }
+# Match the artifact for THIS version explicitly. Older builds are left in the
+# bundle directory by cargo, so picking the first match would archive a stale
+# installer under the new version number.
+$msi = Get-ChildItem (Join-Path $bundle 'msi')  -Filter "*$version*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+$exe = Get-ChildItem (Join-Path $bundle 'nsis') -Filter "*$version*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+if (-not $msi -and -not $exe) {
+    throw "No installers matching version $version found under $bundle"
+}
 
 New-Item -ItemType Directory -Force -Path $destDir | Out-Null
 
