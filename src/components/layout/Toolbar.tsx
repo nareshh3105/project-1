@@ -7,7 +7,9 @@ import {
   FolderOpen,
   Settings,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useUIStore } from '@/stores/uiStore'
+import { ipc } from '@/ipc'
 import { cn } from '@/lib/utils'
 
 interface ToolbarButton {
@@ -18,14 +20,43 @@ interface ToolbarButton {
 }
 
 export function Toolbar() {
-  const { studioMode, statsOverlayVisible, toggleStudioMode, toggleStatsOverlay, openModal } =
-    useUIStore((s) => ({
-      studioMode:          s.studioMode,
-      statsOverlayVisible: s.statsOverlayVisible,
-      toggleStudioMode:    s.toggleStudioMode,
-      toggleStatsOverlay:  s.toggleStatsOverlay,
-      openModal:           s.openModal,
-    }))
+  const {
+    studioMode, statsOverlayVisible, fullscreenPreview,
+    toggleStudioMode, toggleStatsOverlay, toggleFullscreenPreview, openModal,
+  } = useUIStore((s) => ({
+    studioMode:              s.studioMode,
+    statsOverlayVisible:     s.statsOverlayVisible,
+    fullscreenPreview:       s.fullscreenPreview,
+    toggleStudioMode:        s.toggleStudioMode,
+    toggleStatsOverlay:      s.toggleStatsOverlay,
+    toggleFullscreenPreview: s.toggleFullscreenPreview,
+    openModal:               s.openModal,
+  }))
+
+  // Transient feedback for the fire-and-forget actions
+  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
+
+  function flash(text: string, error = false) {
+    setToast({ text, error })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  async function handleScreenshot() {
+    try {
+      const path = await ipc.screenshot.take()
+      flash(`Saved ${path.split(/[/\\]/).pop()}`)
+    } catch (e) {
+      flash(String(e), true)
+    }
+  }
+
+  async function handleOpenRecordings() {
+    try {
+      await ipc.output.openRecordingsFolder()
+    } catch (e) {
+      flash(String(e), true)
+    }
+  }
 
   const buttons: ToolbarButton[] = [
     {
@@ -37,12 +68,13 @@ export function Toolbar() {
     {
       icon:   <Maximize2 size={16} />,
       title:  'Fullscreen Preview',
-      action: () => { /* Phase 3 */ },
+      action: toggleFullscreenPreview,
+      active: fullscreenPreview,
     },
     {
       icon:   <Camera size={16} />,
       title:  'Screenshot',
-      action: () => { /* Phase 3 */ },
+      action: handleScreenshot,
     },
     {
       icon:   <BarChart2 size={16} />,
@@ -58,7 +90,7 @@ export function Toolbar() {
     {
       icon:   <FolderOpen size={16} />,
       title:  'Open Recording Folder',
-      action: () => { /* Phase 3 */ },
+      action: handleOpenRecordings,
     },
     {
       icon:   <Settings size={16} />,
@@ -82,6 +114,18 @@ export function Toolbar() {
           {btn.icon}
         </button>
       ))}
+
+      {toast && (
+        <span
+          className={cn(
+            'ml-2 text-[10px] leading-tight truncate max-w-[280px]',
+            toast.error ? 'text-state-danger' : 'text-state-success',
+          )}
+          title={toast.text}
+        >
+          {toast.text}
+        </span>
+      )}
     </div>
   )
 }

@@ -15,6 +15,7 @@ import { PluginsModal }          from '@/components/modals/PluginsModal'
 import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
 import { AboutModal }           from '@/components/modals/AboutModal'
+import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
 import { useCollectionStore } from '@/stores/collectionStore'
 import { usePluginStore }     from '@/stores/pluginStore'
 import { useHotkeyStore }     from '@/stores/hotkeyStore'
@@ -114,6 +115,9 @@ export function AppShell() {
       <div className="h-px bg-bg-divider flex-shrink-0" />
       <DockLayout />
       <StatusBar />
+
+      {/* Fullscreen program preview — overlays the whole shell */}
+      <FullscreenPreview />
 
       {/* Modal layer */}
       <SettingsModal />

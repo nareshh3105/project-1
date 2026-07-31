@@ -23,7 +23,7 @@ interface CaptureVideoProps {
   className?:       string
 }
 
-function CaptureVideo({ sceneId, showPlaceholder = true, className }: CaptureVideoProps) {
+export function CaptureVideo({ sceneId, showPlaceholder = true, className }: CaptureVideoProps) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const sources   = useSourceStore((s) => sceneId ? (s.byScene[sceneId] ?? []) : [])
   const activeIds = useCaptureStore((s) => s.activeIds)

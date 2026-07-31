@@ -71,6 +71,9 @@ interface UIState {
   statsOverlayVisible: boolean
   stats: RuntimeStats | null
 
+  // Fullscreen preview overlay (program output, no chrome)
+  fullscreenPreview: boolean
+
   // App-level loading
   appReady: boolean
 }
@@ -92,6 +95,9 @@ interface UIActions {
 
   setAppReady: (ready: boolean) => void
 
+  toggleFullscreenPreview: () => void
+  setFullscreenPreview: (enabled: boolean) => void
+
   resetLayout: () => void
 }
 
@@ -111,6 +117,7 @@ export const useUIStore = create<UIState & UIActions>()(
     studioMode: false,
     statsOverlayVisible: false,
     stats: null,
+    fullscreenPreview: false,
     appReady: false,
 
     setLayoutJson: (json) =>
@@ -145,6 +152,12 @@ export const useUIStore = create<UIState & UIActions>()(
 
     setAppReady: (ready) =>
       set((s) => { s.appReady = ready }),
+
+    toggleFullscreenPreview: () =>
+      set((s) => { s.fullscreenPreview = !s.fullscreenPreview }),
+
+    setFullscreenPreview: (enabled) =>
+      set((s) => { s.fullscreenPreview = enabled }),
 
     resetLayout: () =>
       set((s) => {
