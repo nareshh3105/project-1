@@ -43,3 +43,6 @@ versions/**/*.exe
 *.key
 *.key.pub
 .tauri/
+
+# Generated documents (rebuild with: npm run docs:pdf)
+docs/*.pdf
