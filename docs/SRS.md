@@ -32,7 +32,7 @@
 
 This document specifies the software requirements for **CodeBuilders**, a desktop application for screen recording, live streaming, and multi-scene video production.
 
-It is intended for the client's technical and commercial stakeholders, the development and QA teams, and any third party contracted to extend or maintain the product. It defines what the system must do, the constraints under which it must operate, and the criteria by which completion is judged.
+It is written for the client's technical and commercial stakeholders, the development and QA teams, and anyone later contracted to extend or maintain the product. It sets out what the system must do, the limits it has to work within, and how completion will be judged. Where something is still undecided, this document says so rather than guessing.
 
 ## 1.2 Scope
 
@@ -59,7 +59,7 @@ CodeBuilders is a standalone desktop application. It captures video from display
 - Video editing beyond live composition
 - Mobile or web clients
 
-Out-of-scope items are candidates for later releases and are not covered by this specification.
+The items above are candidates for later releases. This specification does not cover them.
 
 ## 1.3 Definitions, Acronyms and Abbreviations
 
@@ -91,7 +91,7 @@ Out-of-scope items are candidates for later releases and are not covered by this
 
 ## 1.5 Overview
 
-Section 2 describes the product in general terms and the environment it operates within. Section 3 specifies functional requirements, each carrying a unique identifier for traceability. Sections 4 to 7 cover interfaces, performance, design constraints, and non-functional attributes. Section 8 provides a preliminary schedule and budget. Section 9 contains supporting appendices, including a requirement-to-release map.
+Section 2 describes the product and the environment it runs in. Section 3 lists the functional requirements, each with an identifier so it can be traced through to testing. Sections 4 to 7 cover interfaces, performance, design constraints, and non-functional attributes. Section 8 gives a preliminary schedule and budget, and Section 9 holds the appendices, including a map from requirements to releases.
 
 ---
 
@@ -101,7 +101,7 @@ Section 2 describes the product in general terms and the environment it operates
 
 CodeBuilders is a new, self-contained product. It does not replace or extend an existing system, and it does not depend on any server component operated by the client, with the single exception of the update distribution endpoint described in FR-16.
 
-It operates in a market alongside established tools such as OBS Studio and Streamlabs Desktop. Its intended differentiation is a modernised interface and a simplified configuration model.
+It competes with established tools such as OBS Studio and Streamlabs Desktop. What it offers over them is a cleaner interface and simpler configuration.
 
 The application is structured as two cooperating processes:
 
@@ -120,11 +120,11 @@ The application is structured as two cooperating processes:
                                      └──────────────────────────┘
 ```
 
-Video capture is performed in the interface process using standard media capture APIs. Encoding, muxing, and transmission are delegated to FFmpeg, which the backend process invokes as a child process.
+The interface process captures video through standard media capture APIs. The backend process hands encoding, muxing, and transmission to FFmpeg, which it runs as a child process.
 
 ## 2.2 Product Functions
 
-At a high level, the product allows a user to:
+The product allows a user to:
 
 1. Compose scenes from multiple video and audio sources
 2. Preview output live, and stage changes before broadcasting them
@@ -149,7 +149,7 @@ At a high level, the product allows a user to:
 | **Corporate user** | Records meetings, produces internal video | Low | Occasional |
 | **Power user** | Complex multi-scene productions, plugin authoring | High | Daily |
 
-The interface must be operable by the low-technical-level classes without documentation for basic recording. Advanced capability may be placed behind secondary interfaces provided it does not obstruct simple use.
+A user with little technical background must be able to start a recording without reading documentation. Advanced features can sit behind secondary screens, so long as they do not get in the way of that.
 
 ## 2.4 General Constraints
 
@@ -460,7 +460,7 @@ Requirements are grouped by module. Each carries a unique identifier and a prior
 
 **Reference hardware** for performance acceptance: quad-core x86-64 processor at 2.5 GHz or above, 8 GB RAM, integrated graphics with hardware video encoding, SSD storage.
 
-Targets PR-5 and PR-6 reflect the Electron runtime and are higher than would apply to a native implementation. This is an accepted consequence of the platform decision recorded in section 6.1.
+PR-5 and PR-6 are set higher than a native implementation would need. That is a consequence of the Electron runtime, and it was accepted when DC-1 was agreed.
 
 ---
 
@@ -476,7 +476,7 @@ Targets PR-5 and PR-6 reflect the Electron runtime and are higher than would app
 | DC-4 | All media encoding shall be delegated to FFmpeg | Avoids implementing codecs; industry standard |
 | DC-5 | The application shall target Windows 10 and 11, 64-bit | Client-defined scope for v1.0 |
 
-The platform decision in DC-1 was taken to prioritise long-term maintainability by a TypeScript-capable team. It carries a known cost in installer size and memory consumption, reflected in PR-5 and PR-6.
+DC-1 was chosen to keep the product maintainable by a team that works in TypeScript. The cost is a larger installer and higher memory use, which PR-5 and PR-6 account for.
 
 ## 6.2 Security
 
@@ -502,12 +502,12 @@ The platform decision in DC-1 was taken to prioritise long-term maintainability 
 
 | ID | Constraint | Status |
 |---|---|---|
-| DC-16 | FFmpeg licensing must be resolved before distribution. Standard prebuilt FFmpeg binaries are GPL-licensed; distributing them within closed-source commercial software would impose source disclosure obligations. Either an LGPL-only build must be commissioned, or FFmpeg must remain a user-installed dependency. | **Unresolved — blocks release** |
+| DC-16 | FFmpeg licensing must be resolved before distribution. The standard prebuilt FFmpeg binaries are GPL-licensed, and shipping those inside closed-source commercial software would require the client to publish their own source code. The alternatives are to commission an LGPL-only build, or to leave FFmpeg as something the user installs. | **Unresolved — blocks release** |
 | DC-17 | Patent licensing for H.264 and AAC may apply to commercial distribution, independently of FFmpeg's own licence. | **Unresolved — requires legal review** |
 | DC-18 | An end-user licence agreement and privacy policy must be prepared and presented at installation. | **Not started** |
 | DC-19 | Third-party open-source component licences must be catalogued and attribution included in the distributed product. | **Not started** |
 
-Items DC-16 through DC-19 require the client's legal counsel. They are not engineering decisions and cannot be resolved by the development team.
+DC-16 through DC-19 need the client's legal counsel. They are not engineering decisions, and the development team cannot settle them.
 
 ---
 
@@ -578,7 +578,7 @@ Items DC-16 through DC-19 require the client's legal counsel. They are not engin
 
 # 8. Preliminary Schedule and Budget
 
-> The estimates in this section are preliminary. Effort is expressed in person-weeks; monetary values are limited to third-party costs, as internal rates are set by the client's commercial agreement.
+> These estimates are preliminary. Effort is given in person-weeks. The only money shown is what goes to third parties, since internal rates come from the client's commercial agreement rather than this document.
 
 ## 8.1 Phase Structure
 
@@ -601,7 +601,7 @@ Items DC-16 through DC-19 require the client's legal counsel. They are not engin
 | Performance validation against section 5 | 1 week | Migration, test suite |
 | **Total** | **6–8 weeks** | |
 
-Test suite work is scheduled concurrently with the migration, since the existing implementation serves as the specification against which ported behaviour is verified.
+Test work runs alongside the migration rather than after it. The existing implementation is the specification the ported code gets checked against, so writing the tests during the port is what verifies it.
 
 ## 8.3 Phase 3 — Indicative Effort
 
@@ -615,7 +615,7 @@ Phase 3 scope is not yet agreed. The following are indicative only and require s
 | Linux support | 3–4 weeks |
 | Localisation | 2–3 weeks |
 
-Licence enforcement and cross-platform support are substantial bodies of work not present in the current product and not covered by this specification.
+Licence enforcement and cross-platform support are both large pieces of work. Neither exists in the current product, and neither is covered by this specification.
 
 ## 8.4 Third-Party Costs
 
@@ -629,13 +629,13 @@ Licence enforcement and cross-platform support are substantial bodies of work no
 
 ## 8.5 Critical Path
 
-The following are prerequisites to public release and are outside the development team's control:
+Three things have to happen before public release, and none of them are in the development team's hands:
 
-1. **Authenticode certificate procurement.** Business verification typically takes several days to several weeks. Without it, users encounter a full-screen Windows warning identifying the application as unrecognised, which materially depresses installation completion.
-2. **FFmpeg licensing determination (DC-16).** Determines whether FFmpeg may be bundled, which in turn determines the installation experience.
-3. **Branding finalisation (AD-4).** The bundle identifier must be fixed before first public release; changing it afterwards relocates application data and results in loss of user settings.
+1. **Authenticode certificate procurement.** Business verification usually takes anywhere from a few days to a few weeks. Without a certificate, anyone downloading the installer meets a full-screen Windows warning calling the application unrecognised, and most of them stop there.
+2. **FFmpeg licensing determination (DC-16).** This decides whether FFmpeg can be bundled, which in turn decides what installation looks like for the user.
+3. **Branding finalisation (AD-4).** The bundle identifier has to be fixed before the first public release. Changing it afterwards moves the application data folder, and every existing user loses their settings.
 
-Item 1 has the longest lead time and should be initiated immediately.
+Item 1 has the longest lead time. It should be started immediately.
 
 ---
 
