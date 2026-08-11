@@ -1,21 +1,57 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { IPC_EVENTS } from '@/lib/constants'
 import { IpcError } from '@/lib/errors'
 import type { RuntimeStats } from '@/stores/uiStore'
 import type { SourceType } from '@/types'
 
+// ── Bridge ────────────────────────────────────────────────────────────────
+// Exposed by electron/preload. Deliberately the only place the renderer
+// reaches the main process — every other module goes through `ipc` below.
+
+export type UnlistenFn = () => void
+
+interface Bridge {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
+  on(event: string, callback: (payload: unknown) => void): UnlistenFn
+}
+
+declare global {
+  interface Window {
+    codebuilders?: Bridge
+  }
+}
+
+function bridge(): Bridge {
+  const api = window.codebuilders
+  if (!api) {
+    throw new Error(
+      'Backend bridge unavailable — the preload script did not load. ' +
+        'Running the renderer outside Electron is not supported.',
+    )
+  }
+  return api
+}
+
 // ── Typed invoke wrapper ──────────────────────────────────────────────────
 
 async function cmd<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>(command, args)
+    return await bridge().invoke<T>(command, args)
   } catch (err) {
     throw new IpcError(
       typeof err === 'string' ? err : `Command "${command}" failed`,
       { command, args }
     )
   }
+}
+
+/** Subscribe to a backend event, matching the previous listen() signature. */
+function listen<T>(
+  event: string,
+  handler: (e: { payload: T }) => void,
+): Promise<UnlistenFn> {
+  return Promise.resolve(
+    bridge().on(event, (payload) => handler({ payload: payload as T })),
+  )
 }
 
 // ── DTOs (mirrors Rust structs, camelCase via serde rename_all) ───────────

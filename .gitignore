@@ -46,3 +46,7 @@ versions/**/*.exe
 
 # Generated documents (rebuild with: npm run docs:pdf)
 docs/*.pdf
+
+# electron-vite build output
+out/
+*.tsbuildinfo
