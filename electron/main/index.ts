@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { installDispatcher } from './ipc'
 import { registerCommands } from './commands'
 import { initDatabase, closeDatabase } from './db'
+import { killAllSessions } from './output/ffmpeg'
+import { stopStatsPolling } from './commands/stats'
+import { stopAudio } from './commands/audio'
 
 const isDev = !app.isPackaged
 
@@ -81,5 +84,10 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // Orphaned ffmpeg processes would keep holding the capture device and the
+  // output file after the window is gone.
+  killAllSessions()
+  stopStatsPolling()
+  stopAudio()
   closeDatabase()
 })
