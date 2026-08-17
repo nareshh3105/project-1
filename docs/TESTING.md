@@ -24,7 +24,7 @@ registrations leak into the next.
 
 ## What is covered
 
-189 tests. Priority went to the layers where a defect is silent rather than
+264 tests. Priority went to the layers where a defect is silent rather than
 loud: schema and cascade behaviour, the IPC boundary every renderer call
 crosses, ffmpeg process handling and argument construction, and persistence.
 
@@ -34,6 +34,8 @@ crosses, ffmpeg process handling and argument construction, and persistence.
 | `electron/main/db` | 100% |
 | `electron/main/output` | 98% |
 | `electron/main/commands` | 64% |
+| `src/lib` | 71% |
+| `src/stores` | 38% |
 | **Backend overall** | **meets the 70% NF-13 commits to** |
 
 `child_process` is mocked (`test/mocks/child-process.ts`), so the recording,
@@ -49,10 +51,13 @@ across the file; on a fake clock the same suite runs in under one.
 
 - `commands/audio.ts`, `stats.ts`, `screenshot.ts`, `hotkeys.ts`,
   `updater.ts`, `window.ts` — thin wrappers over Electron APIs
-- Most renderer stores, and every React component
+- `sceneStore`, `sourceStore`, `collectionStore`, `captureStore`,
+  `transitionStore`, `hotkeyStore` — these call through to IPC, so they need
+  the bridge stubbed before they can be driven
+- Every React component
 
-Renderer coverage is around 13%. Closing that means store tests and component
-tests with Testing Library.
+Renderer coverage is around 42%. Closing the rest means stubbing the IPC
+bridge for the stores above, and component tests with Testing Library.
 
 ## Coverage thresholds
 

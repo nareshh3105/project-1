@@ -49,10 +49,10 @@ export default defineConfig({
         // Files not matched by a glob above — the renderer stores and helpers.
         // A ratchet just under current to stop regression, not a target. Raise
         // as those gain tests; see docs/TESTING.md.
-        statements: 13,
-        branches: 60,
-        functions: 35,
-        lines: 13,
+        statements: 42,
+        branches: 87,
+        functions: 76,
+        lines: 42,
       },
     },
   },
