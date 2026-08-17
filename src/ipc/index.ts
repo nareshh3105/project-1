@@ -185,6 +185,13 @@ export const ipc = {
     startPolling: () => cmd<void>('start_stats_polling'),
   },
 
+  hotkeys: {
+    /** Replaces the OS-level shortcut set. Resolves to accelerators refused. */
+    register:   (shortcuts: { accelerator: string; action: string }[]) =>
+      cmd<string[]>('register_shortcuts', { shortcuts }),
+    unregister: () => cmd<void>('unregister_shortcuts'),
+  },
+
   replay: {
     start:  (bufferSecs?: number) => cmd<void>('start_replay_buffer', { bufferSecs: bufferSecs ?? null }),
     stop:   () => cmd<void>('stop_replay_buffer'),
@@ -298,6 +305,10 @@ export interface VirtualCameraStatusPayload {
 
 export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
   return listen<VirtualCameraStatusPayload>('output:virtual-camera-status', (e) => cb(e.payload))
+}
+
+export function onHotkeyPressed(cb: (action: string) => void): Promise<UnlistenFn> {
+  return listen<{ action: string }>('hotkey:pressed', (e) => cb(e.payload.action))
 }
 
 export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {

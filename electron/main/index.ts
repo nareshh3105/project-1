@@ -8,6 +8,7 @@ import { initDatabase, closeDatabase } from './db'
 import { killAllSessions } from './output/ffmpeg'
 import { stopStatsPolling } from './commands/stats'
 import { stopAudio } from './commands/audio'
+import { unregisterAllShortcuts } from './commands/hotkeys'
 
 const isDev = !app.isPackaged
 
@@ -89,5 +90,6 @@ app.on('before-quit', () => {
   killAllSessions()
   stopStatsPolling()
   stopAudio()
+  unregisterAllShortcuts()
   closeDatabase()
 })

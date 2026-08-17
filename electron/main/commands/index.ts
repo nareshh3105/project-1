@@ -1,6 +1,7 @@
 import { registerAppCommands } from './app'
 import { registerAudioCommands } from './audio'
 import { registerCollectionCommands } from './collections'
+import { registerHotkeyCommands } from './hotkeys'
 import { registerOutputCommands } from './output'
 import { registerPluginCommands } from './plugins'
 import { registerSceneCommands } from './scenes'
@@ -14,6 +15,7 @@ export function registerCommands() {
   registerAppCommands()
   registerAudioCommands()
   registerCollectionCommands()
+  registerHotkeyCommands()
   registerOutputCommands()
   registerPluginCommands()
   registerSceneCommands()
