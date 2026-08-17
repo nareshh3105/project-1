@@ -10,60 +10,10 @@ import {
   isActive, requireFfmpeg, setSession, spawnFfmpeg, stopGracefully,
   takeSession, timestamp, videosDir, getSession,
 } from '../output/ffmpeg'
+import { audioArgs, X264_ARCHIVE } from '../output/args'
 
 const VIRTUAL_CAMERA_PORT = 12345
 const SEGMENT_SECONDS = 5
-
-/** Encoder arguments shared by the recording and replay paths. */
-const X264_ARCHIVE = [
-  '-c:v', 'libx264',
-  '-preset', 'ultrafast',
-  '-crf', '23',
-  '-pix_fmt', 'yuv420p',
-]
-
-/**
- * Builds the audio portion of a recording command.
- *
- * Each selected device becomes its own input and its own output track, so the
- * result can be re-mixed in post. When any track wants noise suppression the
- * whole set has to go through filter_complex, because mixing filtered and
- * unfiltered streams in a plain -map list is not expressible.
- */
-function audioArgs(tracks: string[], ns: boolean[]): { inputs: string[]; output: string[] } {
-  const inputs: string[] = []
-  for (const device of tracks) {
-    inputs.push('-f', 'dshow', '-i', `audio=${device}`)
-  }
-
-  const output: string[] = []
-  if (tracks.length === 0) {
-    output.push('-map', '0:v:0')
-    return { inputs, output }
-  }
-
-  const encoders = tracks.flatMap((_, i) => [
-    `-c:a:${i}`, 'aac', `-b:a:${i}`, '192k',
-  ])
-
-  if (ns.some(Boolean)) {
-    const filters = tracks.map((_, i) =>
-      ns[i]
-        ? `[${i + 1}:a:0]afftdn=nf=-25[a${i}]`
-        : `[${i + 1}:a:0]acopy[a${i}]`,
-    )
-    output.push('-filter_complex', filters.join(';'))
-    output.push('-map', '0:v:0')
-    tracks.forEach((_, i) => output.push('-map', `[a${i}]`))
-    output.push(...encoders)
-  } else {
-    output.push(...encoders)
-    output.push('-map', '0:v:0')
-    tracks.forEach((_, i) => output.push('-map', `${i + 1}:a:0`))
-  }
-
-  return { inputs, output }
-}
 
 export function registerOutputCommands() {
   command('check_ffmpeg', () => ffmpegAvailable(true))

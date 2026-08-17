@@ -53,3 +53,6 @@ out/
 
 # electron-builder output
 release/
+
+# coverage output
+coverage/

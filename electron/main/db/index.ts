@@ -23,6 +23,12 @@ export function initDatabase(dbPath?: string): Database.Database {
   // its sources. better-sqlite3 uses a single connection, so setting it here
   // covers every statement, but it must stay next to the connection open.
   db.pragma('journal_mode = WAL')
+  // better-sqlite3 already enables foreign keys per connection, unlike raw
+  // SQLite where the pragma defaults to OFF. Set it anyway so the requirement
+  // is explicit rather than inherited from driver behaviour that could change.
+  // The Rust build was bitten by exactly this: sqlx makes no such guarantee,
+  // and the pragma was issued once against a pool, so most connections ran
+  // without it and ON DELETE CASCADE silently never fired.
   db.pragma('foreign_keys = ON')
 
   migrate(db)
