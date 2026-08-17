@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { command } from '../ipc'
-import { ensureParentDir, timestamp } from '../output/ffmpeg'
+import { ensureParentDir, timestamp, uniquePath } from '../output/ffmpeg'
 
 export function registerScreenshotCommands() {
   command('take_screenshot', async ({ outputPath }) => {
@@ -27,7 +27,7 @@ export function registerScreenshotCommands() {
 
     const dest =
       (outputPath as string) ||
-      path.join(os.homedir(), 'Pictures', `Screenshot_${timestamp()}.png`)
+      uniquePath(path.join(os.homedir(), 'Pictures', `Screenshot_${timestamp()}.png`))
 
     ensureParentDir(dest)
     fs.writeFileSync(dest, image.toPNG())

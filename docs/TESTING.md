@@ -24,41 +24,50 @@ registrations leak into the next.
 
 ## What is covered
 
-| Area | Coverage |
-|---|---|
-| `db/index.ts`, `db/mappers.ts` | 100% |
-| `ipc.ts` | 100% |
-| `commands/scenes.ts` | 100% |
-| `commands/collections.ts` | 100% |
-| `commands/sources.ts` | 93% |
-| `commands/plugins.ts` | high |
-| `output/args.ts` | 100% |
+189 tests. Priority went to the layers where a defect is silent rather than
+loud: schema and cascade behaviour, the IPC boundary every renderer call
+crosses, ffmpeg process handling and argument construction, and persistence.
 
-105 tests. Priority went to the layers where a defect is silent: schema and
-cascade behaviour, the IPC boundary every renderer call crosses, ffmpeg
-argument construction, and settings persistence.
+| Area | Statements |
+|---|---|
+| `electron/main` (`ipc.ts`) | 100% |
+| `electron/main/db` | 100% |
+| `electron/main/output` | 98% |
+| `electron/main/commands` | 64% |
+| **Backend overall** | **meets the 70% NF-13 commits to** |
+
+`child_process` is mocked (`test/mocks/child-process.ts`), so the recording,
+streaming, replay and virtual camera paths are exercised without spawning
+ffmpeg: argument construction, event emission, refusal to start twice, and
+failure reporting when ffmpeg exits during startup.
+
+Those suites use fake timers. Every start awaits a grace window to catch an
+immediate ffmpeg failure, and waiting those out for real took eighty seconds
+across the file; on a fake clock the same suite runs in under one.
 
 ## What is not covered
 
-Everything that spawns a process or drives an OS surface:
-
-- `output/ffmpeg.ts` and `commands/output.ts` — recording, streaming, replay,
-  virtual camera. The argument construction is extracted into `output/args.ts`
-  and fully covered; what remains is process lifecycle.
-- `commands/screenshot.ts`, `stats.ts`, `audio.ts`, `hotkeys.ts`,
-  `updater.ts`, `window.ts`
+- `commands/audio.ts`, `stats.ts`, `screenshot.ts`, `hotkeys.ts`,
+  `updater.ts`, `window.ts` — thin wrappers over Electron APIs
 - Most renderer stores, and every React component
 
-Overall statement coverage is around 28%, against the 70% that NF-13 in the SRS
-commits to for the backend. Closing that gap means testing the process-spawning
-modules with a mocked `child_process`, and adding component tests. That work is
-not done.
+Renderer coverage is around 13%. Closing that means store tests and component
+tests with Testing Library.
 
-## Coverage thresholds are a ratchet
+## Coverage thresholds
 
-The thresholds in `vitest.config.ts` sit just below what is currently achieved.
-They exist to stop coverage regressing, not to claim a target has been met.
-Raise them as suites are added.
+Two gates, for two different purposes:
+
+`electron/main/**` is held at **70%**, which is what NF-13 in the SRS commits
+the backend process to. It passes today.
+
+Everything else carries a **ratchet** set just under what is currently
+achieved. That exists to stop coverage regressing, not to claim a target has
+been met. Raise it as renderer suites are added.
+
+Scoping the backend separately matters: a single blended number would let
+well-covered backend code disguise the untested renderer, and would read as
+though NF-13 were met when it might not be.
 
 ## Regression guards
 

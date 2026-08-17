@@ -35,15 +35,24 @@ export default defineConfig({
         'electron/main/commands/index.ts',
       ],
 
-      // A ratchet, not the target. NF-13 in the SRS commits the backend to 70%
-      // of statements; these numbers sit just under what is currently achieved
-      // so coverage cannot silently regress, and should be raised as the
-      // remaining modules gain tests. See docs/TESTING.md for what is left.
       thresholds: {
-        statements: 28,
-        branches: 75,
-        functions: 50,
-        lines: 28,
+        // NF-13 commits the backend process to 70% of statements. Enforced on
+        // the backend specifically, so renderer code that has not been covered
+        // yet cannot dilute the number into looking met when it is not.
+        'electron/main/**': {
+          statements: 70,
+          branches: 70,
+          functions: 70,
+          lines: 70,
+        },
+
+        // Files not matched by a glob above — the renderer stores and helpers.
+        // A ratchet just under current to stop regression, not a target. Raise
+        // as those gain tests; see docs/TESTING.md.
+        statements: 13,
+        branches: 60,
+        functions: 35,
+        lines: 13,
       },
     },
   },

@@ -56,8 +56,33 @@ export function timestamp(): string {
 
 export const videosDir = () => path.join(os.homedir(), 'Videos')
 
+/**
+ * Returns `file`, or the first numbered variant that does not already exist.
+ *
+ * Timestamps resolve to the second, and ffmpeg is invoked with `-y`, so two
+ * outputs produced within the same second would otherwise silently overwrite
+ * one another. Reachable by stopping and restarting a recording quickly, and
+ * easily by pressing the screenshot key twice. FR-5.7 requires that names not
+ * collide.
+ */
+export function uniquePath(file: string): string {
+  if (!fs.existsSync(file)) return file
+
+  const dir = path.dirname(file)
+  const ext = path.extname(file)
+  const stem = path.basename(file, ext)
+
+  for (let n = 2; n < 1000; n++) {
+    const candidate = path.join(dir, `${stem}_${n}${ext}`)
+    if (!fs.existsSync(candidate)) return candidate
+  }
+  // Practically unreachable; falling back to a timestamp with milliseconds
+  // beats throwing away the user's recording.
+  return path.join(dir, `${stem}_${Date.now()}${ext}`)
+}
+
 export const defaultRecordingPath = () =>
-  path.join(videosDir(), `CodeBuilders_${timestamp()}.mkv`)
+  uniquePath(path.join(videosDir(), `CodeBuilders_${timestamp()}.mkv`))
 
 export function ensureParentDir(file: string) {
   fs.mkdirSync(path.dirname(file), { recursive: true })

@@ -8,7 +8,7 @@ import {
   REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT,
   assertStartedOk, defaultRecordingPath, ensureParentDir, ffmpegAvailable,
   isActive, requireFfmpeg, setSession, spawnFfmpeg, stopGracefully,
-  takeSession, timestamp, videosDir, getSession,
+  takeSession, timestamp, uniquePath, videosDir, getSession,
 } from '../output/ffmpeg'
 import { audioArgs, X264_ARCHIVE } from '../output/args'
 
@@ -164,7 +164,8 @@ export function registerOutputCommands() {
     )
 
     const dest =
-      (outputPath as string) || path.join(videosDir(), `Replay_${timestamp()}.mkv`)
+      (outputPath as string) ||
+      uniquePath(path.join(videosDir(), `Replay_${timestamp()}.mkv`))
     ensureParentDir(dest)
 
     const result = spawnSync(
