@@ -185,6 +185,25 @@ export const ipc = {
     startPolling: () => cmd<void>('start_stats_polling'),
   },
 
+  window: {
+    setFullscreen:  (fullscreen: boolean) =>
+      cmd<void>('window_set_fullscreen', { fullscreen }),
+    isFullscreen:   () => cmd<boolean>('window_is_fullscreen'),
+    setAlwaysOnTop: (alwaysOnTop: boolean) =>
+      cmd<void>('window_set_always_on_top', { alwaysOnTop }),
+    close:          () => cmd<void>('window_close'),
+  },
+
+  file: {
+    saveDialog: (defaultPath?: string, filters?: { name: string; extensions: string[] }[]) =>
+      cmd<string | null>('show_save_dialog', { defaultPath, filters }),
+    openDialog: (filters?: { name: string; extensions: string[] }[]) =>
+      cmd<string | null>('show_open_dialog', { filters }),
+    readText:   (path: string) => cmd<string>('read_text_file', { path }),
+    writeText:  (path: string, contents: string) =>
+      cmd<void>('write_text_file', { path, contents }),
+  },
+
   hotkeys: {
     /** Replaces the OS-level shortcut set. Resolves to accelerators refused. */
     register:   (shortcuts: { accelerator: string; action: string }[]) =>

@@ -9,6 +9,7 @@ import { registerScreenshotCommands } from './screenshot'
 import { registerSourceCommands } from './sources'
 import { registerStatsCommands } from './stats'
 import { registerUpdaterCommands } from './updater'
+import { registerWindowCommands } from './window'
 import { registeredCommands } from '../ipc'
 
 export function registerCommands() {
@@ -23,6 +24,7 @@ export function registerCommands() {
   registerSourceCommands()
   registerStatsCommands()
   registerUpdaterCommands()
+  registerWindowCommands()
 
   console.info(`[ipc] ${registeredCommands().length} commands registered`)
 }

@@ -3,6 +3,8 @@ productName: CodeBuilders
 copyright: Copyright © 2026 CodeBuilders
 
 directories:
+  # Override with -c.directories.output=<path> when a security product holds a
+  # lock inside this tree; see scripts/PACKAGING.md.
   output: release/${version}
   buildResources: build
 

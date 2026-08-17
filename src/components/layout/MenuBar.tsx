@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useUIStore } from '@/stores/uiStore'
 import { useSceneStore } from '@/stores/sceneStore'
 import { useCollectionStore } from '@/stores/collectionStore'
@@ -137,17 +136,17 @@ export function MenuBar() {
   async function toggleAlwaysOnTop() {
     const next = !alwaysOnTop
     setAlwaysOnTop(next)
-    try { await getCurrentWindow().setAlwaysOnTop(next) } catch { /* browser dev */ }
+    try { await ipc.window.setAlwaysOnTop(next) } catch { /* no window host */ }
   }
 
   async function toggleFullscreen() {
     const next = !fullscreen
     setFullscreen(next)
-    try { await getCurrentWindow().setFullscreen(next) } catch { /* browser dev */ }
+    try { await ipc.window.setFullscreen(next) } catch { /* no window host */ }
   }
 
   async function exitApp() {
-    try { await getCurrentWindow().close() } catch { /* browser dev */ }
+    try { await ipc.window.close() } catch { /* no window host */ }
   }
 
   function handleResetLayout() {

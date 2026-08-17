@@ -1,7 +1,5 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { save, open } from '@tauri-apps/plugin-dialog'
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 import { ipc, type CollectionDto, type SceneDto, type SourceDto } from '@/ipc'
 import { useSceneStore } from './sceneStore'
 
@@ -134,23 +132,21 @@ export const useCollectionStore = create<CollectionState & CollectionActions>()(
 
         const payload: ExportPayload = { name: collection.name, scenes, sourcesByScene }
 
-        const path = await save({
-          defaultPath: `${collection.name}.json`,
-          filters: [{ name: 'Scene Collection', extensions: ['json'] }],
-        })
-        if (path) await writeTextFile(path, JSON.stringify(payload, null, 2))
+        const path = await ipc.file.saveDialog(`${collection.name}.json`, [
+          { name: 'Scene Collection', extensions: ['json'] },
+        ])
+        if (path) await ipc.file.writeText(path, JSON.stringify(payload, null, 2))
       } catch { /* no-op */ }
     },
 
     importCollection: async () => {
       try {
-        const path = await open({
-          multiple: false,
-          filters: [{ name: 'Scene Collection', extensions: ['json'] }],
-        })
-        if (!path || Array.isArray(path)) return
+        const path = await ipc.file.openDialog([
+          { name: 'Scene Collection', extensions: ['json'] },
+        ])
+        if (!path) return
 
-        const text = await readTextFile(path)
+        const text = await ipc.file.readText(path)
         const data = JSON.parse(text) as ExportPayload
 
         const result = await ipc.collection.create(data.name || 'Imported')
