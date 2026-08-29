@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { command } from '../ipc'
+import { logsDir } from '../diagnostics/logger'
 
 function openFolder(dir: string) {
   fs.mkdirSync(dir, { recursive: true })
@@ -27,4 +28,9 @@ export function registerAppCommands() {
   command('open_screenshots_folder', () =>
     openFolder(path.join(app.getPath('pictures'))),
   )
+
+  // Diagnostics: users need a way to reach the log when reporting a fault.
+  command('open_logs_folder', () => openFolder(logsDir()))
+
+  command('get_logs_path', () => logsDir())
 }

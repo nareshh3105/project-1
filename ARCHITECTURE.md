@@ -22,7 +22,7 @@
 | Database | SQLite via better-sqlite3 13 | Synchronous, single connection |
 | System stats | systeminformation | CPU and memory sampling |
 | Updates | electron-updater | Inactive until builds are signed |
-| Tests | Vitest 1.6 | 264 tests; see docs/TESTING.md |
+| Tests | Vitest 1.6 | 285 tests; see docs/TESTING.md |
 
 ---
 
@@ -62,6 +62,9 @@ project 1/
 │   │   ├── db/
 │   │   │   ├── index.ts          # Connection, schema, orphan cleanup
 │   │   │   └── mappers.ts        # snake_case rows to camelCase DTOs
+│   │   ├── diagnostics/
+│   │   │   ├── logger.ts         # Local log file, rotation, secret redaction
+│   │   │   └── crash.ts          # Uncaught errors, renderer and child crashes
 │   │   ├── output/
 │   │   │   ├── ffmpeg.ts         # Process spawning, sessions, graceful stop
 │   │   │   └── args.ts           # Argument construction (extracted to test)
@@ -197,10 +200,11 @@ src/lib/tokens.ts   ← TypeScript constants for canvas/Konva use
 |---|---|
 | Core features | Complete — scenes, sources, recording, streaming, replay, virtual camera, screenshots, audio mixer, filters, multiview, studio mode, profiles, collections, plugins, hotkeys |
 | Platform | Windows only. gdigrab and dshow are Windows-specific; macOS and Linux need their own capture path |
-| Tests | 264. Backend meets the 70% NF-13 requires; renderer around 42% |
+| Tests | 285. Backend meets the 70% NF-13 requires; renderer around 42% |
 | Packaging | NSIS and MSI build; installers archived under `versions/` |
 | Code signing | Not configured — pending certificate |
 | Updates | Built but inactive; requires signed builds |
+| Diagnostics | Local logging and crash capture; nothing transmitted (see below) |
 | Licensing / payment | Not implemented |
 
 ---
@@ -237,6 +241,14 @@ silent or duplicated tracks, which is easy to ship and expensive to notice.
 **Graceful stop rather than kill** — FFmpeg is sent `q` and given a grace
 period before SIGKILL. Killing outright can leave an unplayable file, because
 the container index is written during shutdown.
+
+**Crash reporting is local only** — errors, renderer crashes and native dumps
+are written to `app.getPath('logs')` and the crash directory, and go nowhere.
+`crashReporter` runs with `uploadToServer: false` and no submit URL. Remote
+reporting needs an explicit opt-in (DC-14, NF-26) that does not exist yet, so
+transmission is not enabled by installing the application. Anything written is
+passed through a redactor first, because stream keys would otherwise reach the
+log (NF-3, DC-15).
 
 **FlexLayout over CSS grid** — user-resizable panels that persist across
 sessions. CSS grid cannot be resized by the user at runtime.

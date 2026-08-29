@@ -290,6 +290,11 @@ export function MenuBar() {
           <Item label="About CodeBuilders" onSelect={() => openModal('about')} />
           <Item label="Check for Updates…" onSelect={() => openModal('updater')} />
           <Sep />
+          <Item
+            label="Open Logs Folder"
+            onSelect={() => ipc.output.openLogsFolder().catch(() => {})}
+          />
+          <Sep />
           <Item label="Documentation" onSelect={() => window.open(REPO_URL, '_blank')} />
           <Item label="Report a Bug"  onSelect={() => window.open(`${REPO_URL}/issues/new`, '_blank')} />
         </Menu>

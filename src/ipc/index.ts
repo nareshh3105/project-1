@@ -175,6 +175,8 @@ export const ipc = {
       cmd<void>('start_streaming', { rtmpUrl, streamKey }),
     stopStreaming:    () => cmd<void>('stop_streaming'),
     openRecordingsFolder:  () => cmd<void>('open_recordings_folder'),
+    openLogsFolder:        () => cmd<void>('open_logs_folder'),
+    getLogsPath:           () => cmd<string>('get_logs_path'),
     openScreenshotsFolder: () => cmd<void>('open_screenshots_folder'),
     startVirtualCamera:  () => cmd<string>('start_virtual_camera'),
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),

@@ -9,6 +9,8 @@ import { killAllSessions } from './output/ffmpeg'
 import { stopStatsPolling } from './commands/stats'
 import { stopAudio } from './commands/audio'
 import { unregisterAllShortcuts } from './commands/hotkeys'
+import { initLogger, log } from './diagnostics/logger'
+import { installCrashHandlers, watchWindow } from './diagnostics/crash'
 
 const isDev = !app.isPackaged
 
@@ -43,6 +45,7 @@ function createWindow() {
   })
 
   state.manage(win)
+  watchWindow(win)
 
   // Avoid the white flash before React paints.
   win.once('ready-to-show', () => win.show())
@@ -65,6 +68,9 @@ function createWindow() {
   return win
 }
 
+initLogger()
+installCrashHandlers()
+
 app.whenReady().then(() => {
   // The interface draws its own menu bar. Electron's default native menu would
   // otherwise sit above it, duplicating File/Edit/View.
@@ -85,6 +91,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  log.info('shutting down: stopping sessions and closing database')
   // Orphaned ffmpeg processes would keep holding the capture device and the
   // output file after the window is gone.
   killAllSessions()

@@ -24,7 +24,7 @@ registrations leak into the next.
 
 ## What is covered
 
-264 tests. Priority went to the layers where a defect is silent rather than
+285 tests. Priority went to the layers where a defect is silent rather than
 loud: schema and cascade behaviour, the IPC boundary every renderer call
 crosses, ffmpeg process handling and argument construction, and persistence.
 
@@ -36,6 +36,7 @@ crosses, ffmpeg process handling and argument construction, and persistence.
 | `electron/main/commands` | 64% |
 | `src/lib` | 71% |
 | `src/stores` | 38% |
+| `electron/main/diagnostics` | high |
 | **Backend overall** | **meets the 70% NF-13 commits to** |
 
 `child_process` is mocked (`test/mocks/child-process.ts`), so the recording,
