@@ -1,6 +1,7 @@
 # CodeBuilders — Architecture Reference
 
-> Phase 1 foundation. Updated as phases complete.
+> Current as of v0.5.0, the first build on Electron. The Rust/Tauri
+> implementation this replaced remains in git history.
 
 ---
 
@@ -8,17 +9,45 @@
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Shell | Tauri 2 (Rust) | IPC, native OS, file system, window management |
-| Frontend | React 18 + TypeScript 5 strict | Vite 5 bundler |
-| Styling | Tailwind CSS 4 + shadcn/ui | CSS vars wired to tokens.json |
+| Shell | Electron 43 | Main process in TypeScript on Node |
+| Build | electron-vite 5 | Separate bundles for main, preload and renderer |
+| Packaging | electron-builder 26 | NSIS and MSI targets |
+| Frontend | React 18 + TypeScript 5 strict | Unchanged by the migration |
+| Styling | Tailwind CSS + shadcn/ui | CSS vars wired to tokens.json |
 | State | Zustand 4 + Immer | One store per domain, no Context API |
-| Server state | TanStack Query 5 | For async IPC calls + caching |
-| Forms | React Hook Form 7 + Zod 3 | Settings modals, source property panels |
 | Dock layout | FlexLayout React 0.7 | Persisted to localStorage as JSON |
-| Canvas | HTML Canvas (preview) + React Konva (transform handles) | NOT mixed on same canvas |
-| Encoding | FFmpeg (bundled binary via shell plugin) | Phase 3+ |
-| Database | SQLite via sqlx (async) | Phase 2 |
-| Audio | WASAPI / CoreAudio via Rust | Phase 3 |
+| Canvas | HTML Canvas (preview) + React Konva (transform handles) | NOT mixed on the same canvas |
+| Capture | getDisplayMedia / getUserMedia | Runs in the renderer, not the backend |
+| Encoding | FFmpeg, spawned as a child process | Must be on PATH; not bundled (see Key Decisions) |
+| Database | SQLite via better-sqlite3 13 | Synchronous, single connection |
+| System stats | systeminformation | CPU and memory sampling |
+| Updates | electron-updater | Inactive until builds are signed |
+| Tests | Vitest 1.6 | 264 tests; see docs/TESTING.md |
+
+---
+
+## Process Model
+
+Electron runs two processes that exchange messages. The split matters for
+security: the renderer has no direct access to Node or the filesystem.
+
+```
+┌────────────────────────────┐        ┌────────────────────────────┐
+│  Renderer (Chromium)       │        │  Main (Node)               │
+│                            │        │                            │
+│  React interface           │        │  Command registry          │
+│  Zustand stores            │◄──IPC─►│  SQLite                    │
+│  Screen capture            │        │  FFmpeg subprocesses       │
+│  src/ipc/index.ts          │        │  OS integration            │
+└────────────────────────────┘        └────────────────────────────┘
+              ▲                                     │
+              │ contextBridge                       ▼
+       electron/preload                   ffmpeg · sqlite · shell
+```
+
+Screen and camera capture happen in the **renderer**, using the standard media
+APIs. The main process never touches the video stream; it only spawns FFmpeg,
+which captures independently via gdigrab.
 
 ---
 
@@ -26,90 +55,47 @@
 
 ```
 project 1/
-├── src/                          # React frontend
-│   ├── main.tsx                  # Entry point
-│   ├── App.tsx                   # QueryClient provider + AppShell
-│   ├── globals.css               # Design tokens → CSS vars + Tailwind base
-│   ├── vite-env.d.ts
-│   │
-│   ├── types/                    # Domain type system (pure TypeScript)
-│   │   ├── common.ts             # Primitives: ID, Transform, Rect, Resolution
-│   │   ├── scene.ts              # Scene, SceneCollection, SceneTransition
-│   │   ├── source.ts             # SourceInstance, SourceDefinition, Filter, all settings
-│   │   ├── audio.ts              # MixerChannel, AudioDevice, levels
-│   │   ├── output.ts             # Stream/Recording/VCam status + encoder settings
-│   │   ├── settings.ts           # Profile, AppSettings, VideoSettings
-│   │   ├── hotkey.ts             # KeyBinding, Hotkey, HotkeyAction
-│   │   ├── plugin.ts             # PluginManifest, Plugin
-│   │   └── index.ts              # Barrel
-│   │
-│   ├── lib/
-│   │   ├── utils.ts              # cn(), formatters, dB converters
-│   │   ├── tokens.ts             # Typed constants from tokens.json (for canvas use)
-│   │   ├── constants.ts          # IPC event names, storage keys, app defaults
-│   │   └── errors.ts             # AppError, IpcError, ValidationError
-│   │
-│   ├── stores/                   # Zustand stores (Immer middleware)
-│   │   ├── uiStore.ts            # Modal, context menu, studio mode, stats ✅ Phase 1
-│   │   ├── sceneStore.ts         # Scenes, sources, active scene    ⬜ Phase 2
-│   │   ├── audioStore.ts         # Mixer channels, faders, meters   ⬜ Phase 2
-│   │   ├── outputStore.ts        # Stream/recording/vcam status     ⬜ Phase 3
-│   │   ├── settingsStore.ts      # App + video + audio settings     ⬜ Phase 2
-│   │   ├── profileStore.ts       # Profiles + scene collections     ⬜ Phase 2
-│   │   └── index.ts              # Store barrel
-│   │
-│   ├── ipc/
-│   │   └── index.ts              # Typed invoke wrapper + event listeners
-│   │
-│   ├── config/
-│   │   └── layoutConfig.ts       # FlexLayout default model JSON
-│   │
-│   ├── hooks/                    # Custom React hooks      ⬜ Phase 2+
-│   │
+├── electron/
+│   ├── main/
+│   │   ├── index.ts              # App lifecycle, window, cleanup on quit
+│   │   ├── ipc.ts                # Command registry, dispatch, event emit
+│   │   ├── db/
+│   │   │   ├── index.ts          # Connection, schema, orphan cleanup
+│   │   │   └── mappers.ts        # snake_case rows to camelCase DTOs
+│   │   ├── output/
+│   │   │   ├── ffmpeg.ts         # Process spawning, sessions, graceful stop
+│   │   │   └── args.ts           # Argument construction (extracted to test)
+│   │   └── commands/             # One module per domain; each registers
+│   │       ├── scenes.ts         #   its commands by name
+│   │       ├── sources.ts
+│   │       ├── collections.ts
+│   │       ├── output.ts         # Recording, streaming, replay, vcam
+│   │       ├── audio.ts
+│   │       ├── stats.ts
+│   │       ├── screenshot.ts
+│   │       ├── plugins.ts
+│   │       ├── hotkeys.ts
+│   │       ├── updater.ts
+│   │       ├── window.ts         # Fullscreen, always-on-top, dialogs, file IO
+│   │       └── app.ts
+│   └── preload/
+│       └── index.ts              # contextBridge — the only renderer surface
+│
+├── src/                          # React interface (unchanged by the migration)
+│   ├── ipc/index.ts              # Typed wrapper over the bridge
+│   ├── stores/                   # Zustand, one per domain
 │   ├── components/
-│   │   ├── layout/
-│   │   │   ├── AppShell.tsx      # Root layout container ✅
-│   │   │   ├── MenuBar.tsx       # Top menu bar          ✅
-│   │   │   ├── Toolbar.tsx       # 7 tool buttons        ✅
-│   │   │   ├── DockLayout.tsx    # FlexLayout host       ✅
-│   │   │   └── StatusBar.tsx     # Bottom stats bar      ✅
-│   │   │
-│   │   ├── panels/               # Dockable panel content
-│   │   │   ├── ScenesPanel.tsx   ✅ Phase 1 placeholder
-│   │   │   ├── SourcesPanel.tsx  ✅ Phase 1 placeholder
-│   │   │   ├── PreviewPanel.tsx  ✅ Phase 1 placeholder (canvas + safe guides)
-│   │   │   ├── AudioMixerPanel.tsx ✅ Phase 1 placeholder
-│   │   │   └── ControlsPanel.tsx ✅ Phase 1 placeholder
-│   │   │
-│   │   ├── ui/                   # shadcn/ui components (add via CLI)
-│   │   ├── modals/               # ⬜ Phase 2+
-│   │   ├── overlays/             # ⬜ Phase 3+
-│   │   └── preview/              # ⬜ Phase 3 (canvas + Konva layer)
-│   │
-│   └── pages/                    # ⬜ Phase 2+ (settings, scene-collection mgr)
+│   └── lib/
 │
-├── src-tauri/                    # Rust backend
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   ├── build.rs
-│   ├── capabilities/default.json
-│   └── src/
-│       ├── main.rs               # Thin entry — calls lib::run()
-│       ├── lib.rs                # Builder setup + plugin registration
-│       ├── error.rs              # AppError enum + CommandResult alias
-│       ├── state/mod.rs          # AppState (Arc<RwLock<AppStateInner>>)
-│       └── commands/
-│           ├── mod.rs
-│           └── app_commands.rs   # get_app_version, get_platform_info
+├── test/
+│   ├── main/                     # Backend suites (Node environment)
+│   ├── renderer/                 # Store and helper suites (jsdom)
+│   └── mocks/                    # electron and child_process stubs
 │
-├── figma-plugin/                 # Design tooling (unchanged)
-├── tokens.json                   # W3C DTCG design tokens (source of truth)
-├── package.json
-├── vite.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
-├── components.json               # shadcn/ui config
-└── ARCHITECTURE.md               # This file
+├── docs/                         # SRS, status report, testing guide
+├── scripts/                      # release.ps1, md2pdf.py, packaging notes
+├── build/                        # Installer icons
+└── versions/                     # Archived releases
 ```
 
 ---
@@ -123,33 +109,66 @@ Component
 Zustand Store  (Immer middleware — safe nested mutations)
     │  dispatch action
     ▼
-IPC Layer  (src/ipc/index.ts — typed invoke wrapper)
-    │  invoke('command', args)
+src/ipc/index.ts       ← typed wrapper; the only module touching the bridge
+    │  window.codebuilders.invoke('command', args)
     ▼
-Tauri Command  (src-tauri/src/commands/)
-    │  AppState RwLock
+electron/preload       ← contextBridge; exposes invoke and on, nothing else
+    │  ipcRenderer.invoke('cb:invoke', name, args)
     ▼
-Rust Engine  (Phase 2+)
+electron/main/ipc.ts   ← single dispatcher, looks the name up in the registry
+    │
+    ▼
+Command handler        ← electron/main/commands/*
 ```
 
-**Rule:** Components never call `invoke()` directly. Always go through the IPC layer.
+**Rule:** components never reach the bridge directly. Everything goes through
+`src/ipc/index.ts`, which is what made the platform migration possible without
+touching the interface — only that file's internals changed.
 
 ---
 
-## IPC Event Flow (Rust → Frontend)
+## IPC Event Flow (Main to Renderer)
+
+Events travel on one channel and are filtered by name in the preload, so the
+renderer never enumerates channels.
 
 ```
-Rust engine emits:  app.emit("preview:frame", ArrayBuffer)
-                    app.emit("audio:levels", LevelPayload)
-                    app.emit("output:stream-status", StreamStatus)
-                    app.emit("stats:update", RuntimeStats)
-
-Frontend listens:   onPreviewFrame(cb)   → canvas.drawImage()
-                    onStatsUpdate(cb)    → uiStore.setStats()
-                    onLogLine(cb)        → log panel
+Main:       emit('output:recording-status', { active, filePath })
+            emit('audio:levels', [...])
+            emit('stats:update', RuntimeStats)
+            emit('hotkey:pressed', { action })
+                │  webContents.send('cb:event', name, payload)
+                ▼
+Preload:    filters by name, invokes the subscriber's callback
+                ▼
+Renderer:   onRecordingStatus(cb) → outputStore.setRecordingStatus()
+            onStatsUpdate(cb)     → uiStore.setStats()
 ```
 
-All event names are typed constants in `src/lib/constants.ts → IPC_EVENTS`.
+Event names are constants in `src/lib/constants.ts → IPC_EVENTS`. The backend
+must emit exactly those strings — a mismatch fails silently, which is how the
+streaming indicator stayed broken for the entire life of the Rust build.
+
+---
+
+## Security Model
+
+Electron is not safe by default. These settings are required, not optional:
+
+| Setting | Value | Why |
+|---|---|---|
+| `contextIsolation` | `true` | Renderer cannot reach preload internals |
+| `nodeIntegration` | `false` | No Node APIs in the web context |
+| `sandbox` | `false` | Needed for the preload to import electron |
+
+The renderer's entire capability is the command registry. If a page were
+compromised, it could call registered commands — it could not read the
+filesystem or spawn processes directly.
+
+Paths derived from untrusted input are containment-checked. A plugin
+manifest's entryPoint, and the stored config_path, are both resolved and
+verified to sit inside the plugins directory before anything is read or
+deleted.
 
 ---
 
@@ -166,36 +185,65 @@ tailwind.config.ts  ← theme.extend.colors references var(--color-*)
     │
     ▼
 Components use:     className="bg-bg-surface text-text-primary"
-                    className="bg-accent-gradient"
 
-src/lib/tokens.ts   ← TypeScript constants for canvas/Konva/chart use
+src/lib/tokens.ts   ← TypeScript constants for canvas/Konva use
 ```
 
 ---
 
-## Phase Roadmap
+## Current State
 
-| Phase | Scope | Status |
-|---|---|---|
-| **1 — Foundation** | Build system, types, stores, IPC shell, layout | ✅ Complete |
-| **2 — Scenes & Sources** | sceneStore, sourceStore, SQLite, scene CRUD, source CRUD | ⬜ Next |
-| **3 — Preview & Output** | FFmpeg subprocess, Rust compositor, live preview, streaming, recording | ⬜ |
-| **4 — Audio** | WASAPI/CoreAudio, mixer, VU meters, faders | ⬜ |
-| **5 — Settings & Profiles** | Settings UI, profile manager, hotkeys, auto-config | ⬜ |
-| **6 — Studio Mode & Multiview** | Program/Preview split, transitions, multiview grid | ⬜ |
-| **7 — Plugins** | JS sandbox plugin host, plugin manager UI | ⬜ |
-| **8 — Polish** | Onboarding, crash recovery, update system, release | ⬜ |
+| Area | Status |
+|---|---|
+| Core features | Complete — scenes, sources, recording, streaming, replay, virtual camera, screenshots, audio mixer, filters, multiview, studio mode, profiles, collections, plugins, hotkeys |
+| Platform | Windows only. gdigrab and dshow are Windows-specific; macOS and Linux need their own capture path |
+| Tests | 264. Backend meets the 70% NF-13 requires; renderer around 42% |
+| Packaging | NSIS and MSI build; installers archived under `versions/` |
+| Code signing | Not configured — pending certificate |
+| Updates | Built but inactive; requires signed builds |
+| Licensing / payment | Not implemented |
 
 ---
 
 ## Key Decisions
 
-**FlexLayout over CSS grid** — user-resizable panels that persist layout across sessions. CSS grid cannot be resized by the user at runtime.
+**Electron over Tauri** — chosen for maintainability. The product is now a
+single TypeScript codebase that can be staffed without Rust experience. The
+cost is size and memory: a 112 MB installer against 6 MB, and roughly 200 MB
+resident against 48 MB, because Electron ships its own browser engine rather
+than using the Windows WebView runtime. Recorded as DC-1 in `docs/SRS.md`.
 
-**Separate canvases for preview and Konva** — live video frames render to a plain `<canvas>` via `drawImage()`. React Konva renders transform handles on a transparent overlay canvas on top. They must never share a canvas context.
+**A single command registry rather than one IPC channel per feature** —
+mirrors the model the Rust build used, so commands could be ported one at a
+time against a running application. It also keeps the renderer's reachable
+surface enumerable in one place.
 
-**Zustand + Immer** — deeply nested source/filter mutations require Immer. Without it, every nested update requires manual spread chains.
+**better-sqlite3 over an async driver** — synchronous and single-connection,
+which sidesteps the class of bug that broke the Rust implementation, where a
+per-connection pragma was set once against a pool and most connections ran
+without it. It is a native module, so it needs rebuilding against Electron's
+ABI (`npm run rebuild`) and is unpacked from the asar archive.
 
-**sqlx over rusqlite** — async Rust is Tokio-based; rusqlite is synchronous and requires `spawn_blocking`. sqlx is natively async and integrates cleanly with Tauri's Tokio runtime.
+**FFmpeg spawned, not bundled** — avoids linking complexity, and keeps the
+GPL licensing question open rather than settled by default. Bundling a
+standard build would oblige the vendor to publish source. Unresolved; see
+DC-16 in `docs/SRS.md`.
 
-**FFmpeg subprocess (Phase 3)** — bundled FFmpeg binary called via `tauri-plugin-shell`. Avoids linking complexity. Phase 5+ can migrate to native bindings if needed.
+**Argument construction split from process handling** — `output/args.ts` is
+pure and fully covered by tests, so stream mapping can be verified without
+spawning anything. An off-by-one in a stream index produces a recording with
+silent or duplicated tracks, which is easy to ship and expensive to notice.
+
+**Graceful stop rather than kill** — FFmpeg is sent `q` and given a grace
+period before SIGKILL. Killing outright can leave an unplayable file, because
+the container index is written during shutdown.
+
+**FlexLayout over CSS grid** — user-resizable panels that persist across
+sessions. CSS grid cannot be resized by the user at runtime.
+
+**Separate canvases for preview and Konva** — live video renders to a plain
+`<canvas>` via `drawImage()`. React Konva renders transform handles on a
+transparent overlay above it. They must never share a context.
+
+**Zustand + Immer** — deeply nested source and filter mutations need Immer.
+Without it, every nested update becomes a manual spread chain.
