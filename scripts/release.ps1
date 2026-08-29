@@ -50,9 +50,9 @@ if (-not $SkipBuild) {
         npx electron-vite build
         if ($LASTEXITCODE -ne 0) { throw "electron-vite build failed ($LASTEXITCODE)" }
 
-        $args = @()
-        if ($OutDir) { $args += "-c.directories.output=$buildRoot/`${version}" }
-        npx electron-builder @args
+        $builderArgs = @()
+        if ($OutDir) { $builderArgs += "-c.directories.output=$buildRoot/`${version}" }
+        npx electron-builder @builderArgs
         if ($LASTEXITCODE -ne 0) { throw "electron-builder failed ($LASTEXITCODE)" }
     } finally {
         Pop-Location
