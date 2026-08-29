@@ -1,0 +1,43 @@
+appId: com.codebuilders.desktop
+productName: CodeBuilders
+copyright: Copyright © 2026 CodeBuilders
+
+directories:
+  # Override with -c.directories.output=<path> when a security product holds a
+  # lock inside this tree; see scripts/PACKAGING.md.
+  output: release/${version}
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+# better-sqlite3 ships a compiled .node binding that cannot be bundled by the
+# renderer build, so it is unpacked from the asar and loaded from disk.
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: msi
+      arch: [x64]
+  artifactName: ${productName}_${version}_${arch}-setup.${ext}
+  # Signing is applied by passing the certificate through the environment at
+  # build time; see scripts/SIGNING.md. Unsigned builds still produce
+  # installers, but Windows will warn the user that the publisher is unknown.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CodeBuilders
+
+publish:
+  provider: github
+  owner: nareshh3105
+  repo: project-1

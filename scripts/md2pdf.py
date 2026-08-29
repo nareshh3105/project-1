@@ -390,24 +390,37 @@ def main():
         if len(meta_rows) >= 5:
             break
 
+    # The cover takes its title from the document's own first heading, and its
+    # subtitle from the heading below it if there is one. Hardcoding these
+    # would mislabel every document but the one they were written for.
+    title_match = re.search(r'^#\s+(.+?)\s*$', md, re.M)
+    title = title_match.group(1) if title_match else src.stem
+
+    subtitle = ''
+    if title_match:
+        after_title = md[title_match.end():]
+        sub_match = re.match(r'\s*##\s+(.+?)\s*$', after_title, re.M)
+        if sub_match:
+            subtitle = sub_match.group(1)
+
     body = md
-    body = re.sub(r'^# Software Requirements Specification\s*$', '', body, flags=re.M)
-    body = re.sub(r'^## CodeBuilders.*$', '', body, count=1, flags=re.M)
+    if title_match:
+        body = body.replace(title_match.group(0), '', 1)
+    if subtitle:
+        body = re.sub(r'^##\s+' + re.escape(subtitle) + r'\s*$', '', body,
+                      count=1, flags=re.M)
     body = re.sub(r'\|\s*\|\s*\|\n\|[-\s|]+\|\n(\|\s*\*\*.+?\n)+', '', body, count=1)
     body = re.sub(r'^## Table of Contents.*?(?=^---)', '', body,
                   count=1, flags=re.M | re.S)
     body = body.lstrip('-\n ')
 
-    story = cover(
-        'Software Requirements Specification',
-        'CodeBuilders — Desktop Screen Recording &amp; Live Streaming Studio',
-        meta_rows or [('Version', '1.0')])
+    story = cover(inline(title), inline(subtitle), meta_rows or [])
     story.append(NextPageTemplate('Body'))
     story.append(PageBreak())
     story += parse(body)
 
-    doc = Doc(str(out), 'Software Requirements Specification — CodeBuilders',
-              'Development Team')
+    running_head = f'{title} — CodeBuilders' if 'CodeBuilders' not in title else title
+    doc = Doc(str(out), running_head, 'Development Team')
     doc.build(story)
     print(f'Wrote {out}')
 

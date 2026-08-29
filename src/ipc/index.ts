@@ -1,21 +1,57 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { IPC_EVENTS } from '@/lib/constants'
 import { IpcError } from '@/lib/errors'
 import type { RuntimeStats } from '@/stores/uiStore'
 import type { SourceType } from '@/types'
 
+// ── Bridge ────────────────────────────────────────────────────────────────
+// Exposed by electron/preload. Deliberately the only place the renderer
+// reaches the main process — every other module goes through `ipc` below.
+
+export type UnlistenFn = () => void
+
+interface Bridge {
+  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
+  on(event: string, callback: (payload: unknown) => void): UnlistenFn
+}
+
+declare global {
+  interface Window {
+    codebuilders?: Bridge
+  }
+}
+
+function bridge(): Bridge {
+  const api = window.codebuilders
+  if (!api) {
+    throw new Error(
+      'Backend bridge unavailable — the preload script did not load. ' +
+        'Running the renderer outside Electron is not supported.',
+    )
+  }
+  return api
+}
+
 // ── Typed invoke wrapper ──────────────────────────────────────────────────
 
 async function cmd<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>(command, args)
+    return await bridge().invoke<T>(command, args)
   } catch (err) {
     throw new IpcError(
       typeof err === 'string' ? err : `Command "${command}" failed`,
       { command, args }
     )
   }
+}
+
+/** Subscribe to a backend event, matching the previous listen() signature. */
+function listen<T>(
+  event: string,
+  handler: (e: { payload: T }) => void,
+): Promise<UnlistenFn> {
+  return Promise.resolve(
+    bridge().on(event, (payload) => handler({ payload: payload as T })),
+  )
 }
 
 // ── DTOs (mirrors Rust structs, camelCase via serde rename_all) ───────────
@@ -149,6 +185,32 @@ export const ipc = {
     startPolling: () => cmd<void>('start_stats_polling'),
   },
 
+  window: {
+    setFullscreen:  (fullscreen: boolean) =>
+      cmd<void>('window_set_fullscreen', { fullscreen }),
+    isFullscreen:   () => cmd<boolean>('window_is_fullscreen'),
+    setAlwaysOnTop: (alwaysOnTop: boolean) =>
+      cmd<void>('window_set_always_on_top', { alwaysOnTop }),
+    close:          () => cmd<void>('window_close'),
+  },
+
+  file: {
+    saveDialog: (defaultPath?: string, filters?: { name: string; extensions: string[] }[]) =>
+      cmd<string | null>('show_save_dialog', { defaultPath, filters }),
+    openDialog: (filters?: { name: string; extensions: string[] }[]) =>
+      cmd<string | null>('show_open_dialog', { filters }),
+    readText:   (path: string) => cmd<string>('read_text_file', { path }),
+    writeText:  (path: string, contents: string) =>
+      cmd<void>('write_text_file', { path, contents }),
+  },
+
+  hotkeys: {
+    /** Replaces the OS-level shortcut set. Resolves to accelerators refused. */
+    register:   (shortcuts: { accelerator: string; action: string }[]) =>
+      cmd<string[]>('register_shortcuts', { shortcuts }),
+    unregister: () => cmd<void>('unregister_shortcuts'),
+  },
+
   replay: {
     start:  (bufferSecs?: number) => cmd<void>('start_replay_buffer', { bufferSecs: bufferSecs ?? null }),
     stop:   () => cmd<void>('stop_replay_buffer'),
@@ -262,6 +324,10 @@ export interface VirtualCameraStatusPayload {
 
 export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
   return listen<VirtualCameraStatusPayload>('output:virtual-camera-status', (e) => cb(e.payload))
+}
+
+export function onHotkeyPressed(cb: (action: string) => void): Promise<UnlistenFn> {
+  return listen<{ action: string }>('hotkey:pressed', (e) => cb(e.payload.action))
 }
 
 export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {

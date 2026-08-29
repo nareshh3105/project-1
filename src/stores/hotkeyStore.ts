@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { register, unregisterAll, type ShortcutEvent } from '@tauri-apps/plugin-global-shortcut'
 import { DEFAULT_HOTKEYS, type Hotkey, type KeyBinding, type ModifierKey } from '@/types/hotkey'
-import { ipc } from '@/ipc'
+import { ipc, onHotkeyPressed } from '@/ipc'
 import { generateId } from '@/lib/utils'
 
 const STORAGE_KEY = 'cb:hotkeys'
@@ -144,19 +143,27 @@ async function dispatchAction(action: string): Promise<void> {
 // ── Global shortcut sync ──────────────────────────────────────────────────
 // Unregisters all then re-registers every bound hotkey with the OS.
 
+// A single subscription serves every binding — the backend reports which
+// action fired, so re-syncing the shortcut set does not need a new listener.
+let pressedUnlisten: (() => void) | null = null
+
+async function ensurePressedListener(): Promise<void> {
+  if (pressedUnlisten) return
+  pressedUnlisten = await onHotkeyPressed((action) => { void dispatchAction(action) })
+}
+
 async function syncShortcuts(hotkeys: Hotkey[]): Promise<void> {
   try {
-    await unregisterAll()
-    for (const hk of hotkeys) {
-      for (const binding of hk.bindings) {
-        const shortcut = bindingToShortcut(binding)
-        const action   = hk.action
-        await register(shortcut, (event: ShortcutEvent) => {
-          if (event.state === 'Pressed') {
-            dispatchAction(action)
-          }
-        }).catch((e) => console.warn(`[hotkeys] failed to register "${shortcut}":`, e))
-      }
+    await ensurePressedListener()
+
+    const shortcuts = hotkeys.flatMap((hk) =>
+      hk.bindings.map((b) => ({ accelerator: bindingToShortcut(b), action: hk.action })),
+    )
+
+    const refused = await ipc.hotkeys.register(shortcuts)
+    if (refused.length > 0) {
+      // Usually means another application already owns the combination.
+      console.warn(`[hotkeys] refused by the OS: ${refused.join(', ')}`)
     }
   } catch (err) {
     console.warn('[hotkeys] syncShortcuts error:', err)
