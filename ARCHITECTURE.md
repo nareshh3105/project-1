@@ -22,7 +22,7 @@
 | Database | SQLite via better-sqlite3 13 | Synchronous, single connection |
 | System stats | systeminformation | CPU and memory sampling |
 | Updates | electron-updater | Inactive until builds are signed |
-| Tests | Vitest 1.6 | 285 tests; see docs/TESTING.md |
+| Tests | Vitest 1.6 | 316 tests; see docs/TESTING.md |
 
 ---
 
@@ -200,7 +200,7 @@ src/lib/tokens.ts   ← TypeScript constants for canvas/Konva use
 |---|---|
 | Core features | Complete — scenes, sources, recording, streaming, replay, virtual camera, screenshots, audio mixer, filters, multiview, studio mode, profiles, collections, plugins, hotkeys |
 | Platform | Windows only. gdigrab and dshow are Windows-specific; macOS and Linux need their own capture path |
-| Tests | 285. Backend meets the 70% NF-13 requires; renderer around 42% |
+| Tests | 316. Backend meets the 70% NF-13 requires; renderer around 19% |
 | Packaging | NSIS and MSI build; installers archived under `versions/` |
 | Code signing | Not configured — pending certificate |
 | Updates | Built but inactive; requires signed builds |

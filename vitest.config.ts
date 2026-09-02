@@ -24,7 +24,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['electron/**/*.ts', 'src/stores/**/*.ts', 'src/lib/**/*.ts'],
+      include: [
+        'electron/**/*.ts',
+        'src/stores/**/*.ts',
+        'src/lib/**/*.ts',
+        'src/components/**/*.tsx',
+      ],
       exclude: [
         '**/*.d.ts',
         'electron/preload/**',
@@ -46,13 +51,15 @@ export default defineConfig({
           lines: 70,
         },
 
-        // Files not matched by a glob above — the renderer stores and helpers.
-        // A ratchet just under current to stop regression, not a target. Raise
-        // as those gain tests; see docs/TESTING.md.
-        statements: 42,
-        branches: 87,
-        functions: 76,
-        lines: 42,
+        // Files not matched by a glob above — the renderer: stores, helpers and
+        // components. A ratchet just under current to stop regression, not a
+        // target. The figure is low because src/components is now measured and
+        // is mostly untested; that is the gap, stated rather than hidden.
+        // See docs/TESTING.md.
+        statements: 18,
+        branches: 78,
+        functions: 60,
+        lines: 18,
       },
     },
   },

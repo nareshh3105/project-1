@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
@@ -30,6 +30,16 @@ export function ControlsPanel() {
   const [vcamLoading,    setVcamLoading]    = useState(false)
   const [screenshotMsg,  setScreenshotMsg]  = useState<string | null>(null)
   const [screenshotErr,  setScreenshotErr]  = useState<string | null>(null)
+
+  // Status messages clear themselves on a timer. Without cancelling those
+  // on unmount they fire against a component that is gone — reachable by
+  // rearranging the dock while a message is showing.
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  useEffect(() => () => { timers.current.forEach(clearTimeout) }, [])
+
+  const later = (fn: () => void, ms: number) => {
+    timers.current.push(setTimeout(fn, ms))
+  }
 
   async function handleRecording() {
     setRecError(null)
@@ -74,7 +84,7 @@ export function ControlsPanel() {
     try {
       const path = await ipc.replay.save()
       setReplaySaved(path)
-      setTimeout(() => setReplaySaved(null), 5000)
+      later(() => setReplaySaved(null), 5000)
     } catch (e) {
       setReplayError(String(e))
     }
@@ -102,10 +112,10 @@ export function ControlsPanel() {
     try {
       const path = await ipc.screenshot.take()
       setScreenshotMsg(path.split(/[/\\]/).pop() ?? 'Saved')
-      setTimeout(() => setScreenshotMsg(null), 4000)
+      later(() => setScreenshotMsg(null), 4000)
     } catch (e) {
       setScreenshotErr(String(e))
-      setTimeout(() => setScreenshotErr(null), 4000)
+      later(() => setScreenshotErr(null), 4000)
     }
   }
 

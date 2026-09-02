@@ -24,7 +24,7 @@ registrations leak into the next.
 
 ## What is covered
 
-285 tests. Priority went to the layers where a defect is silent rather than
+316 tests. Priority went to the layers where a defect is silent rather than
 loud: schema and cascade behaviour, the IPC boundary every renderer call
 crosses, ffmpeg process handling and argument construction, and persistence.
 
@@ -34,8 +34,9 @@ crosses, ffmpeg process handling and argument construction, and persistence.
 | `electron/main/db` | 100% |
 | `electron/main/output` | 98% |
 | `electron/main/commands` | 64% |
-| `src/lib` | 71% |
+| `src/lib` | 72% |
 | `src/stores` | 38% |
+| `src/components` | 2 of ~40 components |
 | `electron/main/diagnostics` | high |
 | **Backend overall** | **meets the 70% NF-13 commits to** |
 
@@ -48,6 +49,21 @@ Those suites use fake timers. Every start awaits a grace window to catch an
 immediate ffmpeg failure, and waiting those out for real took eighty seconds
 across the file; on a fake clock the same suite runs in under one.
 
+## Component tests
+
+`test/mocks/bridge.ts` stands in for the preload's contextBridge, so a
+component can be rendered and driven without an Electron host. It records
+which commands were invoked, lets a test queue a result or a failure, and
+can push a backend event at whatever the interface subscribed with.
+
+Interactions go through a small `click` helper that wraps the event in
+`act`. The handlers set state after an awaited IPC call, which otherwise
+lands outside the act scope userEvent establishes and makes React warn.
+
+Two components are covered so far: `ControlsPanel`, where FFmpeg's absence
+has to disable the right things and explain why, and `FfmpegMissingModal`,
+which is the only thing telling a user why recording does not work.
+
 ## What is not covered
 
 - `commands/audio.ts`, `stats.ts`, `screenshot.ts`, `hotkeys.ts`,
@@ -55,10 +71,11 @@ across the file; on a fake clock the same suite runs in under one.
 - `sceneStore`, `sourceStore`, `collectionStore`, `captureStore`,
   `transitionStore`, `hotkeyStore` — these call through to IPC, so they need
   the bridge stubbed before they can be driven
-- Every React component
+- Roughly 38 of the 40 React components
 
-Renderer coverage is around 42%. Closing the rest means stubbing the IPC
-bridge for the stores above, and component tests with Testing Library.
+Renderer coverage reads about 19%, down from the 42% reported before
+components were measured at all. Nothing regressed — the scope widened, and
+the lower number is the honest one.
 
 ## Coverage thresholds
 
@@ -103,4 +120,12 @@ worse than no test, because it implies coverage that does not exist.
 
 Both regression guards above were validated this way: reintroducing the profile
 defect failed two tests, and an off-by-one in the ffmpeg stream index failed two
-more.
+more. Removing streamkey from the redaction list failed five, one of them
+asserting the key never reaches the log file.
+
+Some conditions cannot be reproduced under jsdom. The FfmpegMissingModal suite
+checks that aria-hidden is cleared from the page after the dialog closes, but
+that assertion passes against the old buggy code too, because React still runs
+effect cleanups when a component returns null. The failure it describes was
+real, and was observed in a browser. The test says so rather than implying a
+guarantee it does not provide.
