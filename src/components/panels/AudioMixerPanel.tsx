@@ -3,123 +3,317 @@ import { useAudioStore, type AudioChannel } from '@/stores/audioStore'
 import {
   AudioEngine, requestMicrophone, requestDesktopAudio, type ChannelId,
 } from '@/lib/audio/engine'
+import { decayPeak, FLOOR_DB } from '@/lib/audio/levels'
 import { COLOR } from '@/lib/tokens'
 
-// ── dB helpers ─────────────────────────────────────────────────────────────
+/**
+ * The audio mixer: one vertical strip per channel.
+ *
+ * The strip is ordered name-first and the meter takes whatever height is
+ * left. Previously the name sat at the bottom of a fixed stack of six
+ * elements, so in a short dock it was pushed out of view along with part of
+ * the noise-suppression button — the two controls that say what a strip is
+ * and what it is doing. Mute and noise suppression now share one line, which
+ * gives the meter back a row of height.
+ */
 
-const DB_MIN = -60
-const DB_MAX =   0
-const DB_CLIP    = -6
+// ── dB scale ───────────────────────────────────────────────────────────────
+
+const DB_MIN = FLOOR_DB
+const DB_MAX = 0
+const DB_CLIP = -6
 const DB_CAUTION = -20
+
+/** How fast a held peak falls once the signal drops below it. */
+const PEAK_DECAY_DB_PER_SEC = 20
+
+const SEGMENTS = 20
 
 function dbToFrac(db: number): number {
   return Math.max(0, Math.min(1, (db - DB_MIN) / (DB_MAX - DB_MIN)))
 }
 
 function meterColor(db: number): string {
-  if (db >= DB_CLIP)    return COLOR.meter.clip
+  if (db >= DB_CLIP) return COLOR.meter.clip
   if (db >= DB_CAUTION) return COLOR.meter.caution
   return COLOR.meter.safe
 }
 
-// ── VU Meter bar ───────────────────────────────────────────────────────────
+/**
+ * Holds the loudest recent peak and lets it fall back.
+ *
+ * The previous implementation mutated a ref during render and scheduled a
+ * timer that reassigned the same captured value, so the hold only ever rose:
+ * one loud moment pinned the marker for the rest of the session. Levels
+ * arrive once per animation frame, so decaying against elapsed wall time here
+ * needs no timer of its own and nothing to clean up.
+ */
+function usePeakHold(peak: number): number {
+  const [held, setHeld] = useState(peak)
+  const last = useRef({ value: peak, at: 0 })
 
-const SEGMENTS = 24
+  useEffect(() => {
+    const now = performance.now()
+    const elapsed = last.current.at === 0 ? 0 : now - last.current.at
+    const next = decayPeak(last.current.value, peak, PEAK_DECAY_DB_PER_SEC, elapsed)
+    last.current = { value: next, at: now }
+    setHeld(next)
+  }, [peak])
 
-interface MeterBarProps {
-  rms:  number   // dBFS
-  peak: number   // dBFS (peak hold)
+  return held
 }
 
-function MeterBar({ rms, peak }: MeterBarProps) {
-  const rmsF  = dbToFrac(rms)
+// ── Vertical meter ─────────────────────────────────────────────────────────
+
+/** One channel of the stereo pair, filling from the bottom up. */
+function MeterBar({ rms, peak }: { rms: number; peak: number }) {
+  const rmsF = dbToFrac(rms)
   const peakF = dbToFrac(peak)
+  const showPeak = peak > DB_MIN + 1
 
   return (
-    <div className="flex-1 flex flex-col-reverse gap-px overflow-hidden relative" style={{ minWidth: 6 }}>
-      {Array.from({ length: SEGMENTS }, (_, i) => {
-        const segFrac = i / SEGMENTS
-        const segDb   = DB_MIN + segFrac * (DB_MAX - DB_MIN)
-        const lit     = rmsF > segFrac
-        const isPeak  = Math.abs(peakF - segFrac) < 1 / SEGMENTS && peak > DB_MIN + 2
-        return (
-          <div
-            key={i}
-            style={{
-              flex: '0 0 auto',
-              height: `${100 / SEGMENTS}%`,
-              borderRadius: 1,
-              background: isPeak
-                ? meterColor(segDb)
-                : lit
-                  ? meterColor(segDb)
-                  : COLOR.bg.panel,
-              opacity: isPeak ? 1 : lit ? 0.9 : 0.2,
-            }}
-          />
-        )
-      })}
+    <div
+      className="relative flex-1 h-full overflow-hidden rounded-[2px]"
+      style={{ minWidth: 5, background: COLOR.bg.base }}
+    >
+      {/* Segments, so the meter reads as a ladder rather than a smooth bar. */}
+      <div className="absolute inset-0 flex flex-col-reverse">
+        {Array.from({ length: SEGMENTS }, (_, i) => {
+          const segFrac = (i + 1) / SEGMENTS
+          const segDb = DB_MIN + segFrac * (DB_MAX - DB_MIN)
+          const lit = rmsF >= segFrac
+          return (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                marginTop: 1,
+                background: lit ? meterColor(segDb) : COLOR.text.muted,
+                opacity: lit ? 1 : 0.13,
+                transition: 'opacity 60ms linear',
+              }}
+            />
+          )
+        })}
+      </div>
+
+      {/* Where the signal starts clipping. */}
+      <div
+        className="absolute inset-x-0"
+        style={{
+          bottom: `${dbToFrac(DB_CLIP) * 100}%`,
+          height: 1,
+          background: COLOR.text.muted,
+          opacity: 0.45,
+        }}
+      />
+
+      {showPeak && (
+        <div
+          className="absolute inset-x-0"
+          style={{
+            bottom: `calc(${peakF * 100}% - 1px)`,
+            height: 2,
+            background: meterColor(peak),
+            transition: 'bottom 80ms linear',
+          }}
+        />
+      )}
     </div>
   )
 }
 
-// ── Stereo VU meter (L + R) ────────────────────────────────────────────────
-
-interface StereoMeterProps {
-  peakL: number; peakR: number
-  rmsL:  number; rmsR:  number
-}
-
-function StereoMeter({ peakL, peakR, rmsL, rmsR }: StereoMeterProps) {
+function StereoMeter({ peakL, peakR, rmsL, rmsR }: {
+  peakL: number; peakR: number; rmsL: number; rmsR: number
+}) {
   return (
-    <div className="flex-1 flex gap-px w-full overflow-hidden">
+    <div className="h-full flex gap-[2px]" style={{ width: 16 }}>
       <MeterBar rms={rmsL} peak={peakL} />
       <MeterBar rms={rmsR} peak={peakR} />
     </div>
   )
 }
 
-// ── Vertical fader ─────────────────────────────────────────────────────────
+// ── Readout ────────────────────────────────────────────────────────────────
 
-interface FaderProps {
-  value:    number   // 0–1
-  onChange: (v: number) => void
-}
+function DbReadout({ db }: { db: number }) {
+  const display = db <= DB_MIN + 1 ? '−∞' : db.toFixed(1)
+  const color =
+    db >= DB_CLIP ? COLOR.meter.clip : db >= DB_CAUTION ? COLOR.meter.caution : COLOR.text.secondary
 
-function Fader({ value, onChange }: FaderProps) {
   return (
-    <div className="flex items-center justify-center w-full py-1">
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={{
-          writingMode: 'vertical-lr',
-          direction: 'rtl',
-          height: 64,
-          width: 18,
-          cursor: 'pointer',
-          accentColor: COLOR.accent.start,
-        } as React.CSSProperties}
-      />
-    </div>
+    <span
+      style={{
+        fontSize: 9,
+        color,
+        fontVariantNumeric: 'tabular-nums',
+        lineHeight: '11px',
+      }}
+    >
+      {display}
+    </span>
   )
 }
 
-// ── dB readout ─────────────────────────────────────────────────────────────
+// ── Small toggle ───────────────────────────────────────────────────────────
 
-function DbReadout({ db }: { db: number }) {
-  const display = db <= DB_MIN + 1 ? '-∞' : `${db.toFixed(0)}`
-  const color = db >= DB_CLIP    ? COLOR.meter.clip
-              : db >= DB_CAUTION ? COLOR.meter.caution
-              : COLOR.text.muted
+function Toggle({
+  on, onClick, label, title, activeColor,
+}: {
+  on: boolean
+  onClick: () => void
+  label: string
+  title: string
+  activeColor: string
+}) {
   return (
-    <span style={{ fontSize: 8, color, fontVariantNumeric: 'tabular-nums', minWidth: 22, textAlign: 'center' }}>
-      {display}
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      aria-pressed={on}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        height: 18,
+        borderRadius: 3,
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: '-0.2px',
+        cursor: 'pointer',
+        border: `1px solid ${on ? activeColor : COLOR.bg.divider}`,
+        background: on ? activeColor : 'transparent',
+        color: on ? '#fff' : COLOR.text.muted,
+        transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+// ── Fader ──────────────────────────────────────────────────────────────────
+
+function Fader({ value, onChange, name }: {
+  value: number
+  onChange: (v: number) => void
+  name: string
+}) {
+  return (
+    <input
+      type="range"
+      min={0}
+      max={1}
+      step={0.01}
+      value={value}
+      onChange={(e) => onChange(parseFloat(e.target.value))}
+      aria-label={`${name} volume`}
+      title={`${Math.round(value * 100)}%`}
+      style={{
+        writingMode: 'vertical-lr',
+        direction: 'rtl',
+        height: '100%',
+        width: 16,
+        flexShrink: 0,
+        cursor: 'pointer',
+        accentColor: COLOR.accent.start,
+      } as React.CSSProperties}
+    />
+  )
+}
+
+// ── One channel strip ──────────────────────────────────────────────────────
+
+interface ChannelStripProps {
+  channel: AudioChannel
+  connected: boolean
+  onVolume: (id: string, v: number) => void
+  onMute: (id: string, muted: boolean) => void
+  onNS: (id: string, enabled: boolean) => void
+}
+
+function ChannelStrip({ channel, connected, onVolume, onMute, onNS }: ChannelStripProps) {
+  const { id, name, volume, muted, noiseSuppression, levels } = channel
+  const { peakL, peakR, rmsL, rmsR } = levels
+
+  const holdL = usePeakHold(peakL)
+  const holdR = usePeakHold(peakR)
+
+  const loudest = Math.max(rmsL, rmsR)
+
+  return (
+    <div
+      className="flex flex-col items-center gap-1 h-full rounded-button px-1.5 py-1.5"
+      style={{
+        flex: '1 0 64px',
+        minWidth: 64,
+        maxWidth: 88,
+        background: COLOR.bg.panel,
+        border: `1px solid ${COLOR.bg.divider}`,
+        opacity: muted ? 0.65 : 1,
+        transition: 'opacity 0.12s',
+      }}
+    >
+      {/* Name first, so a short panel can never push it out of view. */}
+      <div className="flex items-center gap-1 w-full min-w-0">
+        <span
+          className="flex-shrink-0 rounded-full"
+          style={{
+            width: 4,
+            height: 4,
+            background: connected ? COLOR.meter.safe : COLOR.text.muted,
+            opacity: connected ? 1 : 0.4,
+          }}
+          title={connected ? 'Receiving audio' : 'No source connected'}
+        />
+        <span
+          className="flex-1 truncate text-center"
+          style={{
+            fontSize: 9.5,
+            fontWeight: 600,
+            color: muted ? COLOR.text.muted : COLOR.text.primary,
+            textDecoration: muted ? 'line-through' : 'none',
+          }}
+          title={name}
+        >
+          {name}
+        </span>
+      </div>
+
+      <DbReadout db={loudest} />
+
+      {/* Fader and meter share the strip's remaining height side by side.
+          Stacked, both wanted the same scarce space and the meter collapsed
+          to zero in a short dock. */}
+      <div className="flex-1 w-full flex items-stretch justify-center gap-1.5 min-h-0">
+        <Fader value={volume} onChange={(v) => onVolume(id, v)} name={name} />
+        <StereoMeter peakL={holdL} peakR={holdR} rmsL={rmsL} rmsR={rmsR} />
+      </div>
+
+      {/* Mute and noise suppression share a line; stacked, they cost the
+          meter a whole row of height in a dock this short. */}
+      <div className="flex gap-1 w-full">
+        <Toggle
+          on={muted}
+          onClick={() => onMute(id, !muted)}
+          label="M"
+          title={muted ? `Unmute ${name}` : `Mute ${name}`}
+          activeColor={COLOR.meter.clip}
+        />
+        <Toggle
+          on={noiseSuppression}
+          onClick={() => onNS(id, !noiseSuppression)}
+          label="NS"
+          title={
+            noiseSuppression
+              ? `Noise suppression on for ${name}`
+              : `Noise suppression off for ${name}`
+          }
+          activeColor={COLOR.accent.start}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -137,30 +331,26 @@ function SourceButton({
 }) {
   return (
     <button
+      type="button"
       onClick={() => onClick(id)}
       disabled={connecting}
+      aria-pressed={connected}
       title={
         error ??
-        (connected
-          ? `${label} connected — click to disconnect`
-          : `Connect ${label.toLowerCase()} audio`)
+        (connected ? `${label} connected — click to disconnect` : `Connect ${label.toLowerCase()} audio`)
       }
       style={{
-        height: 16,
-        padding: '0 6px',
+        height: 18,
+        padding: '0 8px',
         borderRadius: 4,
         fontSize: 9,
         fontWeight: 600,
         cursor: connecting ? 'default' : 'pointer',
-        border: 'none',
-        background: error
-          ? COLOR.meter.clip
-          : connected
-            ? COLOR.meter.safe
-            : COLOR.bg.base,
+        border: `1px solid ${error ? COLOR.meter.clip : connected ? COLOR.meter.safe : COLOR.bg.divider}`,
+        background: error ? COLOR.meter.clip : connected ? COLOR.meter.safe : 'transparent',
         color: connected || error ? '#fff' : COLOR.text.muted,
         opacity: connecting ? 0.5 : 1,
-        transition: 'background 0.1s',
+        transition: 'background 0.12s, border-color 0.12s',
       }}
     >
       {connecting ? '…' : label}
@@ -168,130 +358,24 @@ function SourceButton({
   )
 }
 
-// ── Channel strip ──────────────────────────────────────────────────────────
-
-interface ChannelStripProps {
-  channel:   AudioChannel
-  connected: boolean
-  onVolume:  (id: string, v: number) => void
-  onMute:    (id: string, muted: boolean) => void
-  onNS:      (id: string, enabled: boolean) => void
-}
-
-function ChannelStrip({ channel, connected, onVolume, onMute, onNS }: ChannelStripProps) {
-  const { id, name, volume, muted, noiseSuppression, levels } = channel
-  const { peakL, peakR, rmsL, rmsR } = levels
-
-  // Peak hold: retain peak for 1.5 s then decay
-  const holdL = useRef(peakL)
-  const holdR = useRef(peakR)
-  const timerL = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const timerR = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  if (peakL > holdL.current) {
-    holdL.current = peakL
-    if (timerL.current) clearTimeout(timerL.current)
-    timerL.current = setTimeout(() => { holdL.current = peakL }, 1500)
-  }
-  if (peakR > holdR.current) {
-    holdR.current = peakR
-    if (timerR.current) clearTimeout(timerR.current)
-    timerR.current = setTimeout(() => { holdR.current = peakR }, 1500)
-  }
-
-  const peakDb = Math.max(rmsL, rmsR)
-
-  return (
-    <div
-      className="flex flex-col items-center gap-1 min-w-[52px] max-w-[60px] h-full rounded-button p-2"
-      style={{ background: COLOR.bg.panel, flex: '1 0 52px' }}
-    >
-      {/* VU meter */}
-      <StereoMeter
-        peakL={holdL.current}
-        peakR={holdR.current}
-        rmsL={rmsL}
-        rmsR={rmsR}
-      />
-
-      {/* dB readout */}
-      <DbReadout db={peakDb} />
-
-      {/* Fader */}
-      <Fader value={volume} onChange={(v) => onVolume(id, v)} />
-
-      {/* Mute button */}
-      <button
-        onClick={() => onMute(id, !muted)}
-        title="Mute"
-        style={{
-          width: 28,
-          height: 20,
-          borderRadius: 4,
-          fontSize: 10,
-          fontWeight: 600,
-          cursor: 'pointer',
-          border: 'none',
-          background: muted ? COLOR.meter.clip : COLOR.bg.base,
-          color:      muted ? '#fff'            : COLOR.text.muted,
-          transition: 'background 0.1s',
-        }}
-      >
-        M
-      </button>
-
-      {/* Noise Suppression button */}
-      <button
-        onClick={() => onNS(id, !noiseSuppression)}
-        title={noiseSuppression ? 'Noise suppression ON (click to disable)' : 'Noise suppression OFF (click to enable)'}
-        style={{
-          width: 28,
-          height: 20,
-          borderRadius: 4,
-          fontSize: 9,
-          fontWeight: 700,
-          cursor: 'pointer',
-          border: 'none',
-          background: noiseSuppression ? COLOR.accent.start : COLOR.bg.base,
-          color:      noiseSuppression ? '#fff' : COLOR.text.muted,
-          transition: 'background 0.1s',
-          letterSpacing: '-0.5px',
-        }}
-      >
-        NS
-      </button>
-
-      {/* Label — dimmed when nothing is feeding this channel */}
-      <span
-        style={{
-          fontSize: 9,
-          color: COLOR.text.muted,
-          opacity: connected ? 1 : 0.45,
-          textAlign: 'center',
-          maxWidth: '100%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {name}
-      </span>
-    </div>
-  )
-}
-
 // ── Panel ──────────────────────────────────────────────────────────────────
 
+/** Only these two have a real source available on Windows. */
+const CONNECTABLE: Record<string, () => Promise<MediaStream>> = {
+  mic: requestMicrophone,
+  desktop: requestDesktopAudio,
+}
+
 export function AudioMixerPanel() {
-  const channels           = useAudioStore((s) => s.channels)
-  const connected          = useAudioStore((s) => s.connected)
-  const errors             = useAudioStore((s) => s.errors)
-  const setConnected       = useAudioStore((s) => s.setConnected)
-  const setChannelError    = useAudioStore((s) => s.setChannelError)
-  const engineRef          = useRef<AudioEngine | null>(null)
+  const channels = useAudioStore((s) => s.channels)
+  const connected = useAudioStore((s) => s.connected)
+  const errors = useAudioStore((s) => s.errors)
+  const setConnected = useAudioStore((s) => s.setConnected)
+  const setChannelError = useAudioStore((s) => s.setChannelError)
+  const engineRef = useRef<AudioEngine | null>(null)
   const [connecting, setConnecting] = useState<string | null>(null)
-  const setVolume          = useAudioStore((s) => s.setVolume)
-  const setMuted           = useAudioStore((s) => s.setMuted)
+  const setVolume = useAudioStore((s) => s.setVolume)
+  const setMuted = useAudioStore((s) => s.setMuted)
   const setNoiseSuppression = useAudioStore((s) => s.setNoiseSuppression)
 
   // Levels are measured here from the real streams rather than pushed by the
@@ -299,7 +383,7 @@ export function AudioMixerPanel() {
   // move is reflected on the next frame without re-creating it.
   useEffect(() => {
     const engine = new AudioEngine({
-      gainOf:  (id) => useAudioStore.getState().channels.find((c) => c.id === id)?.volume ?? 1,
+      gainOf: (id) => useAudioStore.getState().channels.find((c) => c.id === id)?.volume ?? 1,
       mutedOf: (id) => useAudioStore.getState().channels.find((c) => c.id === id)?.muted ?? false,
       onLevels: (levels) => useAudioStore.getState().setAllLevels(levels),
     })
@@ -321,11 +405,9 @@ export function AudioMixerPanel() {
     setMuted(id, muted)
   }, [setMuted])
 
-  /** Only these two have a real source available on Windows. */
-  const CONNECTABLE: Record<string, () => Promise<MediaStream>> = {
-    mic:     requestMicrophone,
-    desktop: requestDesktopAudio,
-  }
+  const handleNS = useCallback((id: string, enabled: boolean) => {
+    setNoiseSuppression(id, enabled)
+  }, [setNoiseSuppression])
 
   const handleConnect = useCallback(async (id: string) => {
     const engine = engineRef.current
@@ -350,13 +432,9 @@ export function AudioMixerPanel() {
     } finally {
       setConnecting(null)
     }
-    // CONNECTABLE is rebuilt each render but its functions are module-level.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, setConnected, setChannelError])
 
-  const handleNS = useCallback((id: string, enabled: boolean) => {
-    setNoiseSuppression(id, enabled)
-  }, [setNoiseSuppression])
+  const firstError = Object.values(errors).find(Boolean)
 
   return (
     <div className="flex flex-col h-full bg-bg-surface overflow-hidden">
@@ -364,7 +442,7 @@ export function AudioMixerPanel() {
         <span className="panel-header-title">Audio Mixer</span>
 
         {/* Source connection lives here rather than in the strips: only two of
-            the four channels can connect, and the strips have no spare height. */}
+            the four channels can connect to anything. */}
         <div className="flex items-center gap-1.5 ml-auto">
           {Object.keys(CONNECTABLE).map((id) => (
             <SourceButton
@@ -380,13 +458,11 @@ export function AudioMixerPanel() {
         </div>
       </div>
 
-      {Object.entries(errors).length > 0 && (
-        <p className="text-[10px] text-state-danger px-2 pb-1 leading-tight">
-          {Object.values(errors)[0]}
-        </p>
+      {firstError && (
+        <p className="text-[10px] text-state-danger px-2.5 pb-1 leading-tight">{firstError}</p>
       )}
 
-      <div className="flex-1 flex overflow-x-auto overflow-y-hidden p-2 gap-2">
+      <div className="flex-1 flex overflow-x-auto overflow-y-hidden p-2 gap-2 min-h-0">
         {channels.map((ch) => (
           <ChannelStrip
             key={ch.id}
