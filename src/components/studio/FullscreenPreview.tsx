@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useSceneStore } from '@/stores/sceneStore'
-import { CaptureVideo } from '@/components/panels/PreviewPanel'
+import { SceneCanvas } from '@/components/studio/SceneCanvas'
 
 /**
  * Borderless fullscreen view of the program scene.
@@ -29,7 +29,7 @@ export function FullscreenPreview() {
 
   return (
     <div className="fixed inset-0 z-[90] bg-black flex items-center justify-center animate-fade-in">
-      <CaptureVideo sceneId={activeSceneId} />
+      <SceneCanvas sceneId={activeSceneId} />
 
       <button
         onClick={() => setFullscreenPreview(false)}

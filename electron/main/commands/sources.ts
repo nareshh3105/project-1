@@ -70,6 +70,12 @@ export function registerSourceCommands() {
       .run(locked ? 1 : 0, now(), id as string)
   })
 
+  command('set_source_transform', ({ id, transform }) => {
+    getDb()
+      .prepare(`UPDATE sources SET transform = ?, updated_at = ? WHERE id = ?`)
+      .run(transform as string, now(), id as string)
+  })
+
   command('reorder_sources', ({ ids }) => {
     const db = getDb()
     const stmt = db.prepare(

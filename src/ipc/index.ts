@@ -254,6 +254,8 @@ export const ipc = {
       cmd<void>('set_source_visible', { id, visible }),
     setLocked:    (id: string, locked: boolean) =>
       cmd<void>('set_source_locked', { id, locked }),
+    setTransform: (id: string, transform: string) =>
+      cmd<void>('set_source_transform', { id, transform }),
     reorder:      (ids: string[]) =>
       cmd<void>('reorder_sources', { ids }),
   },

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { ipc, type SourceDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
-import type { ID, SourceType } from '@/types'
+import type { ID, SourceType, Transform } from '@/types'
 
 // ── Domain type ────────────────────────────────────────────────────────────
 
@@ -17,13 +17,26 @@ export interface SourceItem {
   locked: boolean
   muted: boolean
   volume: number
+  /** Placement on the scene canvas, in canvas pixels. */
+  transform: Transform
   createdAt: number
   updatedAt: number
+}
+
+export const DEFAULT_TRANSFORM: Transform = {
+  x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1,
 }
 
 function fromDto(dto: SourceDto): SourceItem {
   let settings: Record<string, unknown> = {}
   try { settings = JSON.parse(dto.settings) } catch { /* keep empty */ }
+
+  // A malformed or partial transform falls back field by field rather than
+  // discarding the whole placement.
+  let transform: Transform = DEFAULT_TRANSFORM
+  try {
+    transform = { ...DEFAULT_TRANSFORM, ...JSON.parse(dto.transform) }
+  } catch { /* keep default */ }
   return {
     id:         dto.id,
     sceneId:    dto.sceneId,
@@ -35,6 +48,7 @@ function fromDto(dto: SourceDto): SourceItem {
     locked:     dto.locked,
     muted:      dto.muted,
     volume:     dto.volume,
+    transform,
     createdAt:  dto.createdAt,
     updatedAt:  dto.updatedAt,
   }
@@ -46,6 +60,7 @@ function makeLocalSource(sceneId: string, name: string, type: SourceType, orderI
     id: generateId(), sceneId, name, sourceType: type,
     settings: {}, orderIndex,
     visible: true, locked: false, muted: false, volume: 1,
+    transform: { ...DEFAULT_TRANSFORM },
     createdAt: now, updatedAt: now,
   }
 }
@@ -67,6 +82,8 @@ interface SourceActions {
   renameSource:   (sceneId: ID, sourceId: ID, name: string) => Promise<void>
   setVisible:     (sceneId: ID, sourceId: ID, visible: boolean) => Promise<void>
   setLocked:      (sceneId: ID, sourceId: ID, locked: boolean) => Promise<void>
+  setTransform:   (sceneId: ID, sourceId: ID, patch: Partial<Transform>) => void
+  commitTransform:(sceneId: ID, sourceId: ID) => Promise<void>
   reorderSources: (sceneId: ID, ids: ID[]) => Promise<void>
   moveUp:         (sceneId: ID, sourceId: ID) => Promise<void>
   moveDown:       (sceneId: ID, sourceId: ID) => Promise<void>
@@ -148,6 +165,28 @@ export const useSourceStore = create<SourceState & SourceActions>()(
         if (src) src.locked = locked
       })
       try { await ipc.source.setLocked(sourceId, locked) } catch { /* no-op */ }
+    },
+
+    /**
+     * Applies a placement change locally. Dragging fires this on every pointer
+     * move, so it deliberately does not touch the backend — commitTransform
+     * persists once the gesture ends.
+     */
+    setTransform: (sceneId, sourceId, patch) => {
+      set((s) => {
+        const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+        if (!src || src.locked) return
+        src.transform = { ...src.transform, ...patch }
+        src.updatedAt = Date.now()
+      })
+    },
+
+    commitTransform: async (sceneId, sourceId) => {
+      const src = get().byScene[sceneId]?.find((x) => x.id === sourceId)
+      if (!src) return
+      try {
+        await ipc.source.setTransform(sourceId, JSON.stringify(src.transform))
+      } catch { /* keep the local placement */ }
     },
 
     reorderSources: async (sceneId, ids) => {

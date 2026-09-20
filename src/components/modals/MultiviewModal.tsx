@@ -3,7 +3,7 @@ import { X, Layers } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useSceneStore } from '@/stores/sceneStore'
 import { useSourceStore } from '@/stores/sourceStore'
-import { CaptureVideo } from '@/components/panels/PreviewPanel'
+import { SceneCanvas } from '@/components/studio/SceneCanvas'
 import { cn } from '@/lib/utils'
 
 /**
@@ -90,7 +90,7 @@ export function MultiviewModal() {
                             : 'border-bg-divider hover:border-accent-start',
                       )}
                     >
-                      <CaptureVideo sceneId={scene.id} showPlaceholder={false} />
+                      <SceneCanvas sceneId={scene.id} showPlaceholder={false} />
 
                       {/* Label bar */}
                       <div className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 px-2 py-1 bg-black/70">
