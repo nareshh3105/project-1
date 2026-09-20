@@ -7,7 +7,7 @@ import {
   FolderOpen,
   Settings,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useUIStore } from '@/stores/uiStore'
 import { ipc } from '@/ipc'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,9 @@ interface ToolbarButton {
   action: () => void
   active?: boolean
 }
+
+/** How long transient toolbar feedback stays on screen. */
+const TOAST_MS = 3500
 
 export function Toolbar() {
   const {
@@ -36,9 +39,17 @@ export function Toolbar() {
   // Transient feedback for the fire-and-forget actions
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null)
 
+  // One timer, replaced each time. Without this a second toast inherits the
+  // first one's countdown and vanishes early — take a screenshot, then hit an
+  // error three seconds later and the error is gone in half a second.
+  const dismiss = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (dismiss.current) clearTimeout(dismiss.current) }, [])
+
   function flash(text: string, error = false) {
+    if (dismiss.current) clearTimeout(dismiss.current)
     setToast({ text, error })
-    setTimeout(() => setToast(null), 3500)
+    dismiss.current = setTimeout(() => setToast(null), TOAST_MS)
   }
 
   async function handleScreenshot() {
