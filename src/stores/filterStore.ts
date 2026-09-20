@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { generateId } from '@/lib/utils'
+import { readPersisted, writePersisted, isRecord, isArrayOf } from '@/lib/persist'
 
 // ── Filter types ──────────────────────────────────────────────────────────────
 
@@ -80,17 +81,30 @@ function defaultFilter(type: FilterType): SourceFilter {
 
 const STORAGE_KEY = 'cb:filters'
 
+const FILTER_TYPES: readonly FilterType[] =
+  ['color-correction', 'crop', 'chroma-key', 'blur', 'sharpen']
+
+/**
+ * Checks FilterBase only. The per-type parameters are a discriminated union of
+ * flat numeric fields, each already read through a default in the editor, so
+ * validating the discriminant is what keeps a stored filter renderable.
+ */
+const isFilter = (v: unknown): v is SourceFilter =>
+  isRecord(v) &&
+  typeof v.id === 'string' &&
+  typeof v.name === 'string' &&
+  typeof v.enabled === 'boolean' &&
+  FILTER_TYPES.includes(v.type as FilterType)
+
+const isFilterMap = (v: unknown): v is Record<string, SourceFilter[]> =>
+  isRecord(v) && Object.values(v).every(isArrayOf(isFilter))
+
 function loadPersisted(): Record<string, SourceFilter[]> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+  return readPersisted(STORAGE_KEY, isFilterMap, () => ({}))
 }
 
 function persist(data: Record<string, SourceFilter[]>) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch { /* ignore */ }
+  writePersisted(STORAGE_KEY, data)
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────

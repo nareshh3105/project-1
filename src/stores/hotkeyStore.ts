@@ -3,19 +3,27 @@ import { immer } from 'zustand/middleware/immer'
 import { DEFAULT_HOTKEYS, type Hotkey, type KeyBinding, type ModifierKey } from '@/types/hotkey'
 import { ipc, onHotkeyPressed } from '@/ipc'
 import { generateId } from '@/lib/utils'
+import { readPersisted, writePersisted, isArrayOf, isRecord } from '@/lib/persist'
 
 const STORAGE_KEY = 'cb:hotkeys'
 
+/** The fields the hotkey editor and the dispatcher actually read. */
+const isHotkey = (v: unknown): v is Hotkey =>
+  isRecord(v) &&
+  typeof v.id === 'string' &&
+  typeof v.action === 'string' &&
+  typeof v.description === 'string' &&
+  Array.isArray(v.bindings)
+
+const defaultHotkeys = (): Hotkey[] =>
+  DEFAULT_HOTKEYS.map((h) => ({ ...h, id: generateId() }))
+
 function loadHotkeys(): Hotkey[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return DEFAULT_HOTKEYS.map((h) => ({ ...h, id: generateId() }))
+  return readPersisted(STORAGE_KEY, isArrayOf(isHotkey), defaultHotkeys)
 }
 
 function saveHotkeys(hotkeys: Hotkey[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(hotkeys)) } catch { /* ignore */ }
+  writePersisted(STORAGE_KEY, hotkeys)
 }
 
 export function formatBinding(b: KeyBinding): string {

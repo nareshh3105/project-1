@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { readPersisted, writePersisted, isRecord } from '@/lib/persist'
 
 export type TransitionType = 'cut' | 'fade' | 'slide' | 'wipe'
 
@@ -7,16 +8,26 @@ const STORAGE_KEY = 'cb:transition'
 
 interface Persisted { type: TransitionType; durationMs: number }
 
+const TRANSITION_TYPES: readonly TransitionType[] = ['cut', 'fade', 'slide', 'wipe']
+
+const DEFAULTS: Persisted = { type: 'fade', durationMs: 300 }
+
+// An unknown type reaches CSS as `animation-name: program-undefined` and a
+// non-finite duration as `undefinedms`; the browser drops both and the
+// transition silently never plays.
+const isPersisted = (v: unknown): v is Persisted =>
+  isRecord(v) &&
+  TRANSITION_TYPES.includes(v.type as TransitionType) &&
+  typeof v.durationMs === 'number' &&
+  Number.isFinite(v.durationMs) &&
+  v.durationMs > 0
+
 function load(): Persisted {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return { type: 'fade', durationMs: 300 }
+  return readPersisted(STORAGE_KEY, isPersisted, () => ({ ...DEFAULTS }))
 }
 
 function persist(type: TransitionType, durationMs: number) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ type, durationMs })) } catch { /* ignore */ }
+  writePersisted(STORAGE_KEY, { type, durationMs })
 }
 
 interface TransitionState {

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { readPersisted, writePersisted, isRecord } from '@/lib/persist'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
 import { STANDARD_RESOLUTIONS, FRAME_RATES } from '@/types/common'
@@ -66,17 +67,32 @@ interface SettingsActions {
   applyAll:         (draft: SettingsState) => void
 }
 
+/**
+ * Each section is merged field-by-field over its defaults below, so this only
+ * has to guarantee that what comes back is a record of records. A stored
+ * `null` used to reach `persisted.general` and throw before the first render.
+ *
+ * Individual leaves are not validated, with one exception: baseResolution is
+ * read by the scene compositor as `base.width`, so a malformed one would take
+ * the preview down rather than degrade.
+ */
+const isSettingsShape = (v: unknown): v is Partial<SettingsState> =>
+  isRecord(v) && Object.values(v).every(isRecord)
+
 function load(): Partial<SettingsState> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+  const loaded = readPersisted<Partial<SettingsState>>(STORAGE_KEY, isSettingsShape, () => ({}))
+  const video = loaded.video as Partial<SettingsState['video']> | undefined
+  const res: unknown = video?.baseResolution
+  const usable =
+    isRecord(res) &&
+    typeof res.width === 'number' && res.width > 0 &&
+    typeof res.height === 'number' && res.height > 0
+  if (video && !usable) delete video.baseResolution
+  return loaded
 }
 
 function save(state: SettingsState) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
+  writePersisted(STORAGE_KEY, state)
 }
 
 const persisted = load()
