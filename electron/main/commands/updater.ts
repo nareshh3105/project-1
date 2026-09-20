@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
 import { command, emit } from '../ipc'
+import { IPC_EVENTS } from '../../../shared/events'
 
 const { autoUpdater } = electronUpdater
 
@@ -18,7 +19,7 @@ function wire() {
   autoUpdater.autoInstallOnAppQuit = true
 
   autoUpdater.on('download-progress', (p) => {
-    emit('updater:download-progress', {
+    emit(IPC_EVENTS.UPDATER_PROGRESS, {
       downloaded: p.transferred,
       total: p.total ?? null,
     })

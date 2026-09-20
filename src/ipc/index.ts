@@ -267,10 +267,6 @@ export function onStatsUpdate(cb: (stats: RuntimeStats) => void): Promise<Unlist
   return listen<RuntimeStats>(IPC_EVENTS.STATS_UPDATE, (e) => cb(e.payload))
 }
 
-export function onPreviewFrame(cb: (dataUrl: string) => void): Promise<UnlistenFn> {
-  return listen<string>(IPC_EVENTS.PREVIEW_FRAME, (e) => cb(e.payload))
-}
-
 export interface RecordingStatusPayload { active: boolean; filePath: string | null }
 export interface StreamingStatusPayload { active: boolean }
 export interface ReplayStatusPayload    { active: boolean }
@@ -284,7 +280,7 @@ export function onStreamingStatus(cb: (p: StreamingStatusPayload) => void): Prom
 }
 
 export function onReplayStatus(cb: (p: ReplayStatusPayload) => void): Promise<UnlistenFn> {
-  return listen<ReplayStatusPayload>('output:replay-status', (e) => cb(e.payload))
+  return listen<ReplayStatusPayload>(IPC_EVENTS.REPLAY_STATUS, (e) => cb(e.payload))
 }
 
 export interface UpdateInfoPayload {
@@ -295,12 +291,12 @@ export interface UpdateInfoPayload {
 }
 
 export interface DownloadProgressPayload {
-  downloaded: number        // usize from Rust
+  downloaded: number
   total:      number | null
 }
 
 export function onUpdateDownloadProgress(cb: (p: DownloadProgressPayload) => void): Promise<UnlistenFn> {
-  return listen<DownloadProgressPayload>('updater:download-progress', (e) => cb(e.payload))
+  return listen<DownloadProgressPayload>(IPC_EVENTS.UPDATER_PROGRESS, (e) => cb(e.payload))
 }
 
 export interface VirtualCameraStatusPayload {
@@ -309,17 +305,9 @@ export interface VirtualCameraStatusPayload {
 }
 
 export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
-  return listen<VirtualCameraStatusPayload>('output:virtual-camera-status', (e) => cb(e.payload))
+  return listen<VirtualCameraStatusPayload>(IPC_EVENTS.VCAM_STATUS, (e) => cb(e.payload))
 }
 
 export function onHotkeyPressed(cb: (action: string) => void): Promise<UnlistenFn> {
-  return listen<{ action: string }>('hotkey:pressed', (e) => cb(e.payload.action))
-}
-
-export function onLogLine(cb: (line: string) => void): Promise<UnlistenFn> {
-  return listen<string>(IPC_EVENTS.LOG_LINE, (e) => cb(e.payload))
-}
-
-export function onAppError(cb: (err: { code: string; message: string }) => void): Promise<UnlistenFn> {
-  return listen<{ code: string; message: string }>(IPC_EVENTS.APP_ERROR, (e) => cb(e.payload))
+  return listen<{ action: string }>(IPC_EVENTS.HOTKEY_PRESSED, (e) => cb(e.payload.action))
 }

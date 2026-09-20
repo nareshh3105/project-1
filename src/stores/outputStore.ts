@@ -8,12 +8,28 @@ export interface StreamSettings {
   streamKey: string
 }
 
+const EMPTY_STREAM: StreamSettings = { rtmpUrl: '', streamKey: '' }
+
+/**
+ * Reads persisted stream settings, coercing each field independently. A
+ * half-written or hand-edited entry used to come back with an undefined
+ * field, which turned the modal's inputs uncontrolled and made
+ * `streamKey.trim()` throw on Go Live.
+ */
 function loadStream(): StreamSettings {
   try {
     const raw = localStorage.getItem(STREAM_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return { rtmpUrl: '', streamKey: '' }
+    if (!raw) return { ...EMPTY_STREAM }
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return { ...EMPTY_STREAM }
+    const { rtmpUrl, streamKey } = parsed as Partial<StreamSettings>
+    return {
+      rtmpUrl:   typeof rtmpUrl   === 'string' ? rtmpUrl   : '',
+      streamKey: typeof streamKey === 'string' ? streamKey : '',
+    }
+  } catch {
+    return { ...EMPTY_STREAM }
+  }
 }
 
 function saveStream(s: StreamSettings) {

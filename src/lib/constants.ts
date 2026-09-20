@@ -1,22 +1,11 @@
 // Application-wide constants — never import from process.env in components
 
 export const APP_NAME    = 'CodeBuilders'
-export const APP_VERSION = '0.1.0'
 
-// IPC event names emitted from Rust → TypeScript
-export const IPC_EVENTS = {
-  PREVIEW_FRAME:       'preview:frame',
-  STREAM_STATUS:       'output:stream-status',
-  RECORDING_STATUS:    'output:recording-status',
-  REPLAY_STATUS:       'output:replay-status',
-  VCAM_STATUS:         'output:vcam-status',
-  AUDIO_LEVELS:        'audio:levels',
-  SCENE_CHANGED:       'scene:changed',
-  SOURCE_UPDATED:      'source:updated',
-  STATS_UPDATE:        'stats:update',
-  LOG_LINE:            'log:line',
-  APP_ERROR:           'app:error',
-} as const
+// Single source of truth, shared with the main process. Previously duplicated
+// here, where VCAM_STATUS read 'output:vcam-status' while main emitted
+// 'output:virtual-camera-status'.
+export { IPC_EVENTS, type IpcEventName } from '../../shared/events'
 
 // Preview canvas target FPS
 export const PREVIEW_TARGET_FPS = 30

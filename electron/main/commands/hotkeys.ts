@@ -1,7 +1,8 @@
 import { globalShortcut } from 'electron'
 import { command, emit } from '../ipc'
+import { IPC_EVENTS } from '../../../shared/events'
 
-export const HOTKEY_PRESSED_EVENT = 'hotkey:pressed'
+export const HOTKEY_PRESSED_EVENT = IPC_EVENTS.HOTKEY_PRESSED
 
 interface Shortcut {
   accelerator: string

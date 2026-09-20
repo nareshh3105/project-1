@@ -23,8 +23,11 @@ export function AboutModal() {
 
   useEffect(() => {
     if (!open) return
-    ipc.app.getVersion().then(setVersion).catch(() => setVersion('0.1.0'))
-    ipc.app.getPlatform().then(setPlatform).catch(() => setPlatform({ os: 'Windows', arch: 'x86_64' }))
+    // Report what the query actually returned. The fallbacks used to assert
+    // version 0.1.0 on a Windows x86_64 machine, which stayed convincing but
+    // wrong once the app shipped 0.5.0 — and told support the wrong thing.
+    ipc.app.getVersion().then(setVersion).catch(() => setVersion('unknown'))
+    ipc.app.getPlatform().then(setPlatform).catch(() => setPlatform(null))
   }, [open])
 
   return (

@@ -6,16 +6,16 @@ type FfmpegProcess = ChildProcessByStdio<Writable, null, Readable>
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { IPC_EVENTS } from '../../../shared/events'
 
-export const RECORDING_STATUS_EVENT = 'output:recording-status'
-// The renderer listens on 'output:stream-status' (IPC_EVENTS.STREAM_STATUS).
-// The Rust backend emitted 'output:streaming-status', which never matched, so
-// streaming status never reached the interface: the Stop button stayed hidden
-// and the elapsed timer never started. Emit the name the renderer expects.
-export const STREAMING_STATUS_EVENT = 'output:stream-status'
-export const REPLAY_STATUS_EVENT = 'output:replay-status'
-export const VIRTUAL_CAMERA_STATUS_EVENT = 'output:virtual-camera-status'
-export const STATS_UPDATE_EVENT = 'stats:update'
+// Re-exported from the shared table so the renderer cannot drift from these
+// names. A mismatch here once hid the Stop button for the whole of a live
+// stream, because only one side had been renamed.
+export const RECORDING_STATUS_EVENT = IPC_EVENTS.RECORDING_STATUS
+export const STREAMING_STATUS_EVENT = IPC_EVENTS.STREAM_STATUS
+export const REPLAY_STATUS_EVENT = IPC_EVENTS.REPLAY_STATUS
+export const VIRTUAL_CAMERA_STATUS_EVENT = IPC_EVENTS.VCAM_STATUS
+export const STATS_UPDATE_EVENT = IPC_EVENTS.STATS_UPDATE
 
 export const FFMPEG_MISSING =
   'ffmpeg not found in PATH. Download ffmpeg from https://ffmpeg.org and add it to PATH.'

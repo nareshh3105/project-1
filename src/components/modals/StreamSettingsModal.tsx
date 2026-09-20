@@ -74,10 +74,11 @@ export function StreamSettingsModal() {
           {/* Body */}
           <div className="px-5 py-5 flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-caption text-text-secondary font-medium">
+              <label htmlFor="stream-rtmp-url" className="text-caption text-text-secondary font-medium">
                 RTMP URL
               </label>
               <input
+                id="stream-rtmp-url"
                 type="text"
                 placeholder="rtmp://live.twitch.tv/app"
                 value={rtmpUrl}
@@ -88,13 +89,17 @@ export function StreamSettingsModal() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-caption text-text-secondary font-medium">
+              <label htmlFor="stream-key" className="text-caption text-text-secondary font-medium">
                 Stream Key
               </label>
               <div className="relative">
                 <input
+                  id="stream-key"
                   type={showKey ? 'text' : 'password'}
-                  placeholder="••••••••••••••••"
+                  // Not a row of bullets: a masked field full of placeholder
+                  // bullets is indistinguishable from one holding a real key,
+                  // so revealing it looked like the toggle was broken.
+                  placeholder="Paste your stream key"
                   value={streamKey}
                   onChange={(e) => setStreamKey(e.target.value)}
                   className="w-full h-8 px-3 pr-8 rounded-input bg-bg-surface border border-bg-divider
@@ -103,6 +108,9 @@ export function StreamSettingsModal() {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
+                  aria-label={showKey ? 'Hide stream key' : 'Show stream key'}
+                  aria-pressed={showKey}
+                  title={showKey ? 'Hide stream key' : 'Show stream key'}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
                 >
                   {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -110,9 +118,11 @@ export function StreamSettingsModal() {
               </div>
             </div>
 
-            <p className="text-[11px] text-text-muted opacity-60 leading-relaxed">
+            {/* A real Dialog.Description: Radix wires aria-describedby from it,
+                so the dialog announces its purpose instead of warning. */}
+            <Dialog.Description className="text-[11px] text-text-muted opacity-60 leading-relaxed">
               Stream key is saved locally. ffmpeg must be installed and in PATH for streaming to work.
-            </p>
+            </Dialog.Description>
 
             {error && (
               <p className="text-caption text-state-danger bg-state-danger/10 px-3 py-2 rounded-input">
