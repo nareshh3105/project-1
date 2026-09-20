@@ -158,12 +158,6 @@ export const ipc = {
     stop:  () => cmd<void>('stop_preview'),
   },
 
-  audio: {
-    start:      () => cmd<void>('start_audio'),
-    stop:       () => cmd<void>('stop_audio'),
-    setVolume:  (id: string, volume: number) => cmd<void>('set_channel_volume', { id, volume }),
-    setMuted:   (id: string, muted: boolean) => cmd<void>('set_channel_muted',  { id, muted }),
-  },
 
   output: {
     checkFfmpeg:      () => cmd<boolean>('check_ffmpeg'),
@@ -273,18 +267,6 @@ export function onStatsUpdate(cb: (stats: RuntimeStats) => void): Promise<Unlist
 
 export function onPreviewFrame(cb: (dataUrl: string) => void): Promise<UnlistenFn> {
   return listen<string>(IPC_EVENTS.PREVIEW_FRAME, (e) => cb(e.payload))
-}
-
-export interface ChannelLevelPayload {
-  id:     string
-  peakL:  number
-  peakR:  number
-  rmsL:   number
-  rmsR:   number
-}
-
-export function onAudioLevels(cb: (levels: ChannelLevelPayload[]) => void): Promise<UnlistenFn> {
-  return listen<ChannelLevelPayload[]>(IPC_EVENTS.AUDIO_LEVELS, (e) => cb(e.payload))
 }
 
 export interface RecordingStatusPayload { active: boolean; filePath: string | null }

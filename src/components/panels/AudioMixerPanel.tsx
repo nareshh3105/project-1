@@ -1,6 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
-import { ipc, onAudioLevels } from '@/ipc'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { useAudioStore, type AudioChannel } from '@/stores/audioStore'
+import {
+  AudioEngine, requestMicrophone, requestDesktopAudio, type ChannelId,
+} from '@/lib/audio/engine'
 import { COLOR } from '@/lib/tokens'
 
 // ── dB helpers ─────────────────────────────────────────────────────────────
@@ -121,16 +123,62 @@ function DbReadout({ db }: { db: number }) {
   )
 }
 
+// ── Source connect button ──────────────────────────────────────────────────
+
+function SourceButton({
+  id, label, connected, connecting, error, onClick,
+}: {
+  id: string
+  label: string
+  connected: boolean
+  connecting: boolean
+  error?: string
+  onClick: (id: string) => void
+}) {
+  return (
+    <button
+      onClick={() => onClick(id)}
+      disabled={connecting}
+      title={
+        error ??
+        (connected
+          ? `${label} connected — click to disconnect`
+          : `Connect ${label.toLowerCase()} audio`)
+      }
+      style={{
+        height: 16,
+        padding: '0 6px',
+        borderRadius: 4,
+        fontSize: 9,
+        fontWeight: 600,
+        cursor: connecting ? 'default' : 'pointer',
+        border: 'none',
+        background: error
+          ? COLOR.meter.clip
+          : connected
+            ? COLOR.meter.safe
+            : COLOR.bg.base,
+        color: connected || error ? '#fff' : COLOR.text.muted,
+        opacity: connecting ? 0.5 : 1,
+        transition: 'background 0.1s',
+      }}
+    >
+      {connecting ? '…' : label}
+    </button>
+  )
+}
+
 // ── Channel strip ──────────────────────────────────────────────────────────
 
 interface ChannelStripProps {
-  channel:  AudioChannel
-  onVolume: (id: string, v: number) => void
-  onMute:   (id: string, muted: boolean) => void
-  onNS:     (id: string, enabled: boolean) => void
+  channel:   AudioChannel
+  connected: boolean
+  onVolume:  (id: string, v: number) => void
+  onMute:    (id: string, muted: boolean) => void
+  onNS:      (id: string, enabled: boolean) => void
 }
 
-function ChannelStrip({ channel, onVolume, onMute, onNS }: ChannelStripProps) {
+function ChannelStrip({ channel, connected, onVolume, onMute, onNS }: ChannelStripProps) {
   const { id, name, volume, muted, noiseSuppression, levels } = channel
   const { peakL, peakR, rmsL, rmsR } = levels
 
@@ -213,8 +261,19 @@ function ChannelStrip({ channel, onVolume, onMute, onNS }: ChannelStripProps) {
         NS
       </button>
 
-      {/* Label */}
-      <span style={{ fontSize: 9, color: COLOR.text.muted, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* Label — dimmed when nothing is feeding this channel */}
+      <span
+        style={{
+          fontSize: 9,
+          color: COLOR.text.muted,
+          opacity: connected ? 1 : 0.45,
+          textAlign: 'center',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {name}
       </span>
     </div>
@@ -225,35 +284,75 @@ function ChannelStrip({ channel, onVolume, onMute, onNS }: ChannelStripProps) {
 
 export function AudioMixerPanel() {
   const channels           = useAudioStore((s) => s.channels)
+  const connected          = useAudioStore((s) => s.connected)
+  const errors             = useAudioStore((s) => s.errors)
+  const setConnected       = useAudioStore((s) => s.setConnected)
+  const setChannelError    = useAudioStore((s) => s.setChannelError)
+  const engineRef          = useRef<AudioEngine | null>(null)
+  const [connecting, setConnecting] = useState<string | null>(null)
   const setVolume          = useAudioStore((s) => s.setVolume)
   const setMuted           = useAudioStore((s) => s.setMuted)
   const setNoiseSuppression = useAudioStore((s) => s.setNoiseSuppression)
-  const updateLevels       = useAudioStore((s) => s.updateLevels)
 
-  // Wire up Tauri audio levels event
+  // Levels are measured here from the real streams rather than pushed by the
+  // backend. The engine reads gain and mute straight from the store so a fader
+  // move is reflected on the next frame without re-creating it.
   useEffect(() => {
-    let unlisten: (() => void) | null = null
-    async function setup() {
-      try { await ipc.audio.start() } catch { /* browser dev — no-op */ }
-      unlisten = await onAudioLevels((levels) => {
-        levels.forEach(({ id, peakL, peakR, rmsL, rmsR }) => {
-          updateLevels(id, { peakL, peakR, rmsL, rmsR })
-        })
-      })
+    const engine = new AudioEngine({
+      gainOf:  (id) => useAudioStore.getState().channels.find((c) => c.id === id)?.volume ?? 1,
+      mutedOf: (id) => useAudioStore.getState().channels.find((c) => c.id === id)?.muted ?? false,
+      onLevels: (levels) => useAudioStore.getState().setAllLevels(levels),
+    })
+
+    engineRef.current = engine
+    engine.start()
+
+    return () => {
+      engineRef.current = null
+      void engine.dispose()
     }
-    setup()
-    return () => { unlisten?.(); ipc.audio.stop().catch(() => {}) }
-  }, [updateLevels])
+  }, [])
 
   const handleVolume = useCallback((id: string, volume: number) => {
     setVolume(id, volume)
-    ipc.audio.setVolume(id, volume).catch(() => {})
   }, [setVolume])
 
   const handleMute = useCallback((id: string, muted: boolean) => {
     setMuted(id, muted)
-    ipc.audio.setMuted(id, muted).catch(() => {})
   }, [setMuted])
+
+  /** Only these two have a real source available on Windows. */
+  const CONNECTABLE: Record<string, () => Promise<MediaStream>> = {
+    mic:     requestMicrophone,
+    desktop: requestDesktopAudio,
+  }
+
+  const handleConnect = useCallback(async (id: string) => {
+    const engine = engineRef.current
+    if (!engine) return
+
+    if (connected.includes(id)) {
+      engine.detach(id as ChannelId)
+      setConnected(id, false)
+      return
+    }
+
+    const request = CONNECTABLE[id]
+    if (!request) return
+
+    setConnecting(id)
+    setChannelError(id, null)
+    try {
+      engine.attach(id as ChannelId, await request())
+      setConnected(id, true)
+    } catch (err) {
+      setChannelError(id, err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnecting(null)
+    }
+    // CONNECTABLE is rebuilt each render but its functions are module-level.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, setConnected, setChannelError])
 
   const handleNS = useCallback((id: string, enabled: boolean) => {
     setNoiseSuppression(id, enabled)
@@ -263,13 +362,36 @@ export function AudioMixerPanel() {
     <div className="flex flex-col h-full bg-bg-surface overflow-hidden">
       <div className="panel-header">
         <span className="panel-header-title">Audio Mixer</span>
+
+        {/* Source connection lives here rather than in the strips: only two of
+            the four channels can connect, and the strips have no spare height. */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          {Object.keys(CONNECTABLE).map((id) => (
+            <SourceButton
+              key={id}
+              id={id}
+              label={id === 'mic' ? 'Mic' : 'Desktop'}
+              connected={connected.includes(id)}
+              connecting={connecting === id}
+              error={errors[id]}
+              onClick={handleConnect}
+            />
+          ))}
+        </div>
       </div>
+
+      {Object.entries(errors).length > 0 && (
+        <p className="text-[10px] text-state-danger px-2 pb-1 leading-tight">
+          {Object.values(errors)[0]}
+        </p>
+      )}
 
       <div className="flex-1 flex overflow-x-auto overflow-y-hidden p-2 gap-2">
         {channels.map((ch) => (
           <ChannelStrip
             key={ch.id}
             channel={ch}
+            connected={connected.includes(ch.id)}
             onVolume={handleVolume}
             onMute={handleMute}
             onNS={handleNS}

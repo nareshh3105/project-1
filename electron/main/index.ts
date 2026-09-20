@@ -7,7 +7,6 @@ import { registerCommands } from './commands'
 import { initDatabase, closeDatabase } from './db'
 import { killAllSessions } from './output/ffmpeg'
 import { stopStatsPolling } from './commands/stats'
-import { stopAudio } from './commands/audio'
 import { unregisterAllShortcuts } from './commands/hotkeys'
 import { initLogger, log } from './diagnostics/logger'
 import { installCrashHandlers, watchWindow } from './diagnostics/crash'
@@ -96,7 +95,6 @@ app.on('before-quit', () => {
   // output file after the window is gone.
   killAllSessions()
   stopStatsPolling()
-  stopAudio()
   unregisterAllShortcuts()
   closeDatabase()
 })

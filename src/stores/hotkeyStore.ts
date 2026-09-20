@@ -120,7 +120,6 @@ async function dispatchAction(action: string): Promise<void> {
       if (ch) {
         const next = !ch.muted
         useAudioStore.getState().setMuted('desktop', next)
-        await ipc.audio.setMuted('desktop', next).catch(console.warn)
       }
       break
     }
@@ -130,7 +129,6 @@ async function dispatchAction(action: string): Promise<void> {
       if (ch) {
         const next = !ch.muted
         useAudioStore.getState().setMuted('mic', next)
-        await ipc.audio.setMuted('mic', next).catch(console.warn)
       }
       break
     }
