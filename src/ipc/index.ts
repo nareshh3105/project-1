@@ -121,6 +121,8 @@ export const ipc = {
   app: {
     getVersion:   () => cmd<string>('get_app_version'),
     getPlatform:  () => cmd<{ os: string; arch: string; version: string }>('get_platform_info'),
+    /** Puts the diagnostics report on the clipboard; resolves to its length. */
+    copyDiagnostics: () => cmd<number>('copy_diagnostics'),
   },
 
   collection: {

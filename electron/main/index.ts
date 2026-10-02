@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,7 @@ import { stopStatsPolling } from './commands/stats'
 import { unregisterAllShortcuts } from './commands/hotkeys'
 import { initLogger, log } from './diagnostics/logger'
 import { installCrashHandlers, watchWindow } from './diagnostics/crash'
+import { describeStartupFailure } from './startup'
 
 const isDev = !app.isPackaged
 
@@ -70,12 +71,37 @@ function createWindow() {
 initLogger()
 installCrashHandlers()
 
+// A second launch would open the same database file, register the same global
+// shortcuts and start competing capture sessions. Hand over to the window that
+// is already open instead of starting another copy.
+const isPrimaryInstance = app.requestSingleInstanceLock()
+
+if (!isPrimaryInstance) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (!win) return
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  })
+}
+
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) return
+
   // The interface draws its own menu bar. Electron's default native menu would
   // otherwise sit above it, duplicating File/Edit/View.
   Menu.setApplicationMenu(null)
 
-  initDatabase()
+  try {
+    initDatabase()
+  } catch (err) {
+    log.error('database failed to open', { error: String(err) })
+    dialog.showErrorBox('CodeBuilders cannot start', describeStartupFailure(err))
+    app.quit()
+    return
+  }
   registerCommands()
   installDispatcher()
   createWindow()

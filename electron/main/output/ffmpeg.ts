@@ -28,12 +28,54 @@ export const DESKTOP_INPUT = [
   '-i', 'desktop',
 ]
 
+export interface FfmpegLocation {
+  /** Electron's resources directory; undefined outside a packaged app. */
+  resourcesPath?: string
+  cwd: string
+  exists: (file: string) => boolean
+}
+
+const BUNDLED = path.join('ffmpeg', 'ffmpeg.exe')
+
+/**
+ * Where to find FFmpeg: the copy shipped with the app, then one in a dev
+ * checkout, then whatever is on the PATH.
+ *
+ * It used to be the PATH only, so every tester had to install FFmpeg and edit
+ * their environment before recording, streaming, the replay buffer or the
+ * virtual camera would work at all. Bundled first also means a different
+ * FFmpeg already on the PATH cannot change how the app behaves.
+ */
+export function resolveFfmpegPath(
+  loc: FfmpegLocation = {
+    resourcesPath: (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+    cwd: process.cwd(),
+    exists: fs.existsSync,
+  },
+): string {
+  const candidates = [
+    loc.resourcesPath && path.join(loc.resourcesPath, BUNDLED),
+    path.join(loc.cwd, 'resources', BUNDLED),
+  ]
+  for (const candidate of candidates) {
+    if (candidate && loc.exists(candidate)) return candidate
+  }
+  return 'ffmpeg'
+}
+
+let cachedBinary: string | null = null
+
+/** The FFmpeg executable to launch. Resolved once; the answer cannot change while running. */
+export function ffmpegBinary(): string {
+  return (cachedBinary ??= resolveFfmpegPath())
+}
+
 let cachedAvailable: boolean | null = null
 
 export function ffmpegAvailable(recheck = false): boolean {
   if (cachedAvailable !== null && !recheck) return cachedAvailable
   try {
-    const r = spawnSync('ffmpeg', ['-version'], { windowsHide: true })
+    const r = spawnSync(ffmpegBinary(), ['-version'], { windowsHide: true })
     cachedAvailable = r.status === 0
   } catch {
     cachedAvailable = false
@@ -120,7 +162,7 @@ const STDERR_LINES = 40
  * few lines is what lets start/stop report why something did not work.
  */
 export function spawnFfmpeg(args: string[]): Session {
-  const child: FfmpegProcess = spawn('ffmpeg', args, {
+  const child: FfmpegProcess = spawn(ffmpegBinary(), args, {
     stdio: ['pipe', 'ignore', 'pipe'],
     windowsHide: true,
   })

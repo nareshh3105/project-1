@@ -39,6 +39,15 @@ $buildRoot = if ($OutDir) { $OutDir } else { Join-Path $root 'release' }
 $buildDir  = Join-Path $buildRoot $version
 
 if (-not $SkipBuild) {
+    # An installer without FFmpeg installs fine and then fails the moment a
+    # tester presses Record, so catch it here rather than in their hands.
+    if (-not (Test-Path (Join-Path $root 'resources\ffmpeg\ffmpeg.exe'))) {
+        Write-Host ''
+        Write-Host 'resources\ffmpeg\ffmpeg.exe is missing - the installer would ship without FFmpeg.' -ForegroundColor Red
+        Write-Host 'Run:  npm run fetch-ffmpeg' -ForegroundColor Red
+        exit 1
+    }
+
     if (-not $env:CSC_LINK) {
         Write-Host ''
         Write-Host 'CSC_LINK is not set — this build will NOT be signed, so Windows' -ForegroundColor Yellow

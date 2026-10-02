@@ -7,10 +7,20 @@ import { useCollectionStore } from '@/stores/collectionStore'
 import { useProfileStore } from '@/stores/profileStore'
 import { usePluginStore } from '@/stores/pluginStore'
 import { useOutputStore } from '@/stores/outputStore'
+import { useNotifyStore, reportFailure } from '@/stores/notifyStore'
 import { ipc } from '@/ipc'
 import { cn } from '@/lib/utils'
 
 const REPO_URL = 'https://github.com/nareshh3105/project-1'
+
+async function copyDiagnostics() {
+  try {
+    await ipc.app.copyDiagnostics()
+    useNotifyStore.getState().notify('info', 'Diagnostics copied. Paste them into your bug report.')
+  } catch (err) {
+    reportFailure('copy the diagnostics', err)
+  }
+}
 
 // ── Menu primitives ─────────────────────────────────────────────────────────
 
@@ -292,8 +302,9 @@ export function MenuBar() {
           <Sep />
           <Item
             label="Open Logs Folder"
-            onSelect={() => ipc.output.openLogsFolder().catch(() => {})}
+            onSelect={() => ipc.output.openLogsFolder().catch((e) => reportFailure('open the logs folder', e))}
           />
+          <Item label="Copy Diagnostics" onSelect={copyDiagnostics} />
           <Sep />
           <Item label="Documentation" onSelect={() => window.open(REPO_URL, '_blank')} />
           <Item label="Report a Bug"  onSelect={() => window.open(`${REPO_URL}/issues/new`, '_blank')} />

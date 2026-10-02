@@ -13,6 +13,16 @@ files:
   - package.json
   - '!**/*.map'
 
+# FFmpeg is shipped beside the app so recording, streaming, the replay buffer
+# and the virtual camera work without the user installing anything. The binary
+# is not in git; scripts/fetch-ffmpeg.ps1 puts it in resources/ffmpeg first.
+extraResources:
+  - from: resources/ffmpeg
+    to: ffmpeg
+    filter:
+      - ffmpeg.exe
+      - LICENSE*
+
 # better-sqlite3 ships a compiled .node binding that cannot be bundled by the
 # renderer build, so it is unpacked from the asar and loaded from disk.
 asarUnpack:

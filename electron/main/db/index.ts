@@ -31,7 +31,16 @@ export function initDatabase(dbPath?: string): Database.Database {
   // without it and ON DELETE CASCADE silently never fired.
   db.pragma('foreign_keys = ON')
 
-  migrate(db)
+  try {
+    runMigrations(db, MIGRATIONS, (from) => backupDatabase(db!, file, from))
+  } catch (err) {
+    // Leave nothing half-open: a caller that catches this must be able to
+    // retry or quit without a live handle on a database it could not use.
+    db.close()
+    db = null
+    throw err
+  }
+  cleanupOrphans(db)
   return db
 }
 
@@ -40,8 +49,40 @@ export function closeDatabase() {
   db = null
 }
 
-function migrate(d: Database.Database) {
-  d.exec(`
+/**
+ * Schema versions.
+ *
+ * The database used to be built by a single block of CREATE TABLE IF NOT
+ * EXISTS statements, which creates what is missing and never alters what is
+ * there. The first build to add a column would have left every existing
+ * install without it and failing on the first query that used it — for the
+ * people testing successive builds, that is a broken app after each update.
+ *
+ * Instead the schema is a list of numbered steps, applied in order and
+ * recorded in SQLite's `user_version`. To change the schema, APPEND a step
+ * with the next number. Never edit or reorder one that has shipped: installs
+ * that already ran it will not run it again.
+ *
+ * Version 1 is the schema as it stood before versioning, written with IF NOT
+ * EXISTS so a database from an earlier build (user_version 0, tables already
+ * present) adopts version 1 without any change to its data.
+ *
+ * A step that rebuilds a table needs foreign keys switched off, and SQLite
+ * ignores that pragma inside a transaction, so do it in a step of its own
+ * outside this runner rather than inside `up`.
+ */
+export interface Migration {
+  version: number
+  description: string
+  up: (d: Database.Database) => void
+}
+
+export const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    description: 'initial schema',
+    up: (d) => {
+      d.exec(`
     CREATE TABLE IF NOT EXISTS scene_collections (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
@@ -92,8 +133,84 @@ function migrate(d: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_scenes_collection ON scenes(collection_id);
     CREATE INDEX IF NOT EXISTS idx_sources_scene     ON sources(scene_id);
   `)
+    },
+  },
+]
 
-  cleanupOrphans(d)
+/** Raised when the data on disk was written by a newer build than this one. */
+export class SchemaTooNewError extends Error {
+  constructor(readonly found: number, readonly supported: number) {
+    super(
+      `Your CodeBuilders data was created by a newer version of the app ` +
+        `(data version ${found}; this version understands up to ${supported}). ` +
+        `Install the latest CodeBuilders, or your data may be damaged if this ` +
+        `older version were to change it.`,
+    )
+    this.name = 'SchemaTooNewError'
+  }
+}
+
+const hasUserTables = (d: Database.Database) =>
+  (d.prepare(`SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+    .get() as { n: number }).n > 0
+
+/**
+ * Brings `d` up to the latest version, one transaction per step so a step that
+ * fails leaves the database exactly as it was before that step. Returns the
+ * resulting version.
+ *
+ * `beforeMigrating` runs once, only when there is existing data to protect.
+ */
+export function runMigrations(
+  d: Database.Database,
+  migrations: readonly Migration[] = MIGRATIONS,
+  beforeMigrating?: (fromVersion: number) => void,
+): number {
+  const latest = migrations.reduce((max, m) => Math.max(max, m.version), 0)
+  const current = d.pragma('user_version', { simple: true }) as number
+
+  // Opening newer data with older code is how a tester who installs a previous
+  // build corrupts their own work; refuse rather than guess.
+  if (current > latest) throw new SchemaTooNewError(current, latest)
+
+  const pending = migrations
+    .filter((m) => m.version > current)
+    .sort((a, b) => a.version - b.version)
+  if (pending.length === 0) return current
+
+  if (hasUserTables(d)) beforeMigrating?.(current)
+
+  for (const m of pending) {
+    d.transaction(() => {
+      m.up(d)
+      d.pragma(`user_version = ${m.version}`)
+    })()
+  }
+  return latest
+}
+
+/** How many safety copies to keep beside the database. */
+const KEEP_BACKUPS = 3
+
+/**
+ * Copies the database aside before a migration changes it, so a bad step can
+ * be undone by hand. The WAL is folded in first, otherwise the copy would miss
+ * whatever had not yet been checkpointed.
+ */
+export function backupDatabase(d: Database.Database, file: string, fromVersion: number): string {
+  d.pragma('wal_checkpoint(TRUNCATE)')
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const dest = `${file}.bak-v${fromVersion}-${stamp}`
+  fs.copyFileSync(file, dest)
+
+  const dir = path.dirname(file)
+  const prefix = `${path.basename(file)}.bak-`
+  const backups = fs.readdirSync(dir).filter((f) => f.startsWith(prefix)).sort()
+  for (const old of backups.slice(0, Math.max(0, backups.length - KEEP_BACKUPS))) {
+    fs.rmSync(path.join(dir, old), { force: true })
+  }
+  return dest
 }
 
 /**

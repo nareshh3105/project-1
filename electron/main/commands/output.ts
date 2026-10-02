@@ -7,7 +7,7 @@ import {
   DESKTOP_INPUT, RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
   REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT,
   assertStartedOk, defaultRecordingPath, ensureParentDir, ffmpegAvailable,
-  isActive, requireFfmpeg, setSession, spawnFfmpeg, stopGracefully,
+  ffmpegBinary, isActive, requireFfmpeg, setSession, spawnFfmpeg, stopGracefully,
   takeSession, timestamp, uniquePath, videosDir, getSession,
 } from '../output/ffmpeg'
 import { audioArgs, X264_ARCHIVE } from '../output/args'
@@ -169,7 +169,7 @@ export function registerOutputCommands() {
     ensureParentDir(dest)
 
     const result = spawnSync(
-      'ffmpeg',
+      ffmpegBinary(),
       ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', dest],
       { windowsHide: true, encoding: 'utf8' },
     )
@@ -224,7 +224,7 @@ export function registerOutputCommands() {
 
     // dshow device listing is written to stderr and always exits non-zero.
     const r = spawnSync(
-      'ffmpeg',
+      ffmpegBinary(),
       ['-hide_banner', '-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'],
       { windowsHide: true, encoding: 'utf8' },
     )

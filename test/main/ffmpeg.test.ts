@@ -83,7 +83,7 @@ describe('requireFfmpeg', () => {
 describe('spawnFfmpeg', () => {
   it('invokes ffmpeg with the given arguments', () => {
     ff.spawnFfmpeg(['-i', 'desktop', 'out.mkv'])
-    expect(cp.spawnCalls[0].command).toBe('ffmpeg')
+    expect(cp.spawnCalls[0].command).toBe(ff.ffmpegBinary())
     expect(cp.spawnCalls[0].args).toEqual(['-i', 'desktop', 'out.mkv'])
   })
 
@@ -338,5 +338,50 @@ describe('uniquePath (FR-5.7)', () => {
     }
 
     expect(fs.readdirSync(dir)).toHaveLength(3)
+  })
+})
+
+describe('resolveFfmpegPath', () => {
+  // Fixed locations, so the answer cannot depend on what is installed on the
+  // machine running the tests.
+  const RESOURCES = path.join(path.sep, 'app', 'resources')
+  const PROJECT = path.join(path.sep, 'project')
+
+  const bundled = path.join(RESOURCES, 'ffmpeg', 'ffmpeg.exe')
+  const dev = path.join(PROJECT, 'resources', 'ffmpeg', 'ffmpeg.exe')
+
+  const where = (present: string[], resourcesPath?: string) => ({
+    resourcesPath,
+    cwd: PROJECT,
+    exists: (f: string) => present.includes(f),
+  })
+
+  it('prefers the copy shipped with the installed app', () => {
+    expect(ff.resolveFfmpegPath(where([bundled, dev], RESOURCES))).toBe(bundled)
+  })
+
+  // Packaged first also means a different FFmpeg on the PATH cannot change how
+  // the app behaves.
+  it('does not fall through to the PATH when the bundled copy exists', () => {
+    expect(ff.resolveFfmpegPath(where([bundled], RESOURCES))).not.toBe('ffmpeg')
+  })
+
+  it('uses the dev checkout copy when not packaged', () => {
+    expect(ff.resolveFfmpegPath(where([dev]))).toBe(dev)
+  })
+
+  it('falls back to the PATH when nothing is bundled', () => {
+    expect(ff.resolveFfmpegPath(where([], RESOURCES))).toBe('ffmpeg')
+  })
+
+  it('ignores a resources path that has no ffmpeg in it', () => {
+    expect(ff.resolveFfmpegPath(where([dev], RESOURCES))).toBe(dev)
+  })
+})
+
+describe('launching', () => {
+  it('starts the resolved binary, not a bare name', () => {
+    ff.spawnFfmpeg(['-version'])
+    expect(cp.spawnCalls[0].command).toBe(ff.ffmpegBinary())
   })
 })
