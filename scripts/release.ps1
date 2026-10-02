@@ -93,6 +93,15 @@ foreach ($f in @($exe, $msi)) {
     }
 }
 
+# What the in-app updater reads: latest.yml names the installer and carries its
+# hash, and the blockmap lets it download only what changed. They must be
+# uploaded to the same release as the installer, so keep them with it.
+foreach ($pattern in @('latest.yml', "*$version*.blockmap")) {
+    Get-ChildItem $buildDir -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item $_.FullName -Destination $destDir -Force
+    }
+}
+
 [pscustomobject]@{
     version   = $version
     builtAt   = (Get-Date).ToString('o')

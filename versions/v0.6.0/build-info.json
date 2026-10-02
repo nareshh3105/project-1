@@ -1,0 +1,13 @@
+﻿{
+    "version":  "0.6.0",
+    "builtAt":  "2026-10-02T19:23:08.7211085+05:30",
+    "gitCommit":  "8bebb2e",
+    "runtime":  "electron",
+    "signed":  false,
+    "artifacts":  [
+                      {
+                          "File":  "CodeBuilders_0.6.0_x64-setup.exe",
+                          "SizeMB":  167.6
+                      }
+                  ]
+}
