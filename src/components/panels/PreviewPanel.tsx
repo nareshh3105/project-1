@@ -90,8 +90,8 @@ function StageCard({ scene }: { scene: SceneItem | null }) {
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-1.5 px-4 text-center">
           <Eye size={18} className="text-text-muted opacity-20" />
-          <span className="text-caption text-text-muted opacity-30">No scene staged</span>
-          <span className="text-[10px] text-text-muted opacity-20 mt-0.5">
+          <span className="text-caption text-text-secondary">No scene staged</span>
+          <span className="text-[10px] text-text-muted mt-0.5">
             Click a scene in the panel
           </span>
         </div>

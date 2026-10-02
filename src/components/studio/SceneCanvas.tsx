@@ -108,8 +108,8 @@ export function SceneCanvas({
       {!anythingLive && showPlaceholder && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <Monitor size={28} className="text-text-muted opacity-20 mb-1.5" />
-          <span className="text-caption text-text-muted opacity-25">No active capture</span>
-          <span className="text-[10px] text-text-muted opacity-15 mt-0.5">
+          <span className="text-caption text-text-secondary">No active capture</span>
+          <span className="text-[10px] text-text-muted mt-0.5">
             Add a Display Capture or Window Capture source
           </span>
         </div>
