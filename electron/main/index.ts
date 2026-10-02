@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { installDispatcher } from './ipc'
 import { registerCommands } from './commands'
 import { initDatabase, closeDatabase } from './db'
-import { killAllSessions } from './output/ffmpeg'
+import { killAllSessions, ffmpegBinary, ffmpegAvailable } from './output/ffmpeg'
 import { stopStatsPolling } from './commands/stats'
 import { unregisterAllShortcuts } from './commands/hotkeys'
 import { initLogger, log } from './diagnostics/logger'
@@ -102,6 +102,11 @@ app.whenReady().then(() => {
     app.quit()
     return
   }
+  // Which FFmpeg this run will use, and whether it works. The first question
+  // about any recording problem; recording it here means a tester's log answers
+  // it without a follow-up.
+  log.info(`ffmpeg: ${ffmpegBinary()} (${ffmpegAvailable() ? 'runs' : 'NOT FOUND OR NOT RUNNABLE'})`)
+
   registerCommands()
   installDispatcher()
   createWindow()
