@@ -43,6 +43,7 @@ export function RenameModal({ open, title, current, confirmLabel = 'Rename', onC
           <Dialog.Title className="text-body font-medium text-text-primary">
             {title}
           </Dialog.Title>
+          <Dialog.Description className="sr-only">Type a new name and press Enter to save.</Dialog.Description>
 
           <input
             ref={inputRef}

@@ -35,6 +35,7 @@ export function ProfileModal() {
               <Dialog.Title className="text-body font-semibold text-text-primary">
                 Profiles
               </Dialog.Title>
+              <Dialog.Description className="sr-only">Create, switch, rename, duplicate and delete profiles.</Dialog.Description>
               <button onClick={closeModal} className="icon-btn">
                 <X size={14} />
               </button>

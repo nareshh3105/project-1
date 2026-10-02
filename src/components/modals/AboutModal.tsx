@@ -44,6 +44,7 @@ export function AboutModal() {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-bg-divider">
             <Dialog.Title className="text-body font-semibold text-text-primary">About CodeBuilders</Dialog.Title>
+            <Dialog.Description className="sr-only">Version, platform and licence information for CodeBuilders.</Dialog.Description>
             <button onClick={closeModal} className="icon-btn w-6 h-6"><X size={14} /></button>
           </div>
 

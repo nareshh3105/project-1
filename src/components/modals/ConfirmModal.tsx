@@ -33,7 +33,7 @@ export function ConfirmModal({
             </Dialog.Title>
           </div>
 
-          <p className="text-caption text-text-secondary leading-relaxed">{message}</p>
+          <Dialog.Description className="text-caption text-text-secondary leading-relaxed">{message}</Dialog.Description>
 
           <div className="flex justify-end gap-2">
             <button

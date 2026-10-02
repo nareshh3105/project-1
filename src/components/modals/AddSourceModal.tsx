@@ -56,6 +56,7 @@ export function AddSourceModal({ open, onAdd, onClose }: AddSourceModalProps) {
             <Dialog.Title className="text-body font-medium text-text-primary">
               Add Source
             </Dialog.Title>
+            <Dialog.Description className="sr-only">Choose a source type and name it to add it to the current scene.</Dialog.Description>
             <button onClick={onClose} className="icon-btn">
               <X size={14} />
             </button>

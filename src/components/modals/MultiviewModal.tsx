@@ -59,6 +59,7 @@ export function MultiviewModal() {
                 {studioMode && ' — click to stage to preview'}
               </span>
             </Dialog.Title>
+            <Dialog.Description className="sr-only">A grid of every scene. Select one to make it live.</Dialog.Description>
             <button onClick={closeModal} className="icon-btn w-6 h-6">
               <X size={14} />
             </button>

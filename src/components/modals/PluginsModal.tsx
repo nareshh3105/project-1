@@ -46,6 +46,7 @@ export function PluginsModal() {
               <Dialog.Title className="text-body font-semibold text-text-primary">
                 Plugins
               </Dialog.Title>
+              <Dialog.Description className="sr-only">Enable, disable or uninstall plugins, and open the plugins folder.</Dialog.Description>
               <button onClick={closeModal} className="icon-btn">
                 <X size={14} />
               </button>

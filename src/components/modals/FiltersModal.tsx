@@ -65,6 +65,7 @@ export function FiltersModal() {
                 <span className="ml-1.5 font-normal text-text-muted">— {payload.sourceName}</span>
               )}
             </Dialog.Title>
+            <Dialog.Description className="sr-only">Add and adjust video filters for the selected source.</Dialog.Description>
             <button onClick={closeModal} className="icon-btn">
               <X size={14} />
             </button>

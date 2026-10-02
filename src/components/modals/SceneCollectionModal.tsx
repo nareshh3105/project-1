@@ -36,6 +36,7 @@ export function SceneCollectionModal() {
               <Dialog.Title className="text-body font-semibold text-text-primary">
                 Scene Collections
               </Dialog.Title>
+              <Dialog.Description className="sr-only">Create, switch, rename, duplicate, import, export and delete scene collections.</Dialog.Description>
               <button onClick={closeModal} className="icon-btn">
                 <X size={14} />
               </button>

@@ -63,10 +63,10 @@ export function FfmpegMissingModal() {
 
           {/* Body */}
           <div className="px-5 py-4 flex flex-col gap-4">
-            <p className="text-body text-text-secondary leading-relaxed">
+            <Dialog.Description className="text-body text-text-secondary leading-relaxed">
               CodeBuilders requires <span className="text-text-primary font-medium">FFmpeg</span> for
               recording, streaming, replay buffer, and virtual camera. It was not found in your PATH.
-            </p>
+            </Dialog.Description>
 
             <div className="bg-bg-base rounded-input p-3 flex flex-col gap-2">
               <p className="text-caption font-semibold text-text-muted uppercase tracking-wider">

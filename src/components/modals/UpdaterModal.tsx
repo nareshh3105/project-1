@@ -91,6 +91,7 @@ export function UpdaterModal() {
             <Dialog.Title className="text-body font-semibold text-text-primary">
               Software Update
             </Dialog.Title>
+            <Dialog.Description className="sr-only">Check for updates and install the latest version of CodeBuilders.</Dialog.Description>
             <Dialog.Close asChild>
               <button className="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-state-hover">
                 <X size={14} />

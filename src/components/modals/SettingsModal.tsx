@@ -501,6 +501,7 @@ export function SettingsModal() {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-bg-divider flex-shrink-0">
             <Dialog.Title className="text-body font-semibold text-text-primary">Settings</Dialog.Title>
+            <Dialog.Description className="sr-only">Configure general, video, audio and recording options.</Dialog.Description>
             <button onClick={closeModal} className="icon-btn w-6 h-6">
               <X size={14} />
             </button>
