@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { MenuBar }       from './MenuBar'
 import { Toolbar }       from './Toolbar'
+import { NoticeHost }    from './NoticeHost'
 import { DockLayout }    from './DockLayout'
 import { StatusBar }     from './StatusBar'
 import { useUIStore }    from '@/stores/uiStore'
@@ -131,6 +132,7 @@ export function AppShell() {
       <AboutModal />
       <MultiviewModal />
       <FfmpegMissingModal />
+      <NoticeHost />
     </div>
   )
 }

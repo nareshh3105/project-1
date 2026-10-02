@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { ipc, type SceneDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
 import { useCaptureStore } from './captureStore'
+import { reportFailure, describeError, useNotifyStore } from './notifyStore'
 import type { ID } from '@/types'
 
 // ── Domain types (client-side) ─────────────────────────────────────────────
@@ -94,8 +95,14 @@ export const useSceneStore = create<SceneState & SceneActions>()(
           const { useSourceStore } = await import('./sourceStore')
           await useSourceStore.getState().loadSources(scenes[0].id)
         }
-      } catch {
-        // Tauri not available (browser dev) — seed in-memory
+      } catch (err) {
+        // Falling back to an in-memory scene keeps the window usable, but
+        // everything done from here is lost on exit. Doing that silently let a
+        // database that failed to open look like a working project.
+        useNotifyStore.getState().notify(
+          'error',
+          `Couldn't open your project: ${describeError(err)}. Changes made now won't be saved.`,
+        )
         const cid  = 'default'
         const seed = makeLocalScene('Scene 1', cid, 0)
         set((s) => {
@@ -143,22 +150,36 @@ export const useSceneStore = create<SceneState & SceneActions>()(
           const idx = s.scenes.findIndex((x) => x.id === optimistic.id)
           if (idx !== -1) s.scenes[idx] = fromDto(dto)
         })
-      } catch {
-        // Keep optimistic state (in-memory only when Tauri unavailable)
+      } catch (err) {
+        set((s) => { s.scenes = s.scenes.filter((x) => x.id !== optimistic.id) })
+        reportFailure('add the scene', err)
       }
     },
 
     renameScene: async (id, name) => {
+      const previous = get().scenes.find((x) => x.id === id)?.name
       set((s) => {
         const scene = s.scenes.find((x) => x.id === id)
         if (scene) { scene.name = name; scene.updatedAt = Date.now() }
       })
-      try { await ipc.scene.rename(id, name) } catch { /* no-op */ }
+      try {
+        await ipc.scene.rename(id, name)
+      } catch (err) {
+        if (previous !== undefined) {
+          set((s) => {
+            const scene = s.scenes.find((x) => x.id === id)
+            if (scene) scene.name = previous
+          })
+        }
+        reportFailure('rename the scene', err)
+      }
     },
 
     deleteScene: async (id) => {
       const { scenes, activeSceneId } = get()
       const remaining = scenes.filter((s) => s.id !== id)
+      const index = scenes.findIndex((s) => s.id === id)
+      const removed = scenes[index]
 
       // Release the scene's captures before its sources leave memory.
       const { useSourceStore } = await import('./sourceStore')
@@ -176,7 +197,19 @@ export const useSceneStore = create<SceneState & SceneActions>()(
       // the id directly left it showing nothing until it was clicked again.
       if (activeSceneId === id && remaining[0]) get().setActiveScene(remaining[0].id)
 
-      try { await ipc.scene.delete(id) } catch { /* no-op */ }
+      try {
+        await ipc.scene.delete(id)
+      } catch (err) {
+        // It still exists in the database, so bring it back with its sources.
+        if (removed) {
+          set((s) => {
+            if (!s.scenes.some((x) => x.id === id)) s.scenes.splice(Math.min(index, s.scenes.length), 0, removed)
+            if (activeSceneId === id) s.activeSceneId = id
+          })
+          void useSourceStore.getState().loadSources(id)
+        }
+        reportFailure('delete the scene', err)
+      }
     },
 
     duplicateScene: async (id) => {
@@ -200,12 +233,16 @@ export const useSceneStore = create<SceneState & SceneActions>()(
           const { useSourceStore } = await import('./sourceStore')
           useSourceStore.getState().seedSources(result.scene.id, result.sources)
         }
-      } catch { /* keep optimistic */ }
+      } catch (err) {
+        set((s) => { s.scenes = s.scenes.filter((x) => x.id !== copy.id) })
+        reportFailure('duplicate the scene', err)
+      }
     },
 
     reorderScenes: async (ids) => {
-      set((s) => {
-        s.scenes = ids
+      const previous = get().scenes.map((x) => x.id)
+      const arrange = (order: ID[]) => set((s) => {
+        s.scenes = order
           .map((id, i) => {
             const scene = s.scenes.find((x) => x.id === id)
             if (scene) scene.orderIndex = i
@@ -213,7 +250,13 @@ export const useSceneStore = create<SceneState & SceneActions>()(
           })
           .filter(Boolean) as SceneItem[]
       })
-      try { await ipc.scene.reorder(ids) } catch { /* no-op */ }
+      arrange(ids)
+      try {
+        await ipc.scene.reorder(ids)
+      } catch (err) {
+        arrange(previous)
+        reportFailure('reorder the scenes', err)
+      }
     },
 
     setActiveScene: (id) => {

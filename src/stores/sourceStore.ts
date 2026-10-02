@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { ipc, type SourceDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
 import { useCaptureStore } from './captureStore'
+import { reportFailure } from './notifyStore'
 import type { ID, SourceType, Transform } from '@/types'
 
 // ── Domain type ────────────────────────────────────────────────────────────
@@ -66,6 +67,17 @@ function makeLocalSource(sceneId: string, name: string, type: SourceType, orderI
   }
 }
 
+/** `current` rearranged into the order of `ids`, renumbering orderIndex. */
+function reordered(current: SourceItem[], ids: ID[]): SourceItem[] {
+  return ids
+    .map((id, i) => {
+      const src = current.find((x) => x.id === id)
+      if (src) src.orderIndex = i
+      return src
+    })
+    .filter(Boolean) as SourceItem[]
+}
+
 // ── State & actions ────────────────────────────────────────────────────────
 
 interface SourceState {
@@ -105,7 +117,8 @@ export const useSourceStore = create<SourceState & SourceActions>()(
           s.byScene[sceneId] = dtos.map(fromDto)
           s.loading = false
         })
-      } catch {
+      } catch (err) {
+        reportFailure('load the sources', err)
         set((s) => {
           if (!s.byScene[sceneId]) s.byScene[sceneId] = []
           s.loading = false
@@ -133,7 +146,14 @@ export const useSourceStore = create<SourceState & SourceActions>()(
           const idx  = list?.findIndex((x) => x.id === optimistic.id)
           if (idx !== undefined && idx !== -1 && list) list[idx] = fromDto(dto)
         })
-      } catch { /* keep optimistic */ }
+      } catch (err) {
+        // Keeping the optimistic row would show a source that was never saved
+        // and is gone after the next launch.
+        set((s) => {
+          s.byScene[sceneId] = (s.byScene[sceneId] ?? []).filter((x) => x.id !== optimistic.id)
+        })
+        reportFailure('add the source', err)
+      }
     },
 
     removeSource: async (sceneId, sourceId) => {
@@ -142,12 +162,30 @@ export const useSourceStore = create<SourceState & SourceActions>()(
       // control left on screen to do so. Doing it here covers every caller;
       // the toolbar's remove button used to skip it.
       useCaptureStore.getState().stopCapture(sourceId)
+
+      const list = get().byScene[sceneId] ?? []
+      const index = list.findIndex((x) => x.id === sourceId)
+      const removed = list[index]
+
       set((s) => {
         if (s.byScene[sceneId]) {
           s.byScene[sceneId] = s.byScene[sceneId].filter((x) => x.id !== sourceId)
         }
       })
-      try { await ipc.source.remove(sourceId) } catch { /* no-op */ }
+      try {
+        await ipc.source.remove(sourceId)
+      } catch (err) {
+        // Put it back where it was; it still exists in the database.
+        if (removed) {
+          set((s) => {
+            const current = (s.byScene[sceneId] ??= [])
+            if (!current.some((x) => x.id === sourceId)) {
+              current.splice(Math.min(index, current.length), 0, removed)
+            }
+          })
+        }
+        reportFailure('remove the source', err)
+      }
     },
 
     /** Drops a deleted scene's sources from memory, releasing any capture they held. */
@@ -158,27 +196,60 @@ export const useSourceStore = create<SourceState & SourceActions>()(
     },
 
     renameSource: async (sceneId, sourceId, name) => {
+      const previous = get().byScene[sceneId]?.find((x) => x.id === sourceId)?.name
       set((s) => {
         const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
         if (src) { src.name = name; src.updatedAt = Date.now() }
       })
-      try { await ipc.source.rename(sourceId, name) } catch { /* no-op */ }
+      try {
+        await ipc.source.rename(sourceId, name)
+      } catch (err) {
+        if (previous !== undefined) {
+          set((s) => {
+            const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+            if (src) src.name = previous
+          })
+        }
+        reportFailure('rename the source', err)
+      }
     },
 
     setVisible: async (sceneId, sourceId, visible) => {
+      const previous = get().byScene[sceneId]?.find((x) => x.id === sourceId)?.visible
       set((s) => {
         const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
         if (src) src.visible = visible
       })
-      try { await ipc.source.setVisible(sourceId, visible) } catch { /* no-op */ }
+      try {
+        await ipc.source.setVisible(sourceId, visible)
+      } catch (err) {
+        if (previous !== undefined) {
+          set((s) => {
+            const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+            if (src) src.visible = previous
+          })
+        }
+        reportFailure(visible ? 'show the source' : 'hide the source', err)
+      }
     },
 
     setLocked: async (sceneId, sourceId, locked) => {
+      const previous = get().byScene[sceneId]?.find((x) => x.id === sourceId)?.locked
       set((s) => {
         const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
         if (src) src.locked = locked
       })
-      try { await ipc.source.setLocked(sourceId, locked) } catch { /* no-op */ }
+      try {
+        await ipc.source.setLocked(sourceId, locked)
+      } catch (err) {
+        if (previous !== undefined) {
+          set((s) => {
+            const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+            if (src) src.locked = previous
+          })
+        }
+        reportFailure(locked ? 'lock the source' : 'unlock the source', err)
+      }
     },
 
     /**
@@ -200,21 +271,22 @@ export const useSourceStore = create<SourceState & SourceActions>()(
       if (!src) return
       try {
         await ipc.source.setTransform(sourceId, JSON.stringify(src.transform))
-      } catch { /* keep the local placement */ }
+      } catch (err) {
+        // The placement stays where the user dragged it, so their work is not
+        // snatched back mid-gesture, but they are told it was not saved.
+        reportFailure('save the source position', err)
+      }
     },
 
     reorderSources: async (sceneId, ids) => {
-      set((s) => {
-        const current = s.byScene[sceneId] ?? []
-        s.byScene[sceneId] = ids
-          .map((id, i) => {
-            const src = current.find((x) => x.id === id)
-            if (src) src.orderIndex = i
-            return src
-          })
-          .filter(Boolean) as SourceItem[]
-      })
-      try { await ipc.source.reorder(ids) } catch { /* no-op */ }
+      const previous = (get().byScene[sceneId] ?? []).map((x) => x.id)
+      set((s) => { s.byScene[sceneId] = reordered(s.byScene[sceneId] ?? [], ids) })
+      try {
+        await ipc.source.reorder(ids)
+      } catch (err) {
+        set((s) => { s.byScene[sceneId] = reordered(s.byScene[sceneId] ?? [], previous) })
+        reportFailure('reorder the sources', err)
+      }
     },
 
     moveUp: async (sceneId, sourceId) => {

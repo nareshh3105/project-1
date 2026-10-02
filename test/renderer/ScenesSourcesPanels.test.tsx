@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { installBridge, removeBridge } from '../mocks/bridge'
+import { installBridge, removeBridge, type BridgeStub } from '../mocks/bridge'
 import type { SourceDto } from '../../src/ipc'
 
 /**
@@ -10,6 +10,7 @@ import type { SourceDto } from '../../src/ipc'
  * and removed.
  */
 
+let bridge: BridgeStub
 let ScenesPanel: typeof import('../../src/components/panels/ScenesPanel')['ScenesPanel']
 let SourcesPanel: typeof import('../../src/components/panels/SourcesPanel')['SourcesPanel']
 let useSceneStore: typeof import('../../src/stores/sceneStore')['useSceneStore']
@@ -30,7 +31,7 @@ function dto(id: string, name: string, sceneId = 's1'): SourceDto {
 beforeEach(async () => {
   vi.resetModules()
   localStorage.clear()
-  installBridge()
+  bridge = installBridge()
   Object.defineProperty(navigator, 'mediaDevices', { value: {}, configurable: true })
 
   ScenesPanel = (await import('../../src/components/panels/ScenesPanel')).ScenesPanel
@@ -54,6 +55,8 @@ afterEach(() => {
 
 describe('scenes panel', () => {
   it('names a new scene with the first free number', async () => {
+    // What the backend returns for the scene it just created.
+    bridge.reply('create_scene', scene('s2', 'Scene 2', 2))
     render(<ScenesPanel />)
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Add scene' })[0])

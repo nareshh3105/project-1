@@ -82,6 +82,10 @@ describe('transform parsing', () => {
   })
 
   it('gives a newly added source a default placement', async () => {
+    // The backend answers an add with the stored row. Without a reply the
+    // store sees undefined, treats that as a failed save and rolls the source
+    // back — which the old empty catch used to hide.
+    bridge.reply('add_source', dto({ id: 'new-1', name: 'Webcam', sourceType: 'dshow_video' }))
     await useSourceStore.getState().addSource(SCENE, 'Webcam', 'dshow_video')
     expect(first().transform).toEqual(DEFAULT_TRANSFORM)
   })
