@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useId } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,11 +18,22 @@ import { ipc } from '@/ipc'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
+/**
+ * The id of the row label the control inside it should be named by. The label
+ * is a span beside the control rather than a wrapping <label>, so without this
+ * a select or toggle had no accessible name at all and a screen reader said
+ * only "combo box" or "button".
+ */
+const LabelContext = createContext<string | undefined>(undefined)
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  const labelId = useId()
   return (
     <div className="flex items-center justify-between gap-6 py-2.5 border-b border-bg-divider/40 last:border-0">
-      <span className="text-body text-text-secondary flex-shrink-0 w-52">{label}</span>
-      <div className="flex-1 flex justify-end">{children}</div>
+      <span id={labelId} className="text-body text-text-secondary flex-shrink-0 w-52">{label}</span>
+      <div className="flex-1 flex justify-end">
+        <LabelContext.Provider value={labelId}>{children}</LabelContext.Provider>
+      </div>
     </div>
   )
 }
@@ -34,8 +45,10 @@ function Sel<T extends string | number>({
   onChange: (v: T) => void
   options: { value: T; label: string }[]
 }) {
+  const labelledBy = useContext(LabelContext)
   return (
     <select
+      aria-labelledby={labelledBy}
       value={value}
       onChange={(e) => onChange(e.target.value as T)}
       className="h-7 px-2 min-w-[160px] rounded-input bg-bg-surface border border-bg-divider
@@ -49,8 +62,13 @@ function Sel<T extends string | number>({
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const labelledBy = useContext(LabelContext)
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-labelledby={labelledBy}
       onClick={() => onChange(!value)}
       className={cn(
         'w-9 h-5 rounded-full relative transition-colors flex-shrink-0',
@@ -420,6 +438,7 @@ function HotkeysTab() {
                         {formatBinding(b)}
                       </button>
                       <button
+                        aria-label={`Remove ${formatBinding(b)} from ${hk.description}`}
                         onClick={() => removeBinding(hk.id, i)}
                         className="w-5 h-5 flex items-center justify-center text-text-muted hover:text-state-danger transition-colors"
                       >
@@ -496,7 +515,12 @@ export function SettingsModal() {
             'w-[820px] h-[580px] bg-bg-panel border border-bg-divider rounded-panel shadow-modal',
             'flex flex-col animate-fade-in overflow-hidden'
           )}
-          onKeyDown={(e) => { if (e.key === 'Escape' && !useHotkeyStore.getState().recording) closeModal() }}
+          // Radix closes a dialog on Escape through its own document listener,
+          // ahead of any handler here. While a hotkey is being recorded Escape
+          // means "cancel the recording" (the tab says so), and letting it
+          // through closed Settings and threw away every unsaved change on the
+          // other tabs. The recorder itself stops on the same keypress.
+          onEscapeKeyDown={(e) => { if (useHotkeyStore.getState().recording) e.preventDefault() }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-bg-divider flex-shrink-0">
@@ -510,10 +534,18 @@ export function SettingsModal() {
           {/* Body */}
           <div className="flex flex-1 min-h-0">
             {/* Sidebar */}
-            <nav className="w-40 bg-bg-base flex-shrink-0 flex flex-col py-2 gap-0.5 border-r border-bg-divider">
+            <nav
+              role="tablist"
+              aria-label="Settings sections"
+              aria-orientation="vertical"
+              className="w-40 bg-bg-base flex-shrink-0 flex flex-col py-2 gap-0.5 border-r border-bg-divider"
+            >
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     'text-left px-4 py-2 mx-2 text-body rounded-button transition-colors',
@@ -528,7 +560,7 @@ export function SettingsModal() {
             </nav>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5">
+            <div role="tabpanel" aria-label={TABS.find((t) => t.id === activeTab)?.label} className="flex-1 overflow-y-auto p-5">
               {activeTab === 'general' && (
                 <GeneralTab draft={draft.general} set={patchGeneral} />
               )}
