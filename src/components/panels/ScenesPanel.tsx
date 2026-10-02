@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Copy, Trash2, Edit2 } from 'lucide-react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { useSceneStore, type SceneItem } from '@/stores/sceneStore'
+import { useSceneStore, nextSceneName, type SceneItem } from '@/stores/sceneStore'
 import { useSourceStore } from '@/stores/sourceStore'
 import { useUIStore } from '@/stores/uiStore'
 import { RenameModal } from '@/components/modals/RenameModal'
@@ -41,8 +41,7 @@ export function ScenesPanel() {
   }
 
   async function handleAddScene() {
-    const name = `Scene ${scenes.length + 1}`
-    await createScene(name)
+    await createScene(nextSceneName(scenes.map((s) => s.name)))
   }
 
   return (
@@ -102,7 +101,7 @@ export function ScenesPanel() {
       <ConfirmModal
         open={!!deleteTarget}
         title="Delete Scene"
-        message={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
+        message={`Delete "${deleteTarget?.name ?? ''}"? This cannot be undone.`}
         confirmLabel="Delete"
         danger
         onConfirm={() => deleteTarget && deleteScene(deleteTarget.id)}
@@ -131,9 +130,17 @@ function SceneRow({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
         <div
+          role="button"
+          tabIndex={0}
+          aria-current={isProgram || isPreview ? 'true' : undefined}
+          aria-label={scene.name}
           onClick={onSelect}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() }
+          }}
           className={cn(
             'flex items-center gap-2 h-10 px-3 cursor-pointer select-none',
+            'focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-accent-start',
             'border-b border-bg-divider transition-colors',
             isProgram && studioMode
               ? 'bg-state-danger/10 border-l-2 border-l-state-danger text-text-primary'

@@ -54,7 +54,6 @@ export function SourcesPanel() {
   const filtersBySource  = useFilterStore((s) => s.filtersBySource)
   const captureActiveIds = useCaptureStore((s) => s.activeIds)
   const startCapture     = useCaptureStore((s) => s.startCapture)
-  const stopCapture      = useCaptureStore((s) => s.stopCapture)
 
   const sources = (activeSceneId ? byScene[activeSceneId] : []) ?? []
   const reversedSources = [...sources].reverse() // top layer first in UI
@@ -62,7 +61,13 @@ export function SourcesPanel() {
   const [addOpen,      setAddOpen]      = useState(false)
   const [renameTarget, setRenameTarget] = useState<SourceItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SourceItem | null>(null)
-  const [selected,     setSelected]     = useState<string | null>(null)
+  const [selectedId,   setSelectedId]   = useState<string | null>(null)
+
+  // Derived from the live list rather than trusted: the id used to outlive its
+  // source (removed from the context menu, or the scene switched away), which
+  // left the toolbar's remove and move buttons enabled with nothing behind them.
+  const selectedSource = sources.find((s) => s.id === selectedId) ?? null
+  const selected = selectedSource?.id ?? null
 
   async function handleAdd(type: SourceType, name: string) {
     if (!activeSceneId) return
@@ -116,7 +121,7 @@ export function SourcesPanel() {
               source={src}
               selected={selected === src.id}
               hasFilters={(filtersBySource[src.id]?.length ?? 0) > 0}
-              onSelect={() => setSelected(src.id)}
+              onSelect={() => setSelectedId(src.id)}
               onToggleVisible={() => setVisible(src.sceneId, src.id, !src.visible)}
               onToggleLocked={() => setLocked(src.sceneId, src.id, !src.locked)}
               onRename={() => setRenameTarget(src)}
@@ -141,8 +146,8 @@ export function SourcesPanel() {
         </button>
         <button
           className="icon-btn" title="Remove selected"
-          onClick={() => selected && activeSceneId && removeSource(activeSceneId, selected)}
-          disabled={!selected}
+          onClick={() => selectedSource && setDeleteTarget(selectedSource)}
+          disabled={!selectedSource}
         >
           <Minus size={12} />
         </button>
@@ -175,14 +180,12 @@ export function SourcesPanel() {
       <ConfirmModal
         open={!!deleteTarget}
         title="Remove Source"
-        message={`Remove "${deleteTarget?.name}" from the scene?`}
+        message={`Remove "${deleteTarget?.name ?? ''}" from the scene?`}
         confirmLabel="Remove"
         danger
         onConfirm={() => {
-          if (deleteTarget) {
-            stopCapture(deleteTarget.id)
-            removeSource(deleteTarget.sceneId, deleteTarget.id)
-          }
+          // removeSource also stops the capture.
+          if (deleteTarget) removeSource(deleteTarget.sceneId, deleteTarget.id)
         }}
         onClose={() => setDeleteTarget(null)}
       />
@@ -214,9 +217,24 @@ function SourceRow({
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
         <div
+          // Not role="button": the row holds buttons of its own (hide, lock,
+          // filters), and interactive controls cannot nest. A labelled group
+          // that can take focus keeps both usable from the keyboard.
+          role="group"
+          tabIndex={0}
+          aria-label={source.name}
+          aria-current={selected ? 'true' : undefined}
           onClick={onSelect}
+          onKeyDown={(e) => {
+            // Only the row's own keypresses; Enter on an inner button belongs to that button.
+            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              onSelect()
+            }
+          }}
           className={cn(
             'flex items-center gap-1.5 h-8 px-2 cursor-pointer select-none group',
+            'focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-accent-start',
             'border-b border-bg-divider transition-colors',
             selected
               ? 'bg-state-active text-text-primary'

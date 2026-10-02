@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { ipc, type SceneDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
+import { useCaptureStore } from './captureStore'
 import type { ID } from '@/types'
 
 // ── Domain types (client-side) ─────────────────────────────────────────────
@@ -29,6 +30,18 @@ function fromDto(dto: SceneDto): SceneItem {
 function makeLocalScene(name: string, collectionId: string, orderIndex: number): SceneItem {
   const now = Date.now()
   return { id: generateId(), collectionId, name, orderIndex, createdAt: now, updatedAt: now }
+}
+
+/**
+ * The lowest "Scene N" not already taken. Counting existing scenes instead
+ * collides as soon as one is deleted: with Scene 1 and Scene 3 left, the
+ * count is two and the next scene came out as a second "Scene 3".
+ */
+export function nextSceneName(existing: readonly string[]): string {
+  const taken = new Set(existing)
+  let n = 1
+  while (taken.has(`Scene ${n}`)) n++
+  return `Scene ${n}`
 }
 
 // ── State & actions ────────────────────────────────────────────────────────
@@ -97,6 +110,9 @@ export const useSceneStore = create<SceneState & SceneActions>()(
     // ── Scene Collections ────────────────────────────────────────────────
 
     loadCollection: (collectionId, scenes) => {
+      // The previous collection's sources are gone; so are the controls for
+      // any capture still running on their behalf.
+      useCaptureStore.getState().stopAll()
       set((s) => {
         s.collectionId   = collectionId
         s.scenes         = scenes
@@ -141,15 +157,25 @@ export const useSceneStore = create<SceneState & SceneActions>()(
     },
 
     deleteScene: async (id) => {
-      const { scenes } = get()
+      const { scenes, activeSceneId } = get()
       const remaining = scenes.filter((s) => s.id !== id)
+
+      // Release the scene's captures before its sources leave memory.
+      const { useSourceStore } = await import('./sourceStore')
+      useSourceStore.getState().forgetScene(id)
 
       set((s) => {
         s.scenes = remaining
-        if (s.activeSceneId === id) {
-          s.activeSceneId = remaining[0]?.id ?? null
-        }
+        // A scene staged in Studio Mode that no longer exists would otherwise
+        // stay referenced and render as an empty preview.
+        if (s.previewSceneId === id) s.previewSceneId = null
+        if (s.activeSceneId === id) s.activeSceneId = remaining[0]?.id ?? null
       })
+
+      // Going through setActiveScene loads the replacement's sources; assigning
+      // the id directly left it showing nothing until it was clicked again.
+      if (activeSceneId === id && remaining[0]) get().setActiveScene(remaining[0].id)
+
       try { await ipc.scene.delete(id) } catch { /* no-op */ }
     },
 

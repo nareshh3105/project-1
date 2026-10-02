@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { ipc, type SourceDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
+import { useCaptureStore } from './captureStore'
 import type { ID, SourceType, Transform } from '@/types'
 
 // ── Domain type ────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ interface SourceActions {
   seedSources:    (sceneId: ID, dtos: SourceDto[]) => void
   addSource:      (sceneId: ID, name: string, type: SourceType) => Promise<void>
   removeSource:   (sceneId: ID, sourceId: ID) => Promise<void>
+  forgetScene:    (sceneId: ID) => void
   renameSource:   (sceneId: ID, sourceId: ID, name: string) => Promise<void>
   setVisible:     (sceneId: ID, sourceId: ID, visible: boolean) => Promise<void>
   setLocked:      (sceneId: ID, sourceId: ID, locked: boolean) => Promise<void>
@@ -135,12 +137,24 @@ export const useSourceStore = create<SourceState & SourceActions>()(
     },
 
     removeSource: async (sceneId, sourceId) => {
+      // A screen or camera capture keeps running after its source is gone
+      // unless something stops it, and with the source removed there is no
+      // control left on screen to do so. Doing it here covers every caller;
+      // the toolbar's remove button used to skip it.
+      useCaptureStore.getState().stopCapture(sourceId)
       set((s) => {
         if (s.byScene[sceneId]) {
           s.byScene[sceneId] = s.byScene[sceneId].filter((x) => x.id !== sourceId)
         }
       })
       try { await ipc.source.remove(sourceId) } catch { /* no-op */ }
+    },
+
+    /** Drops a deleted scene's sources from memory, releasing any capture they held. */
+    forgetScene: (sceneId) => {
+      const capture = useCaptureStore.getState()
+      for (const src of get().byScene[sceneId] ?? []) capture.stopCapture(src.id)
+      set((s) => { delete s.byScene[sceneId] })
     },
 
     renameSource: async (sceneId, sourceId, name) => {
