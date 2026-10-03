@@ -4,6 +4,7 @@ import { ipc, type SourceDto } from '@/ipc'
 import { generateId } from '@/lib/utils'
 import { useCaptureStore } from './captureStore'
 import { reportFailure } from './notifyStore'
+import { withCaptureTarget, type CaptureTarget } from '@/lib/capture/target'
 import type { ID, SourceType, Transform } from '@/types'
 
 // ── Domain type ────────────────────────────────────────────────────────────
@@ -90,7 +91,10 @@ interface SourceState {
 interface SourceActions {
   loadSources:    (sceneId: ID) => Promise<void>
   seedSources:    (sceneId: ID, dtos: SourceDto[]) => void
-  addSource:      (sceneId: ID, name: string, type: SourceType) => Promise<void>
+  /** Adds a source and returns it, or null if it could not be saved. */
+  addSource:      (sceneId: ID, name: string, type: SourceType) => Promise<SourceItem | null>
+  /** Records which screen, window or camera a capture source points at. */
+  setCaptureTarget: (sceneId: ID, sourceId: ID, target: CaptureTarget) => Promise<boolean>
   removeSource:   (sceneId: ID, sourceId: ID) => Promise<void>
   forgetScene:    (sceneId: ID) => void
   renameSource:   (sceneId: ID, sourceId: ID, name: string) => Promise<void>
@@ -141,11 +145,13 @@ export const useSourceStore = create<SourceState & SourceActions>()(
 
       try {
         const dto = await ipc.source.add(sceneId, name, type, '{}')
+        const saved = fromDto(dto)
         set((s) => {
           const list = s.byScene[sceneId]
           const idx  = list?.findIndex((x) => x.id === optimistic.id)
-          if (idx !== undefined && idx !== -1 && list) list[idx] = fromDto(dto)
+          if (idx !== undefined && idx !== -1 && list) list[idx] = saved
         })
+        return saved
       } catch (err) {
         // Keeping the optimistic row would show a source that was never saved
         // and is gone after the next launch.
@@ -153,6 +159,34 @@ export const useSourceStore = create<SourceState & SourceActions>()(
           s.byScene[sceneId] = (s.byScene[sceneId] ?? []).filter((x) => x.id !== optimistic.id)
         })
         reportFailure('add the source', err)
+        // Callers must not assume the last source in the scene is the new one:
+        // after a failure it is some other source.
+        return null
+      }
+    },
+
+    setCaptureTarget: async (sceneId, sourceId, target) => {
+      const current = get().byScene[sceneId]?.find((x) => x.id === sourceId)
+      if (!current) return false
+
+      const previous = current.settings
+      const next = withCaptureTarget(previous, target)
+
+      set((s) => {
+        const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+        if (src) src.settings = next
+      })
+
+      try {
+        await ipc.source.updateSettings(sourceId, JSON.stringify(next))
+        return true
+      } catch (err) {
+        set((s) => {
+          const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+          if (src) src.settings = previous
+        })
+        reportFailure('save what this source captures', err)
+        return false
       }
     },
 

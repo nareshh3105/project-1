@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { SourceType } from '@/types'
+import { ipc } from '@/ipc'
+import {
+  resolveTarget, missingMessage, type CaptureTarget, type LiveSource,
+} from '@/lib/capture/target'
 
 export const CAPTURE_SOURCE_TYPES: SourceType[] = [
   'display_capture', 'window_capture', 'game_capture', 'dshow_video',
@@ -19,10 +23,46 @@ interface CaptureState {
 }
 
 interface CaptureActions {
-  startCapture: (sourceId: string, type: SourceType) => Promise<void>
+  /**
+   * Starts capturing `target` for a source. Without a target there is nothing
+   * to capture, which is reported rather than guessed at.
+   */
+  startCapture: (sourceId: string, type: SourceType, target: CaptureTarget | null) => Promise<void>
   stopCapture:  (sourceId: string) => void
   stopAll:      () => void
   getStream:    (sourceId: string) => MediaStream | undefined
+}
+
+/** What the system can capture right now for a kind of target. */
+async function liveSources(target: CaptureTarget): Promise<LiveSource[]> {
+  if (target.kind === 'camera') {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices
+      .filter((d) => d.kind === 'videoinput')
+      .map((d, i) => ({ id: d.deviceId, name: d.label || `Camera ${i + 1}` }))
+  }
+  const sources = await ipc.capture.listSources([target.kind])
+  return sources.map((s) => ({ id: s.id, name: s.name }))
+}
+
+async function openStream(target: CaptureTarget): Promise<MediaStream> {
+  const live = resolveTarget(target, await liveSources(target))
+  if (!live) throw new Error(missingMessage(target))
+
+  if (target.kind === 'camera') {
+    return navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: live.id } },
+      audio: false,
+    })
+  }
+
+  // Electron grants a screen capture only to a choice made through the broker
+  // just beforehand, so say what is wanted and then ask for it.
+  await ipc.capture.prepare(live.id, false)
+  return navigator.mediaDevices.getDisplayMedia({
+    video: { frameRate: 30 } as MediaTrackConstraints,
+    audio: false,
+  })
 }
 
 export const useCaptureStore = create<CaptureState & CaptureActions>()(
@@ -30,7 +70,7 @@ export const useCaptureStore = create<CaptureState & CaptureActions>()(
     activeIds: [],
     errors:    {},
 
-    startCapture: async (sourceId, type) => {
+    startCapture: async (sourceId, _type, target) => {
       // Clean up any existing stream for this source
       const existing = _streams.get(sourceId)
       if (existing) {
@@ -42,20 +82,15 @@ export const useCaptureStore = create<CaptureState & CaptureActions>()(
         })
       }
 
+      if (!target) {
+        set((s) => { s.errors[sourceId] = 'Choose what to capture.' })
+        return
+      }
+
       try {
-        let stream: MediaStream
+        const stream = await openStream(target)
 
-        if (type === 'dshow_video') {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        } else {
-          // display_capture, window_capture, game_capture — uses the OS screen picker
-          stream = await (navigator.mediaDevices as MediaDevices).getDisplayMedia({
-            video: { frameRate: 30 } as MediaTrackConstraints,
-            audio: false,
-          })
-        }
-
-        // Detect when user clicks "Stop sharing" in the browser toolbar
+        // Detect when the user clicks "Stop sharing", or the window closes.
         stream.getVideoTracks().forEach((track) => {
           track.addEventListener('ended', () => {
             _streams.delete(sourceId)
@@ -69,7 +104,7 @@ export const useCaptureStore = create<CaptureState & CaptureActions>()(
           delete s.errors[sourceId]
         })
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Capture failed or was cancelled'
+        const msg = err instanceof Error && err.message ? err.message : 'Capture failed or was cancelled'
         set((s) => { s.errors[sourceId] = msg })
       }
     },

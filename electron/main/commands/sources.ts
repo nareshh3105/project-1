@@ -70,6 +70,14 @@ export function registerSourceCommands() {
       .run(locked ? 1 : 0, now(), id as string)
   })
 
+  // What a source captures (which screen, which window, which camera) lives in
+  // its settings, so it survives a restart and the capture can be resumed.
+  command('update_source_settings', ({ id, settings }) => {
+    getDb()
+      .prepare(`UPDATE sources SET settings = ?, updated_at = ? WHERE id = ?`)
+      .run(settings as string, now(), id as string)
+  })
+
   command('set_source_transform', ({ id, transform }) => {
     getDb()
       .prepare(`UPDATE sources SET transform = ?, updated_at = ? WHERE id = ?`)

@@ -3,7 +3,7 @@ import {
   Plus, Minus, Eye, EyeOff, Lock, Unlock, Trash2, Edit2,
   ChevronUp, ChevronDown, SlidersHorizontal, RefreshCw,
   Monitor, AppWindow, Gamepad2, Camera, Speaker, Mic,
-  Image, Film, Globe, Palette, Type, Layers,
+  Image, Film, Globe, Palette, Type, Layers, AlertCircle, Crosshair,
 } from 'lucide-react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useSceneStore } from '@/stores/sceneStore'
@@ -16,6 +16,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import type { SourceType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
+import { parseCaptureTarget } from '@/lib/capture/target'
 
 function sourceIcon(type: SourceType) {
   const props = { size: 12, className: 'flex-shrink-0' }
@@ -53,6 +54,7 @@ export function SourcesPanel() {
   const openModal        = useUIStore((s) => s.openModal)
   const filtersBySource  = useFilterStore((s) => s.filtersBySource)
   const captureActiveIds = useCaptureStore((s) => s.activeIds)
+  const captureErrors    = useCaptureStore((s) => s.errors)
   const startCapture     = useCaptureStore((s) => s.startCapture)
 
   const sources = (activeSceneId ? byScene[activeSceneId] : []) ?? []
@@ -69,14 +71,21 @@ export function SourcesPanel() {
   const selectedSource = sources.find((s) => s.id === selectedId) ?? null
   const selected = selectedSource?.id ?? null
 
+  function chooseTarget(src: SourceItem) {
+    openModal('capture-picker', { sceneId: src.sceneId, sourceId: src.id, sourceType: src.sourceType })
+  }
+
   async function handleAdd(type: SourceType, name: string) {
     if (!activeSceneId) return
-    await addSource(activeSceneId, name, type)
-    if (isCaptureType(type)) {
-      const sceneSources = useSourceStore.getState().byScene[activeSceneId] ?? []
-      const newSrc = sceneSources[sceneSources.length - 1]
-      if (newSrc) startCapture(newSrc.id, type).catch(console.warn)
-    }
+    const created = await addSource(activeSceneId, name, type)
+    // A capture source has nothing to show until it is told what to capture.
+    if (created && isCaptureType(type)) chooseTarget(created)
+  }
+
+  function restartCapture(src: SourceItem) {
+    const target = parseCaptureTarget(src.settings)
+    if (!target) { chooseTarget(src); return }
+    void startCapture(src.id, src.sourceType, target)
   }
 
   function openFilters(src: SourceItem) {
@@ -130,7 +139,9 @@ export function SourcesPanel() {
               onMoveDown={() => moveDown(src.sceneId, src.id)}
               onFilters={() => openFilters(src)}
               isCapturing={captureActiveIds.includes(src.id)}
-              onRestartCapture={() => startCapture(src.id, src.sourceType).catch(console.warn)}
+              captureError={captureErrors[src.id]}
+              onRestartCapture={() => restartCapture(src)}
+              onChooseTarget={() => chooseTarget(src)}
             />
           ))
         )}
@@ -198,6 +209,7 @@ interface SourceRowProps {
   selected: boolean
   hasFilters: boolean
   isCapturing: boolean
+  captureError?: string
   onSelect: () => void
   onToggleVisible: () => void
   onToggleLocked: () => void
@@ -207,11 +219,12 @@ interface SourceRowProps {
   onMoveDown: () => void
   onFilters: () => void
   onRestartCapture: () => void
+  onChooseTarget: () => void
 }
 
 function SourceRow({
-  source, selected, hasFilters, isCapturing, onSelect, onToggleVisible, onToggleLocked,
-  onRename, onDelete, onMoveUp, onMoveDown, onFilters, onRestartCapture,
+  source, selected, hasFilters, isCapturing, captureError, onSelect, onToggleVisible, onToggleLocked,
+  onRename, onDelete, onMoveUp, onMoveDown, onFilters, onRestartCapture, onChooseTarget,
 }: SourceRowProps) {
   return (
     <ContextMenu.Root>
@@ -265,6 +278,18 @@ function SourceRow({
           {/* Name */}
           <span className="flex-1 text-caption truncate">{source.name}</span>
 
+          {/* Why a capture is not running, where the user can see it. */}
+          {captureError && !isCapturing && (
+            <span
+              className="text-state-danger flex-shrink-0"
+              title={captureError}
+              role="img"
+              aria-label={`Capture problem: ${captureError}`}
+            >
+              <AlertCircle size={12} />
+            </span>
+          )}
+
           {/* Live capture dot */}
           {isCapturing && (
             <span
@@ -298,6 +323,11 @@ function SourceRow({
           <ContextMenu.Item className="context-menu-item" onSelect={onFilters}>
             <SlidersHorizontal size={12} /> Filters…
           </ContextMenu.Item>
+          {isCaptureType(source.sourceType) && (
+            <ContextMenu.Item className="context-menu-item" onSelect={onChooseTarget}>
+              <Crosshair size={12} /> Select Capture Target…
+            </ContextMenu.Item>
+          )}
           {isCaptureType(source.sourceType) && (
             <ContextMenu.Item className="context-menu-item" onSelect={onRestartCapture}>
               <RefreshCw size={12} /> Restart Capture

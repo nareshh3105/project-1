@@ -1,5 +1,6 @@
 import { registerAppCommands } from './app'
 import { registerAudioCommands } from './audio'
+import { registerCaptureCommands } from './capture'
 import { registerCollectionCommands } from './collections'
 import { registerHotkeyCommands } from './hotkeys'
 import { registerOutputCommands } from './output'
@@ -15,6 +16,7 @@ import { registeredCommands } from '../ipc'
 export function registerCommands() {
   registerAppCommands()
   registerAudioCommands()
+  registerCaptureCommands()
   registerCollectionCommands()
   registerHotkeyCommands()
   registerOutputCommands()

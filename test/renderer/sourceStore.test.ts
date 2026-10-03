@@ -160,3 +160,69 @@ describe('commitTransform', () => {
     expect(bridge.calls.some((c) => c.command === 'set_source_transform')).toBe(false)
   })
 })
+
+describe('addSource return value', () => {
+  // The Sources panel used to assume the new source was the last one in the
+  // scene. After a failed add that is some other source, so it started a
+  // capture on the wrong one.
+  it('returns the source that was saved', async () => {
+    bridge.reply('add_source', dto({ id: 'new-1', name: 'Webcam', sourceType: 'dshow_video' }))
+
+    const created = await useSourceStore.getState().addSource(SCENE, 'Webcam', 'dshow_video')
+
+    expect(created?.id).toBe('new-1')
+    expect(created?.sourceType).toBe('dshow_video')
+  })
+
+  it('returns null when it could not be saved, and leaves the others alone', async () => {
+    useSourceStore.getState().seedSources(SCENE, [dto({ id: 'existing' })])
+    bridge.fail('add_source', 'disk full')
+
+    const created = await useSourceStore.getState().addSource(SCENE, 'Webcam', 'dshow_video')
+
+    expect(created).toBeNull()
+    expect(sources().map((s) => s.id)).toEqual(['existing'])
+  })
+})
+
+describe('setCaptureTarget', () => {
+  const TARGET = { kind: 'window' as const, id: 'window:5:0', name: 'Notepad' }
+
+  beforeEach(() => {
+    useSourceStore.getState().seedSources(SCENE, [dto({ settings: JSON.stringify({ other: 1 }) })])
+  })
+
+  it('records the target on the source', async () => {
+    const ok = await useSourceStore.getState().setCaptureTarget(SCENE, 'src-1', TARGET)
+
+    expect(ok).toBe(true)
+    expect(first().settings.capture).toEqual(TARGET)
+  })
+
+  it('keeps the settings it was not asked to change', async () => {
+    await useSourceStore.getState().setCaptureTarget(SCENE, 'src-1', TARGET)
+    expect(first().settings.other).toBe(1)
+  })
+
+  it('saves it so it survives a restart', async () => {
+    await useSourceStore.getState().setCaptureTarget(SCENE, 'src-1', TARGET)
+
+    const args = bridge.argsFor('update_source_settings')
+    expect(args?.id).toBe('src-1')
+    expect(JSON.parse(args!.settings as string)).toMatchObject({ other: 1, capture: TARGET })
+  })
+
+  it('puts the old settings back when saving fails', async () => {
+    bridge.fail('update_source_settings', 'database is locked')
+
+    const ok = await useSourceStore.getState().setCaptureTarget(SCENE, 'src-1', TARGET)
+
+    expect(ok).toBe(false)
+    expect(first().settings).toEqual({ other: 1 })
+  })
+
+  it('reports false for a source that does not exist', async () => {
+    expect(await useSourceStore.getState().setCaptureTarget(SCENE, 'missing', TARGET)).toBe(false)
+    expect(bridge.argsFor('update_source_settings')).toBeUndefined()
+  })
+})

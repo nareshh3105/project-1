@@ -45,6 +45,16 @@ export function nextSceneName(existing: readonly string[]): string {
   return `Scene ${n}`
 }
 
+/**
+ * Fetches a scene's sources. Goes through loadSources, which reports a failure
+ * and leaves the list usable. The chain this replaced returned nothing from its
+ * inner promise, so an error there was unhandled, and the outer catch swallowed
+ * the rest: a scene whose sources failed to load just looked empty.
+ */
+function loadSourcesFor(sceneId: ID) {
+  void import('./sourceStore').then(({ useSourceStore }) => useSourceStore.getState().loadSources(sceneId))
+}
+
 // ── State & actions ────────────────────────────────────────────────────────
 
 interface SceneState {
@@ -127,11 +137,7 @@ export const useSceneStore = create<SceneState & SceneActions>()(
         s.previewSceneId = null
       })
       if (scenes[0]) {
-        ipc.source.list(scenes[0].id).then((dtos) => {
-          import('./sourceStore').then(({ useSourceStore }) => {
-            useSourceStore.getState().seedSources(scenes[0].id, dtos)
-          })
-        }).catch(() => { /* browser dev — no-op */ })
+        loadSourcesFor(scenes[0].id)
       }
     },
 
@@ -262,11 +268,7 @@ export const useSceneStore = create<SceneState & SceneActions>()(
     setActiveScene: (id) => {
       set((s) => { s.activeSceneId = id })
       // Lazy-load sources on scene switch
-      ipc.source.list(id).then((dtos) => {
-        import('./sourceStore').then(({ useSourceStore }) => {
-          useSourceStore.getState().seedSources(id, dtos)
-        })
-      }).catch(() => { /* browser dev — no-op */ })
+      loadSourcesFor(id)
     },
 
     setPreviewScene: (id) => {

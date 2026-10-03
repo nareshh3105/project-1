@@ -81,6 +81,15 @@ export interface SourceDto {
   updatedAt: number
 }
 
+/** A screen or window that can be captured, as shown in the picker. */
+export interface CaptureSourceDto {
+  id: string
+  name: string
+  kind: 'screen' | 'window'
+  thumbnail: string | null
+  icon: string | null
+}
+
 export interface InitResult {
   collectionId: string
   scenes: SceneDto[]
@@ -260,6 +269,20 @@ export const ipc = {
       cmd<void>('set_source_transform', { id, transform }),
     reorder:      (ids: string[]) =>
       cmd<void>('reorder_sources', { ids }),
+    updateSettings: (id: string, settings: string) =>
+      cmd<void>('update_source_settings', { id, settings }),
+  },
+
+  capture: {
+    /** Screens and windows that can be captured now, with thumbnails. */
+    listSources:  (kinds?: ('screen' | 'window')[]) =>
+      cmd<CaptureSourceDto[]>('list_capture_sources', { kinds }),
+    /**
+     * Declares what the next getDisplayMedia call may receive. Without it the
+     * request is refused; a choice is used once and expires.
+     */
+    prepare:      (sourceId: string, audio = false) =>
+      cmd<void>('prepare_capture', { sourceId, audio }),
   },
 }
 

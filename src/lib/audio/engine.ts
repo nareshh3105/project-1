@@ -1,6 +1,7 @@
 import {
   SILENT, decayPeak, measure, type ChannelLevels,
 } from './levels'
+import { ipc } from '@/ipc'
 
 /**
  * Real per-channel audio metering.
@@ -208,12 +209,21 @@ export async function requestMicrophone(deviceId?: string): Promise<MediaStream>
 }
 
 /**
- * Requests system audio. The user picks a surface, and Windows only offers
- * audio for some of them, so a stream may come back with video and no audio.
+ * Requests system audio: everything the machine is playing, captured as
+ * loopback.
+ *
+ * Audio cannot be requested on its own, so a screen is asked for as well and
+ * its video is discarded. The request has to be declared to the main process
+ * first; without that it is refused (and before this existed, getDisplayMedia
+ * failed outright in the packaged app).
  */
 export async function requestDesktopAudio(): Promise<MediaStream> {
   let stream: MediaStream
   try {
+    const screens = await ipc.capture.listSources(['screen'])
+    if (screens.length === 0) throw new Error('No screen was found to attach system audio to.')
+
+    await ipc.capture.prepare(screens[0].id, true)
     stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
   } catch (err) {
     throw new Error(describeMediaError(err, 'system audio'))
@@ -221,9 +231,7 @@ export async function requestDesktopAudio(): Promise<MediaStream> {
 
   if (stream.getAudioTracks().length === 0) {
     stream.getTracks().forEach((t) => t.stop())
-    throw new Error(
-      'That source has no audio. Pick a window or screen and tick "Share audio" in the picker.',
-    )
+    throw new Error('Windows did not provide system audio.')
   }
 
   // The video track is only there because audio cannot be requested alone.

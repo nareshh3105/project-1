@@ -15,6 +15,8 @@ import { ProfileModal }          from '@/components/modals/ProfileModal'
 import { PluginsModal }          from '@/components/modals/PluginsModal'
 import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
+import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
+import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
 import { MultiviewModal }       from '@/components/modals/MultiviewModal'
@@ -31,6 +33,9 @@ import {
 } from '@/ipc'
 
 export function AppShell() {
+  // Sources that remember what they capture start again by themselves.
+  useResumeCaptures()
+
   const setAppReady     = useUIStore((s) => s.setAppReady)
   const setStats        = useUIStore((s) => s.setStats)
   const initApp         = useSceneStore((s) => s.initApp)
@@ -132,6 +137,7 @@ export function AppShell() {
       <AboutModal />
       <MultiviewModal />
       <FfmpegMissingModal />
+      <CapturePickerModal />
       <NoticeHost />
     </div>
   )

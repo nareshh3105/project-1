@@ -33,12 +33,16 @@ function dto(id: string, sceneId: string, type = 'display_capture'): SourceDto {
   } as SourceDto
 }
 
+const SCREEN = { kind: 'screen' as const, id: 'screen:0:0', name: 'Entire screen' }
+
 /** Starts a capture for `sourceId` and returns its track, to assert on. */
 async function capture(sourceId: string) {
   const { track, stream } = fakeStream()
+  // What the main process reports, then what the browser hands back.
+  bridge.reply('list_capture_sources', [{ ...SCREEN, thumbnail: null, icon: null }])
   ;(navigator.mediaDevices as unknown as { getDisplayMedia: unknown }).getDisplayMedia =
     vi.fn(async () => stream)
-  await useCaptureStore.getState().startCapture(sourceId, 'display_capture')
+  await useCaptureStore.getState().startCapture(sourceId, 'display_capture', SCREEN)
   expect(useCaptureStore.getState().activeIds).toContain(sourceId)
   return track
 }
@@ -139,7 +143,10 @@ describe('deleting a scene', () => {
     await useSceneStore.getState().deleteScene('s1')
 
     expect(useSceneStore.getState().activeSceneId).toBe('s2')
-    expect(bridge.calls.some((c) => c.command === 'list_sources' && c.args.sceneId === 's2')).toBe(true)
+    // The load starts just after the delete resolves.
+    await vi.waitFor(() =>
+      expect(bridge.calls.some((c) => c.command === 'list_sources' && c.args.sceneId === 's2')).toBe(true),
+    )
   })
 
   it('leaves the active scene alone when another is deleted', async () => {

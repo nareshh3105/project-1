@@ -1,9 +1,10 @@
-import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
+import { app, BrowserWindow, Menu, dialog, session, shell } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installDispatcher } from './ipc'
 import { registerCommands } from './commands'
+import { installDisplayMediaHandler } from './commands/capture'
 import { initDatabase, closeDatabase } from './db'
 import { killAllSessions, ffmpegBinary, ffmpegAvailable } from './output/ffmpeg'
 import { stopStatsPolling } from './commands/stats'
@@ -37,6 +38,13 @@ function createWindow() {
       preload: path.join(dirname, '../preload/index.mjs'),
       // Security: the renderer gets no direct Node access. Everything goes
       // through the command registry exposed by the preload script.
+      // The compositor that feeds recording and streaming runs on timers in
+      // this window. By default Chromium slows or stops a page that is
+      // minimized or covered, and a recording made then would run at about
+      // 1 frame per second (measured: 32 frames drawn in 30 seconds). A
+      // recorder has to keep running exactly when the user is looking at
+      // something else.
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // required for the preload to import 'electron'
@@ -70,6 +78,14 @@ function createWindow() {
 
 initLogger()
 installCrashHandlers()
+
+// Keep the page rendering when its window is covered, minimized or in the
+// background. Must be set before the app is ready. Verified to matter: with
+// these off, a minimized window draws about 1 frame per second.
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 // A second launch would open the same database file, register the same global
 // shortcuts and start competing capture sessions. Hand over to the window that
@@ -108,6 +124,7 @@ app.whenReady().then(() => {
   log.info(`ffmpeg: ${ffmpegBinary()} (${ffmpegAvailable() ? 'runs' : 'NOT FOUND OR NOT RUNNABLE'})`)
 
   registerCommands()
+  installDisplayMediaHandler(session.defaultSession)
   installDispatcher()
   createWindow()
 

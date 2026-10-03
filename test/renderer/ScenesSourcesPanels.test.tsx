@@ -16,6 +16,7 @@ let SourcesPanel: typeof import('../../src/components/panels/SourcesPanel')['Sou
 let useSceneStore: typeof import('../../src/stores/sceneStore')['useSceneStore']
 let useSourceStore: typeof import('../../src/stores/sourceStore')['useSourceStore']
 let useCaptureStore: typeof import('../../src/stores/captureStore')['useCaptureStore']
+let useUIStore: typeof import('../../src/stores/uiStore')['useUIStore']
 
 const scene = (id: string, name: string, orderIndex: number) =>
   ({ id, collectionId: 'c1', name, orderIndex, createdAt: 0, updatedAt: 0 })
@@ -32,6 +33,8 @@ beforeEach(async () => {
   vi.resetModules()
   localStorage.clear()
   bridge = installBridge()
+  // Selecting a scene fetches its sources; the real backend always answers with a list.
+  bridge.reply('list_sources', [])
   Object.defineProperty(navigator, 'mediaDevices', { value: {}, configurable: true })
 
   ScenesPanel = (await import('../../src/components/panels/ScenesPanel')).ScenesPanel
@@ -39,6 +42,7 @@ beforeEach(async () => {
   useSceneStore = (await import('../../src/stores/sceneStore')).useSceneStore
   useSourceStore = (await import('../../src/stores/sourceStore')).useSourceStore
   useCaptureStore = (await import('../../src/stores/captureStore')).useCaptureStore
+  useUIStore = (await import('../../src/stores/uiStore')).useUIStore
 
   useSceneStore.setState({
     collectionId: 'c1',
@@ -120,7 +124,11 @@ describe('sources panel', () => {
     const stream = { getTracks: () => [track], getVideoTracks: () => [track] }
     ;(navigator.mediaDevices as unknown as { getDisplayMedia: unknown }).getDisplayMedia =
       vi.fn(async () => stream)
-    await act(async () => { await useCaptureStore.getState().startCapture('a', 'display_capture') })
+    const target = { kind: 'screen' as const, id: 'screen:0:0', name: 'Entire screen' }
+    bridge.reply('list_capture_sources', [{ ...target, thumbnail: null, icon: null }])
+    await act(async () => {
+      await useCaptureStore.getState().startCapture('a', 'display_capture', target)
+    })
 
     render(<SourcesPanel />)
     await userEvent.click(row('Display'))
@@ -184,5 +192,74 @@ describe('sources panel', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(row('Webcam')).not.toHaveAttribute('aria-current')
+  })
+})
+
+describe('adding a capture source', () => {
+  // The header and the toolbar each have one; either opens the same dialog.
+  const addButton = () => screen.getAllByRole('button', { name: 'Add source' })[0]
+
+  async function pickType(label: string) {
+    await userEvent.click(addButton())
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(label, 'i') }))
+  }
+
+  // A capture source has nothing to show until it is told what to capture.
+  it('opens the picker for the source it just created', async () => {
+    bridge.reply('add_source', dto('created-1', 'Display Capture'))
+    render(<SourcesPanel />)
+
+    await pickType('Display Capture')
+
+    await vi.waitFor(() => expect(useUIStore.getState().modal?.type).toBe('capture-picker'))
+    expect(useUIStore.getState().modal?.payload).toMatchObject({
+      sceneId: 's1', sourceId: 'created-1', sourceType: 'display_capture',
+    })
+  })
+
+  // The panel used to pick "the last source in the scene", which after a
+  // failed add is a different source altogether.
+  it('does not open the picker, or touch another source, when the add fails', async () => {
+    // Another capture source already in the scene: the one the old code would
+    // have mistaken for the new one.
+    useSourceStore.getState().seedSources('s1', [dto('existing', 'Existing')])
+    bridge.fail('add_source', 'disk full')
+    render(<SourcesPanel />)
+
+    await pickType('Display Capture')
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+
+    expect(useUIStore.getState().modal).toBeNull()
+    expect(useCaptureStore.getState().activeIds).toEqual([])
+  })
+
+  it('does not open the picker for a source that does not capture', async () => {
+    bridge.reply('add_source', dto('created-2', 'Image'))
+    render(<SourcesPanel />)
+
+    await pickType('^Image')
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+
+    expect(useUIStore.getState().modal).toBeNull()
+  })
+})
+
+describe('capture status in the list', () => {
+  beforeEach(() => {
+    useSourceStore.getState().seedSources('s1', [dto('a', 'Display'), dto('b', 'Webcam')])
+  })
+
+  it('shows why a capture is not running', async () => {
+    useCaptureStore.setState({ errors: { a: '"Notepad" is not open.' } })
+    render(<SourcesPanel />)
+
+    expect(
+      within(screen.getByRole('group', { name: 'Display' })).getByRole('img', { name: /notepad.*not open/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows nothing when the capture is fine', () => {
+    render(<SourcesPanel />)
+    expect(screen.queryByRole('img', { name: /capture problem/i })).toBeNull()
   })
 })

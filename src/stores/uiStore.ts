@@ -12,6 +12,7 @@ export type ModalType =
   | 'scene-collection'
   | 'profile-manager'
   | 'add-source'
+  | 'capture-picker'
   | 'confirm'
   | 'rename'
   | 'plugins'
