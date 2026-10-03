@@ -9,6 +9,7 @@ import { usePluginStore } from '@/stores/pluginStore'
 import { useOutputStore } from '@/stores/outputStore'
 import { useNotifyStore, reportFailure } from '@/stores/notifyStore'
 import { ipc } from '@/ipc'
+import { startVirtualCamera } from '@/lib/outputs'
 import { cn } from '@/lib/utils'
 
 const REPO_URL = 'https://github.com/nareshh3105/project-1'
@@ -167,7 +168,7 @@ export function MenuBar() {
   async function toggleVirtualCamera() {
     try {
       if (virtualCamera.active) await ipc.output.stopVirtualCamera()
-      else                      await ipc.output.startVirtualCamera()
+      else                      await startVirtualCamera()
     } catch { /* surfaced in ControlsPanel */ }
   }
 

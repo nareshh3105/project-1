@@ -3,14 +3,11 @@ import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square, Save } from 
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { useAudioStore } from '@/stores/audioStore'
 import { ipc } from '@/ipc'
+import { startRecording, startReplayBuffer, startVirtualCamera } from '@/lib/outputs'
 
 export function ControlsPanel() {
   const openModal         = useUIStore((s) => s.openModal)
-  const recordingConfig   = useSettingsStore((s) => s.recording)
-  const audioChannels     = useAudioStore((s) => s.channels)
   const { recording, streaming, replayBuffer, virtualCamera, ffmpegAvailable } = useOutputStore((s) => ({
     recording:       s.recording,
     streaming:       s.streaming,
@@ -48,11 +45,7 @@ export function ControlsPanel() {
       if (recording.active) {
         await ipc.output.stopRecording()
       } else {
-        const tracks = recordingConfig.audioTracks.length > 0 ? recordingConfig.audioTracks : undefined
-        // Map device index → noise suppression using mic channel state for all aux tracks
-        const micNS = audioChannels.find((c) => c.id === 'mic')?.noiseSuppression ?? false
-        const nsFlags = tracks ? tracks.map(() => micNS) : undefined
-        await ipc.output.startRecording(undefined, tracks, nsFlags)
+        await startRecording()
       }
     } catch (e) {
       setRecError(String(e))
@@ -69,7 +62,7 @@ export function ControlsPanel() {
       if (replayBuffer.active) {
         await ipc.replay.stop()
       } else {
-        await ipc.replay.start(30)
+        await startReplayBuffer()
       }
     } catch (e) {
       setReplayError(String(e))
@@ -97,7 +90,7 @@ export function ControlsPanel() {
       if (virtualCamera.active) {
         await ipc.output.stopVirtualCamera()
       } else {
-        await ipc.output.startVirtualCamera()
+        await startVirtualCamera()
       }
     } catch (e) {
       setVcamError(String(e))

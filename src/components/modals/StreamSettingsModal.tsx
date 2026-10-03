@@ -3,7 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { X, Eye, EyeOff } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
-import { ipc } from '@/ipc'
+import { startStreaming } from '@/lib/outputs'
 import { cn } from '@/lib/utils'
 
 export function StreamSettingsModal() {
@@ -40,7 +40,7 @@ export function StreamSettingsModal() {
     setStarting(true)
     try {
       setStreamSettings(url, streamKey.trim())
-      await ipc.output.startStreaming(url, streamKey.trim())
+      await startStreaming(url, streamKey.trim())
       closeModal()
     } catch (e) {
       setError(String(e))

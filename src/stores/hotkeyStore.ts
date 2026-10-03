@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { DEFAULT_HOTKEYS, type Hotkey, type KeyBinding, type ModifierKey } from '@/types/hotkey'
 import { ipc, onHotkeyPressed } from '@/ipc'
 import { generateId } from '@/lib/utils'
+import { startRecording, startStreaming, startReplayBuffer, startVirtualCamera } from '@/lib/outputs'
 import { readPersisted, writePersisted, isArrayOf, isRecord } from '@/lib/persist'
 
 const STORAGE_KEY = 'cb:hotkeys'
@@ -72,7 +73,7 @@ async function dispatchAction(action: string): Promise<void> {
     case 'start_recording':
       if (!output.recording.active) {
         const path = await ipc.output.getRecordingPath().catch(() => null)
-        await ipc.output.startRecording(path ?? undefined).catch(console.warn)
+        await startRecording(path ?? undefined).catch(console.warn)
       }
       break
 
@@ -84,7 +85,7 @@ async function dispatchAction(action: string): Promise<void> {
     case 'start_streaming':
       if (!output.streaming.active) {
         const { rtmpUrl, streamKey } = output.stream
-        if (rtmpUrl) await ipc.output.startStreaming(rtmpUrl, streamKey).catch(console.warn)
+        if (rtmpUrl) await startStreaming(rtmpUrl, streamKey).catch(console.warn)
       }
       break
 
@@ -95,7 +96,7 @@ async function dispatchAction(action: string): Promise<void> {
 
     case 'start_replay_buffer':
       if (!output.replayBuffer.active)
-        await ipc.replay.start(30).catch(console.warn)
+        await startReplayBuffer().catch(console.warn)
       break
 
     case 'stop_replay_buffer':
@@ -112,7 +113,7 @@ async function dispatchAction(action: string): Promise<void> {
       if (output.virtualCamera.active)
         await ipc.output.stopVirtualCamera().catch(console.warn)
       else
-        await ipc.output.startVirtualCamera().catch(console.warn)
+        await startVirtualCamera().catch(console.warn)
       break
 
     case 'take_screenshot':

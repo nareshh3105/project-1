@@ -14,7 +14,6 @@ import {
 } from '@/stores/hotkeyStore'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
-import { ipc } from '@/ipc'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
@@ -305,25 +304,6 @@ function OutputTab({
   draft: RecordingConfig
   set:   (patch: Partial<RecordingConfig>) => void
 }) {
-  const [devices,  setDevices]  = useState<string[]>([])
-  const [loading,  setLoading]  = useState(false)
-  const [devError, setDevError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    ipc.output.listAudioDevices()
-      .then(setDevices)
-      .catch((e) => setDevError(String(e)))
-      .finally(() => setLoading(false))
-  }, [])
-
-  function toggleTrack(device: string) {
-    const next = draft.audioTracks.includes(device)
-      ? draft.audioTracks.filter((d) => d !== device)
-      : [...draft.audioTracks, device]
-    set({ audioTracks: next })
-  }
-
   return (
     <div>
       <SectionHeader title="Recording" />
@@ -338,51 +318,41 @@ function OutputTab({
         />
       </Row>
 
-      <SectionHeader title="Audio Tracks" />
-      <p className="text-caption text-text-muted mb-2">
-        Select audio devices to embed as separate tracks in the recording.
-        Leave empty to record without audio.
+      <SectionHeader title="Encoding" />
+      <Row label="Video Encoder">
+        <Sel
+          value={draft.encoder}
+          onChange={(v) => set({ encoder: v as RecordingConfig['encoder'] })}
+          options={[
+            { value: 'auto', label: 'Automatic (hardware if available)' },
+            { value: 'hardware', label: 'Hardware only' },
+            { value: 'software', label: 'Software (x264-class, more CPU)' },
+          ]}
+        />
+      </Row>
+      <Row label="Video Bitrate">
+        <Sel
+          value={String(draft.videoBitrateKbps)}
+          onChange={(v) => set({ videoBitrateKbps: Number(v) })}
+          options={[
+            { value: '0', label: 'Automatic (suits the resolution)' },
+            ...[2500, 4000, 6000, 8000, 12000, 20000, 35000].map((k) => ({
+              value: String(k), label: `${(k / 1000).toFixed(1)} Mbps`,
+            })),
+          ]}
+        />
+      </Row>
+      <Row label="Audio Bitrate">
+        <Sel
+          value={String(draft.audioBitrateKbps)}
+          onChange={(v) => set({ audioBitrateKbps: Number(v) })}
+          options={[96, 128, 160, 192, 256, 320].map((k) => ({ value: String(k), label: `${k} kbps` }))}
+        />
+      </Row>
+      <p className="text-caption text-text-muted mt-3">
+        Resolution and frame rate come from the Video tab. What you hear in the audio mixer,
+        at the levels you set, is what is recorded and streamed.
       </p>
-
-      {loading && (
-        <p className="text-caption text-text-muted py-2">Loading audio devices…</p>
-      )}
-      {devError && (
-        <p className="text-caption text-state-danger py-2">{devError}</p>
-      )}
-      {!loading && !devError && devices.length === 0 && (
-        <p className="text-caption text-text-muted py-2">
-          No audio devices found. Make sure ffmpeg is installed and audio devices are available.
-        </p>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        {devices.map((device) => {
-          const checked = draft.audioTracks.includes(device)
-          return (
-            <label
-              key={device}
-              className="flex items-center gap-2.5 py-1.5 border-b border-bg-divider/40 last:border-0 cursor-pointer group"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleTrack(device)}
-                className="w-4 h-4 rounded accent-accent-primary cursor-pointer"
-              />
-              <span className="text-body text-text-secondary group-hover:text-text-primary transition-colors">
-                {device}
-              </span>
-            </label>
-          )
-        })}
-      </div>
-
-      {draft.audioTracks.length > 0 && (
-        <p className="text-caption text-text-muted mt-3">
-          {draft.audioTracks.length} track{draft.audioTracks.length > 1 ? 's' : ''} will be embedded: each can be independently adjusted in post-production.
-        </p>
-      )}
     </div>
   )
 }

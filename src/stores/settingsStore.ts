@@ -9,8 +9,11 @@ const STORAGE_KEY = 'cb:settings'
 
 export interface RecordingConfig {
   format:       'mkv' | 'mp4'
-  audioTracks:  string[]   // dshow audio device names to embed as separate tracks
   outputFolder: string     // empty = default ~/Videos
+  /** Video bitrate in kbit/s; 0 picks one to suit the resolution and frame rate. */
+  videoBitrateKbps: number
+  audioBitrateKbps: number
+  encoder:      'auto' | 'hardware' | 'software'
 }
 
 export const DEFAULT_GENERAL: GeneralSettings = {
@@ -38,8 +41,10 @@ export const DEFAULT_VIDEO: VideoSettings = {
 
 export const DEFAULT_RECORDING: RecordingConfig = {
   format:       'mkv',
-  audioTracks:  [],
   outputFolder: '',
+  videoBitrateKbps: 0,
+  audioBitrateKbps: 160,
+  encoder:      'auto',
 }
 
 export const DEFAULT_AUDIO: AudioSettings = {
