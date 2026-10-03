@@ -21,13 +21,13 @@ beforeEach(async () => {
 })
 
 /** Runs a command the way installDispatcher's handler would. */
-async function invoke(name: string, args: Record<string, unknown> = {}) {
+async function invoke(name: string, args: Record<string, unknown> = {}, event: unknown = {}) {
   const { ipcMain } = await import('electron')
   ipc.installDispatcher()
 
   const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
   if (!handler) throw new Error('dispatcher was not installed')
-  return handler({}, name, args)
+  return handler(event, name, args)
 }
 
 describe('command registry', () => {
@@ -77,8 +77,7 @@ describe('dispatch', () => {
   it('tells the handler which window is asking', async () => {
     const spy = vi.fn(() => null)
     ipc.command('who', spy)
-    const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
-    await handler({ sender: { id: 42 } }, 'who', {})
+    await invoke('who', {}, { sender: { id: 42 } })
     expect(spy).toHaveBeenCalledWith({}, { senderId: 42 })
   })
 
