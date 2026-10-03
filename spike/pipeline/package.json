@@ -1,0 +1,1 @@
+{"name":"pipeline-spike","private":true,"description":"Experiment only; not part of the app.","dependencies":{"mp4-muxer":"^5.2.2"}}
