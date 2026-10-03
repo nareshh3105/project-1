@@ -12,6 +12,8 @@
  */
 export const IPC_EVENTS = {
   RECORDING_STATUS: 'output:recording-status',
+  /** An output ended on its own: FFmpeg died, or the host's encoder failed. */
+  OUTPUT_ERROR:     'output:error',
   STREAM_STATUS:    'output:stream-status',
   REPLAY_STATUS:    'output:replay-status',
   VCAM_STATUS:      'output:virtual-camera-status',

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { SEND_CHANNELS, RECEIVE_CHANNELS } from '../../shared/host'
 
 /**
  * The only channel the renderer is given. Everything the interface can ask the
@@ -21,6 +22,25 @@ const api = {
     }
     ipcRenderer.on('cb:event', listener)
     return () => ipcRenderer.removeListener('cb:event', listener)
+  },
+
+  /**
+   * Fire-and-forget message to the main process, for the output host: encoded
+   * chunks arrive many times a second and a request/response round trip for
+   * each would be wasteful. Only the named host channels are allowed, so a
+   * compromised page cannot use this to reach arbitrary handlers.
+   */
+  send(channel: string, ...args: unknown[]): void {
+    if (!SEND_CHANNELS.includes(channel)) throw new Error(`Channel not allowed: ${channel}`)
+    ipcRenderer.send(channel, ...args)
+  },
+
+  /** Listen on one of the host's receive channels. Returns an unsubscribe function. */
+  listen(channel: string, callback: (...args: unknown[]) => void): () => void {
+    if (!RECEIVE_CHANNELS.includes(channel)) throw new Error(`Channel not allowed: ${channel}`)
+    const listener = (_e: unknown, ...args: unknown[]) => callback(...args)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
   },
 }
 
