@@ -28,6 +28,8 @@ export interface AudioRig {
   dispose(): void
   /** Maps a position on the audio clock to wall-clock ms. */
   toWallMs(ctxSec: number): number
+  /** Where the audio clock is, for checking that it keeps up with real time. */
+  debug?(): { state: string; ctxSec: number; perfMs: number; sinkId: string }
 }
 
 export interface AudioBlock {
@@ -91,6 +93,17 @@ export class HostApp {
     this.unlisten = []
     for (const kind of [...this.running.keys()]) this.abort(kind)
     this.releaseIdle()
+  }
+
+  /** Diagnostics, readable from the host page's console. */
+  debug() {
+    return {
+      active: this.active,
+      captures: this.pool.debug(),
+      audio: this.audio?.debug?.() ?? null,
+      snapshot: this.snapshot,
+      sessions: [...this.running.values()].map((r) => ({ kind: r.kind, ...r.session.stats() })),
+    }
   }
 
   get active(): OutputKind[] {

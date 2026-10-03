@@ -172,3 +172,31 @@ describe('kindOf', () => {
     expect(kindOf('window:5:0')).toBe('window')
   })
 })
+
+describe('several windows at once', () => {
+  // The interface and the output host both open captures, sometimes together.
+  it('keeps the choice of each window apart', async () => {
+    broker.prepare('screen:1:0', false, 1)
+    broker.prepare('window:11:0', false, 2)
+
+    expect((await broker.resolve(2))?.video.id).toBe('window:11:0')
+    expect((await broker.resolve(1))?.video.id).toBe('screen:1:0')
+  })
+
+  it('does not let one window use the choice of another', async () => {
+    broker.prepare('screen:1:0', false, 1)
+
+    expect(await broker.resolve(2)).toBeNull()
+    // And the owner still has theirs.
+    expect((await broker.resolve(1))?.video.id).toBe('screen:1:0')
+  })
+
+  it('replaces only an earlier choice from the same window', async () => {
+    broker.prepare('screen:0:0', false, 1)
+    broker.prepare('screen:1:0', false, 2)
+    broker.prepare('window:11:0', false, 1)
+
+    expect((await broker.resolve(1))?.video.id).toBe('window:11:0')
+    expect((await broker.resolve(2))?.video.id).toBe('screen:1:0')
+  })
+})

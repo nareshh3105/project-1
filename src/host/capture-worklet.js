@@ -14,9 +14,10 @@ class CaptureProcessor extends AudioWorkletProcessor {
 
   process(inputs) {
     const input = inputs[0]
-    const l = input && input[0]
-    if (!l) return true
-    const r = input[1] || l
+    // With nothing connected the graph delivers no channels. The recording still
+    // needs a continuous track, so that is silence rather than a gap.
+    const l = (input && input[0]) || new Float32Array(128)
+    const r = (input && input[1]) || l
 
     if (this.count === 0) this.startFrame = currentFrame
     this.left.push(l.slice())

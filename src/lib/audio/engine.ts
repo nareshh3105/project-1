@@ -2,6 +2,7 @@ import {
   SILENT, decayPeak, measure, type ChannelLevels,
 } from './levels'
 import { ipc } from '@/ipc'
+import { exclusively } from '@/lib/capture/gate'
 
 /**
  * Real per-channel audio metering.
@@ -223,8 +224,10 @@ export async function requestDesktopAudio(): Promise<MediaStream> {
     const screens = await ipc.capture.listSources(['screen'])
     if (screens.length === 0) throw new Error('No screen was found to attach system audio to.')
 
-    await ipc.capture.prepare(screens[0].id, true)
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    stream = await exclusively(async () => {
+      await ipc.capture.prepare(screens[0].id, true)
+      return navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    })
   } catch (err) {
     throw new Error(describeMediaError(err, 'system audio'))
   }

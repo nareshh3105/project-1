@@ -1,7 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
+/** Who is asking: the id of the window's web contents. */
+export interface CommandContext {
+  senderId: number
+}
+
 export type CommandHandler = (
   args: Record<string, unknown>,
+  context: CommandContext,
 ) => unknown | Promise<unknown>
 
 const registry = new Map<string, CommandHandler>()
@@ -27,12 +33,12 @@ export function registeredCommands(): string[] {
  * bare message.
  */
 export function installDispatcher() {
-  ipcMain.handle('cb:invoke', async (_event, name: string, args = {}) => {
+  ipcMain.handle('cb:invoke', async (event, name: string, args = {}) => {
     const handler = registry.get(name)
     if (!handler) throw `Unknown command: ${name}`
 
     try {
-      return await handler(args ?? {})
+      return await handler(args ?? {}, { senderId: event.sender.id })
     } catch (err) {
       throw err instanceof Error ? err.message : String(err)
     }

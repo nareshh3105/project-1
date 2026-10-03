@@ -18,7 +18,13 @@ import workletUrl from './capture-worklet.js?url'
 const BLOCK_MS = (1024 / SAMPLE_RATE) * 1000
 
 export async function createAudioRig(onBlock: (block: AudioBlock) => void): Promise<AudioRig> {
-  const context = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' })
+  // No output device. A context tied to the speakers runs at the speed of the
+  // speakers' clock and glitches with them: measured at 93% of real time, which
+  // meant about 7% of the audio was lost. Without a device the context renders
+  // on a timer and measures 99.8%. Nothing needs to be audible here anyway.
+  const context = new AudioContext({
+    sampleRate: SAMPLE_RATE, latencyHint: 'interactive', sinkId: { type: 'none' },
+  } as AudioContextOptions)
   if (context.state === 'suspended') await context.resume()
 
   await context.audioWorklet.addModule(workletUrl)
@@ -60,6 +66,7 @@ export async function createAudioRig(onBlock: (block: AudioBlock) => void): Prom
   return {
     apply: (channels) => mixer.apply(channels),
     toWallMs: (ctxSec) => clock.toPerfMs(ctxSec),
+    debug: () => ({ state: context.state, ctxSec: context.currentTime, perfMs: performance.now(), sinkId: String((context as unknown as { sinkId?: unknown }).sinkId ?? '') }),
     dispose: () => {
       mixer.dispose()
       worklet.port.onmessage = null

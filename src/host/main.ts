@@ -44,9 +44,7 @@ const app = new HostApp({
   bridge,
   session,
   pool: {
-    // Opening a capture is a two-step handshake with the main process (declare the
-    // choice, then ask for it); two at once would cross, so they go one at a time.
-    open: serialized(openCaptureStream),
+    open: openCaptureStream,
     createVideo: () => {
       const video = document.createElement('video')
       video.muted = true
@@ -72,14 +70,5 @@ const app = new HostApp({
 })
 
 app.start()
+;(window as unknown as { __host: HostApp }).__host = app
 window.addEventListener('beforeunload', () => app.dispose())
-
-/** Runs calls one after another, whatever order they were made in or whether one fails. */
-function serialized<A, R>(fn: (arg: A) => Promise<R>): (arg: A) => Promise<R> {
-  let tail: Promise<unknown> = Promise.resolve()
-  return (arg) => {
-    const run = tail.then(() => fn(arg))
-    tail = run.catch(() => {})
-    return run
-  }
-}

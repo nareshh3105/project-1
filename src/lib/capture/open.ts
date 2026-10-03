@@ -1,4 +1,5 @@
 import { ipc } from '@/ipc'
+import { exclusively } from './gate'
 import { resolveTarget, missingMessage, type CaptureTarget, type LiveSource } from './target'
 
 /**
@@ -33,9 +34,11 @@ export async function openCaptureStream(target: CaptureTarget): Promise<MediaStr
 
   // Electron grants a screen capture only to a choice made through the broker
   // just beforehand, so say what is wanted and then ask for it.
-  await ipc.capture.prepare(live.id, false)
-  return navigator.mediaDevices.getDisplayMedia({
-    video: { frameRate: 30 } as MediaTrackConstraints,
-    audio: false,
+  return exclusively(async () => {
+    await ipc.capture.prepare(live.id, false)
+    return navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30 } as MediaTrackConstraints,
+      audio: false,
+    })
   })
 }

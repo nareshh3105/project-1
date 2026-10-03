@@ -99,6 +99,15 @@ export class CapturePool {
     for (const id of [...this.entries.keys()]) this.release(id)
   }
 
+  /** What each capture is doing, for finding out why a picture is not changing. */
+  debug(): Array<{ id: string; state: State; time: number; readyState: number; width: number; height: number; error: string | null }> {
+    return [...this.entries].map(([id, e]) => ({
+      id, state: e.state, error: e.error,
+      time: (e.video as unknown as { currentTime?: number }).currentTime ?? 0,
+      readyState: e.video.readyState, width: e.video.videoWidth, height: e.video.videoHeight,
+    }))
+  }
+
   get size(): number {
     return this.entries.size
   }
