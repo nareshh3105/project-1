@@ -1,10 +1,8 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { SourceType } from '@/types'
-import { ipc } from '@/ipc'
-import {
-  resolveTarget, missingMessage, type CaptureTarget, type LiveSource,
-} from '@/lib/capture/target'
+import type { CaptureTarget } from '@/lib/capture/target'
+import { openCaptureStream } from '@/lib/capture/open'
 
 export const CAPTURE_SOURCE_TYPES: SourceType[] = [
   'display_capture', 'window_capture', 'game_capture', 'dshow_video',
@@ -33,38 +31,6 @@ interface CaptureActions {
   getStream:    (sourceId: string) => MediaStream | undefined
 }
 
-/** What the system can capture right now for a kind of target. */
-async function liveSources(target: CaptureTarget): Promise<LiveSource[]> {
-  if (target.kind === 'camera') {
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    return devices
-      .filter((d) => d.kind === 'videoinput')
-      .map((d, i) => ({ id: d.deviceId, name: d.label || `Camera ${i + 1}` }))
-  }
-  const sources = await ipc.capture.listSources([target.kind])
-  return sources.map((s) => ({ id: s.id, name: s.name }))
-}
-
-async function openStream(target: CaptureTarget): Promise<MediaStream> {
-  const live = resolveTarget(target, await liveSources(target))
-  if (!live) throw new Error(missingMessage(target))
-
-  if (target.kind === 'camera') {
-    return navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: live.id } },
-      audio: false,
-    })
-  }
-
-  // Electron grants a screen capture only to a choice made through the broker
-  // just beforehand, so say what is wanted and then ask for it.
-  await ipc.capture.prepare(live.id, false)
-  return navigator.mediaDevices.getDisplayMedia({
-    video: { frameRate: 30 } as MediaTrackConstraints,
-    audio: false,
-  })
-}
-
 export const useCaptureStore = create<CaptureState & CaptureActions>()(
   immer((set) => ({
     activeIds: [],
@@ -88,7 +54,7 @@ export const useCaptureStore = create<CaptureState & CaptureActions>()(
       }
 
       try {
-        const stream = await openStream(target)
+        const stream = await openCaptureStream(target)
 
         // Detect when the user clicks "Stop sharing", or the window closes.
         stream.getVideoTracks().forEach((track) => {
