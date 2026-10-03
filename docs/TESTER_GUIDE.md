@@ -41,6 +41,10 @@ well as anything that is broken.
 - [ ] The app opens, and the empty preview tells you what to do.
 - [ ] Add a Display Capture source and pick a screen. It appears in the preview.
 - [ ] Add a second source (a window, or a camera). Both show in the preview.
+- [ ] Click a source in the preview and drag it. Drag a handle to resize it. Hold
+      Shift on a corner to stretch freely. Arrow keys nudge it (Shift for 10 pixels).
+      Press Escape mid-drag to put it back.
+- [ ] Record with the sources arranged like that: the recording shows the same arrangement.
 
 **Scenes and sources**
 - [ ] Add, rename, duplicate and delete scenes. New scenes get sensible names.
@@ -50,13 +54,17 @@ well as anything that is broken.
 
 **Recording and streaming**
 - [ ] Start and stop a recording. The file appears in your Videos folder and plays.
+- [ ] Minimize CodeBuilders while recording. The recording carries on with no gaps.
+- [ ] In Settings → Output, try the encoder and bitrate options.
 - [ ] Record twice quickly. You get two files, neither overwritten.
 - [ ] Replay buffer: start it, wait, save a replay.
 - [ ] Streaming, only if you have a test stream key. **Do not paste a real stream key into a bug report.**
 
 **Audio**
 - [ ] Connect the microphone and the desktop audio from the Audio Mixer header. The meters move.
-- [ ] Mute a channel. The strip dims.
+- [ ] Mute a channel. The strip dims. Record a few seconds: that channel is silent in the file.
+- [ ] Move a fader, close the app and open it again. The fader is where you left it, and the
+      inputs you had connected connect again by themselves.
 
 **Settings**
 - [ ] Change a setting, press Cancel, reopen. It did not change. Change it, press OK. It did.
@@ -77,10 +85,21 @@ that, and the newest file from `%APPDATA%\CodeBuilders\logs`.
 
 ## Known limitations
 
-- Image and text sources are placeholders in the preview; they are not drawn yet.
-- Sources cannot yet be dragged or resized in the preview.
-- The Language setting is not wired to anything yet; the app is English only.
-- Audio device choices in Settings → Audio are not applied yet. Use the
-  Mic and Desktop buttons in the Audio Mixer.
+- Only Display, Window, Game (captures the game's window) and Video Capture
+  sources are drawn into recordings. The other source types are shown greyed
+  out in the Add Source dialog.
+- 1080p at 60 fps is at the edge of what this build manages on a typical
+  laptop: expect an occasional dropped frame. 1080p at 30 fps and 720p at 30 fps
+  are steady. If a 60 fps recording looks uneven, drop to 30 fps in Settings → Video.
+- Sound can be up to about 70 ms ahead of or behind the picture. Nothing drifts
+  over a long recording, but it is not frame-exact.
+- Sound is the system default microphone and everything the computer plays.
+  Choosing a specific device is not available yet.
+- The virtual camera is a video stream on `udp://127.0.0.1:12345` for other
+  programs that can open a network stream (OBS, VLC, FFmpeg). It does not
+  appear as a webcam in Zoom or Teams yet.
+- The interface is in English only.
 - Hotkey changes in Settings apply immediately and are not reverted by Cancel.
+- While recording, the whole of what you put on the canvas is captured. If a
+  private window is open on the screen you are recording, it is recorded.
 - Windows only.
