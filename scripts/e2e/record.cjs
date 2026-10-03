@@ -26,6 +26,7 @@ const fps = Number(flag('fps', 30))
 const [width, height] = flag('res', '1280x720').split('x').map(Number)
 const minimize = !args.includes('--no-minimize')
 const withSync = args.includes('--sync')
+const arrange = args.includes('--arrange')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -93,6 +94,24 @@ function cpuSeconds(dir) {
   return out
 }
 
+/**
+ * Brightest the corners and the middle of the picture ever get. With the source
+ * shrunk to the middle and the screen flashing white, the middle must reach
+ * white while the corners stay black.
+ */
+function arrangeCheck(file) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const peak = (crop) => {
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-i', file, '-map', '0:v:0', '-vf',
+      `crop=${crop},scale=16:9,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    const ys = [...r.stdout.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]))
+    return ys.length ? Math.max(...ys) : null
+  }
+  // Fractions of the frame: a corner patch, and a patch in the middle.
+  return { cornerPeak: peak('iw*0.15:ih*0.15:0:0'), centrePeak: peak('iw*0.3:ih*0.3:iw*0.35:ih*0.35') }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -125,10 +144,17 @@ async function main() {
     const screens = await invoke('list_capture_sources', { kinds: ['screen'] })
     if (!screens.length) throw new Error('No screen to capture')
     const target = { kind: 'screen', id: screens[0].id, name: screens[0].name }
-    await invoke('add_source', {
+    const added = await invoke('add_source', {
       sceneId, name: 'Screen', sourceType: 'display_capture',
       settings: JSON.stringify({ capture: target }),
     })
+    if (arrange) {
+      // Half size, centred: the corners of the recording must stay black.
+      await invoke('set_source_transform', {
+        id: added.id,
+        transform: JSON.stringify({ x: 480, y: 270, width: 960, height: 540, rotation: 0, scaleX: 1, scaleY: 1 }),
+      })
+    }
     await ui.eval('location.reload()')
     await sleep(2500)
     // The page reloaded: reconnect.
@@ -273,6 +299,7 @@ main()
       console.log('--- app log ---\n' + r.appLog.slice(-3000))
       process.exit(1)
     }
+    if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)
     // The recording is of the real screen and may show private things; it is

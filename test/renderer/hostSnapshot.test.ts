@@ -24,16 +24,26 @@ const channel = (id: string, over: Partial<AudioChannel> = {}): AudioChannel => 
 const BASE = { width: 1920, height: 1080 }
 
 describe('buildSnapshot', () => {
-  // The list shows the top layer first; the host draws bottom first.
-  it('puts the bottom layer first', () => {
-    const snap = buildSnapshot({ sources: [source('top'), source('mid'), source('bottom')], base: BASE, channels: [], connected: [] })
+  // The preview paints by orderIndex, lowest at the bottom; so must the recording.
+  it('stacks layers by orderIndex, lowest at the bottom, whatever the list order', () => {
+    const snap = buildSnapshot({
+      sources: [source('top', { orderIndex: 2 }), source('bottom', { orderIndex: 0 }), source('mid', { orderIndex: 1 })],
+      base: BASE, channels: [], connected: [],
+    })
     const drawOrder = [...snap.sources].sort((a, b) => a.order - b.order).map((s) => s.id)
     expect(drawOrder).toEqual(['bottom', 'mid', 'top'])
   })
 
+  it('does not reorder the list it was given', () => {
+    const list = [source('b', { orderIndex: 1 }), source('a', { orderIndex: 0 })]
+    buildSnapshot({ sources: list, base: BASE, channels: [], connected: [] })
+    expect(list.map((s) => s.id)).toEqual(['b', 'a'])
+  })
+
   it('leaves out hidden sources, and ranks the rest without gaps', () => {
     const snap = buildSnapshot({
-      sources: [source('a'), source('hidden', { visible: false }), source('b')], base: BASE, channels: [], connected: [],
+      sources: [source('a', { orderIndex: 0 }), source('hidden', { visible: false, orderIndex: 1 }), source('b', { orderIndex: 2 })],
+      base: BASE, channels: [], connected: [],
     })
     expect(snap.sources.map((s) => s.id)).toEqual(['a', 'b'])
     expect(snap.sources.map((s) => s.order).sort()).toEqual([0, 1])

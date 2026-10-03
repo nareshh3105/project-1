@@ -75,6 +75,10 @@ interface UIState {
   // Fullscreen preview overlay (program output, no chrome)
   fullscreenPreview: boolean
 
+  // The source picked in the Sources panel or on the preview canvas. Shared so
+  // that choosing in one place selects it in the other.
+  selectedSourceId: string | null
+
   // App-level loading
   appReady: boolean
 }
@@ -95,6 +99,8 @@ interface UIActions {
   setStats: (stats: RuntimeStats) => void
 
   setAppReady: (ready: boolean) => void
+
+  selectSource: (id: string | null) => void
 
   toggleFullscreenPreview: () => void
   setFullscreenPreview: (enabled: boolean) => void
@@ -119,6 +125,7 @@ export const useUIStore = create<UIState & UIActions>()(
     statsOverlayVisible: false,
     stats: null,
     fullscreenPreview: false,
+    selectedSourceId: null,
     appReady: false,
 
     setLayoutJson: (json) =>
@@ -153,6 +160,9 @@ export const useUIStore = create<UIState & UIActions>()(
 
     setAppReady: (ready) =>
       set((s) => { s.appReady = ready }),
+
+    selectSource: (id) =>
+      set((s) => { s.selectedSourceId = id }),
 
     toggleFullscreenPreview: () =>
       set((s) => { s.fullscreenPreview = !s.fullscreenPreview }),

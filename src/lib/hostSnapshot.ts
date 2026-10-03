@@ -11,7 +11,7 @@ import { parseCaptureTarget } from '@/lib/capture/target'
  */
 
 interface SnapshotInput {
-  /** The sources of the scene being output, in the interface's order: index 0 is the top layer. */
+  /** The sources of the scene being output, in any order; their orderIndex says where each sits. */
   sources: readonly SourceItem[]
   base: { width: number; height: number }
   channels: readonly AudioChannel[]
@@ -19,16 +19,17 @@ interface SnapshotInput {
 }
 
 export function buildSnapshot({ sources, base, channels, connected }: SnapshotInput): HostSnapshot {
-  const visible = sources.filter((s) => s.visible)
+  // The preview paints by orderIndex, lowest at the bottom. The recording has to
+  // stack them the same way, whatever order the list happens to be held in.
+  const visible = sources.filter((s) => s.visible).sort((a, b) => a.orderIndex - b.orderIndex)
 
   return {
     base: { width: base.width, height: base.height },
-    // The interface lists the top layer first; the host draws the bottom first.
     sources: visible
       .map((s, i) => ({
         id: s.id,
         type: s.sourceType,
-        order: visible.length - 1 - i,
+        order: i,
         transform: { ...s.transform },
         target: parseCaptureTarget(s.settings),
       })),

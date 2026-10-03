@@ -63,7 +63,8 @@ export function SourcesPanel() {
   const [addOpen,      setAddOpen]      = useState(false)
   const [renameTarget, setRenameTarget] = useState<SourceItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SourceItem | null>(null)
-  const [selectedId,   setSelectedId]   = useState<string | null>(null)
+  const selectedId = useUIStore((s) => s.selectedSourceId)
+  const setSelectedId = useUIStore((s) => s.selectSource)
 
   // Derived from the live list rather than trusted: the id used to outlive its
   // source (removed from the context menu, or the scene switched away), which
