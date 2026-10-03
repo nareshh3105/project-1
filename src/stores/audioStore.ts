@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { readPersisted, writePersisted, isRecord } from '@/lib/persist'
 
 export interface ChannelLevels {
   peakL: number   // dBFS, -100 = silence
@@ -28,8 +29,52 @@ function silentLevels(): ChannelLevels {
   return { peakL: -100, peakR: -100, rmsL: -100, rmsR: -100 }
 }
 
-function makeChannel(id: string, name: string): AudioChannel {
-  return { id, name, volume: 1, muted: false, noiseSuppression: false, levels: silentLevels() }
+// ── What survives a restart ──
+// Fader positions, mutes and which inputs were connected: an installed mixer
+// comes back the way it was left, not with every fader at full and no sound.
+
+const MIXER_KEY = 'cb:mixer'
+
+interface RememberedChannel { volume?: unknown; muted?: unknown; noiseSuppression?: unknown }
+interface Remembered { channels: Record<string, RememberedChannel>; inputs: string[] }
+
+const isRemembered = (v: unknown): v is Remembered =>
+  isRecord(v) && isRecord(v.channels) && Array.isArray(v.inputs)
+
+const remembered = (): Remembered =>
+  readPersisted(MIXER_KEY, isRemembered, () => ({ channels: {}, inputs: [] }))
+
+function makeChannel(id: string, name: string, saved: RememberedChannel = {}): AudioChannel {
+  const volume = typeof saved.volume === 'number' && Number.isFinite(saved.volume)
+    ? Math.min(1, Math.max(0, saved.volume)) : 1
+  return {
+    id, name, volume,
+    muted: saved.muted === true,
+    noiseSuppression: saved.noiseSuppression === true,
+    levels: silentLevels(),
+  }
+}
+
+/** The inputs the user had connected last time, to be reconnected at launch. */
+export const rememberedInputs = (): string[] =>
+  remembered().inputs.filter((x): x is string => typeof x === 'string')
+
+/** Records whether the user wants an input connected. */
+export function rememberInput(id: string, wanted: boolean): void {
+  const saved = remembered()
+  const inputs = saved.inputs.filter((x) => x !== id)
+  if (wanted) inputs.push(id)
+  writePersisted(MIXER_KEY, { ...saved, inputs })
+}
+
+function saveChannels(channels: AudioChannel[]): void {
+  const saved = remembered()
+  writePersisted(MIXER_KEY, {
+    ...saved,
+    channels: Object.fromEntries(
+      channels.map((c) => [c.id, { volume: c.volume, muted: c.muted, noiseSuppression: c.noiseSuppression }]),
+    ),
+  })
 }
 
 interface AudioState {
@@ -52,7 +97,7 @@ interface AudioActions {
 
 export const useAudioStore = create<AudioState & AudioActions>()(
   immer((set) => ({
-    channels: CHANNEL_DEFS.map(({ id, name }) => makeChannel(id, name)),
+    channels: CHANNEL_DEFS.map(({ id, name }) => makeChannel(id, name, remembered().channels[id] as RememberedChannel | undefined)),
     connected: [],
     errors: {},
 
@@ -60,18 +105,21 @@ export const useAudioStore = create<AudioState & AudioActions>()(
       set((s) => {
         const ch = s.channels.find((c) => c.id === id)
         if (ch) ch.volume = volume
+        saveChannels(s.channels)
       }),
 
     setMuted: (id, muted) =>
       set((s) => {
         const ch = s.channels.find((c) => c.id === id)
         if (ch) ch.muted = muted
+        saveChannels(s.channels)
       }),
 
     setNoiseSuppression: (id, enabled) =>
       set((s) => {
         const ch = s.channels.find((c) => c.id === id)
         if (ch) ch.noiseSuppression = enabled
+        saveChannels(s.channels)
       }),
 
     updateLevels: (id, levels) =>

@@ -11,6 +11,8 @@ interface SourceTypeDef {
   label: string
   icon: React.ReactNode
   description: string
+  /** Shown instead of the description when the type cannot be used yet. */
+  unavailable?: string
 }
 
 const SOURCE_TYPES: SourceTypeDef[] = [
@@ -18,14 +20,14 @@ const SOURCE_TYPES: SourceTypeDef[] = [
   { type: 'window_capture',   label: 'Window Capture',     icon: <AppWindow size={20} />,  description: 'Capture a specific window' },
   { type: 'game_capture',     label: 'Game Capture',       icon: <Gamepad2 size={20} />,   description: 'DirectX / Vulkan game hook' },
   { type: 'dshow_video',      label: 'Video Capture',      icon: <Camera size={20} />,     description: 'Webcam or capture card' },
-  { type: 'wasapi_output',    label: 'Desktop Audio',      icon: <Speaker size={20} />,    description: 'System audio loopback' },
-  { type: 'wasapi_input',     label: 'Microphone',         icon: <Mic size={20} />,        description: 'Microphone or audio input' },
-  { type: 'image',            label: 'Image',              icon: <Image size={20} />,      description: 'PNG, JPG or animated GIF' },
-  { type: 'media_source',     label: 'Media Source',       icon: <Film size={20} />,       description: 'Video or audio file / URL' },
-  { type: 'browser_source',   label: 'Browser Source',     icon: <Globe size={20} />,      description: 'Web overlay via CEF' },
-  { type: 'color_source',     label: 'Color Source',       icon: <Palette size={20} />,    description: 'Solid color fill' },
-  { type: 'text_gdi_plus',    label: 'Text (GDI+)',        icon: <Type size={20} />,       description: 'Text label' },
-  { type: 'scene',            label: 'Scene',              icon: <Layers size={20} />,     description: 'Nest another scene' },
+  { type: 'wasapi_output',    label: 'Desktop Audio',      icon: <Speaker size={20} />,    description: 'System audio loopback', unavailable: 'Use the Desktop button in the Audio Mixer' },
+  { type: 'wasapi_input',     label: 'Microphone',         icon: <Mic size={20} />,        description: 'Microphone or audio input', unavailable: 'Use the Mic button in the Audio Mixer' },
+  { type: 'image',            label: 'Image',              icon: <Image size={20} />,      description: 'PNG, JPG or animated GIF', unavailable: 'Not available yet' },
+  { type: 'media_source',     label: 'Media Source',       icon: <Film size={20} />,       description: 'Video or audio file / URL', unavailable: 'Not available yet' },
+  { type: 'browser_source',   label: 'Browser Source',     icon: <Globe size={20} />,      description: 'Web overlay via CEF', unavailable: 'Not available yet' },
+  { type: 'color_source',     label: 'Color Source',       icon: <Palette size={20} />,    description: 'Solid color fill', unavailable: 'Not available yet' },
+  { type: 'text_gdi_plus',    label: 'Text (GDI+)',        icon: <Type size={20} />,       description: 'Text label', unavailable: 'Not available yet' },
+  { type: 'scene',            label: 'Scene',              icon: <Layers size={20} />,     description: 'Nest another scene', unavailable: 'Not available yet' },
 ]
 
 interface AddSourceModalProps {
@@ -36,6 +38,7 @@ interface AddSourceModalProps {
 
 export function AddSourceModal({ open, onAdd, onClose }: AddSourceModalProps) {
   function handlePick(def: SourceTypeDef) {
+    if (def.unavailable) return
     onAdd(def.type, def.label)
     onClose()
   }
@@ -68,10 +71,14 @@ export function AddSourceModal({ open, onAdd, onClose }: AddSourceModalProps) {
               <button
                 key={def.type}
                 onClick={() => handlePick(def)}
+                disabled={!!def.unavailable}
+                title={def.unavailable}
                 className={cn(
                   'flex flex-col items-center gap-2 p-3 rounded-input',
                   'bg-bg-surface border border-bg-divider text-center',
-                  'hover:border-accent-start hover:bg-state-active transition-colors group'
+                  def.unavailable
+                    ? 'opacity-45 cursor-not-allowed'
+                    : 'hover:border-accent-start hover:bg-state-active transition-colors group'
                 )}
               >
                 <span className="text-text-muted group-hover:text-accent-start transition-colors">
@@ -81,7 +88,7 @@ export function AddSourceModal({ open, onAdd, onClose }: AddSourceModalProps) {
                   {def.label}
                 </span>
                 <span className="text-[10px] text-text-muted leading-tight">
-                  {def.description}
+                  {def.unavailable ?? def.description}
                 </span>
               </button>
             ))}

@@ -6,7 +6,7 @@
  * the file.
  *
  *   node scripts/e2e/record.cjs [seconds] [--fps=30] [--res=1280x720] [--no-minimize]
- *                               [--kind=recording|replay|streaming] [--keep]
+ *                               [--kind=recording|streaming|replay|vcam] [--keep]
  *
  * Run `npm run build` (electron-vite build) first.
  */
@@ -78,6 +78,19 @@ function memoryMb(dir) {
   const ps = `(Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | Measure-Object WorkingSetSize -Sum).Sum`
   const r = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' })
   return Math.round(Number(r.stdout.trim() || 0) / 1048576)
+}
+
+/** CPU seconds used so far by each of this run's processes, by role. */
+function cpuSeconds(dir) {
+  const tag = path.basename(dir)
+  const ps = `Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | ForEach-Object { $t = 'main'; if ($_.CommandLine -match '--type=([a-z-]+)') { $t = $Matches[1] }; if ($_.CommandLine -match 'host.html') { $t = 'host' }; "$t,$($_.ProcessId),$(($_.UserModeTime + $_.KernelModeTime) / 10000000)" }`
+  const r = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' })
+  const out = {}
+  for (const line of r.stdout.trim().split(String.fromCharCode(10))) {
+    const [type, pid, secs] = line.split(',')
+    if (pid) out[`${type}:${pid}`] = Number(secs)
+  }
+  return out
 }
 
 async function waitFor(fn, what, ms = 30000) {
@@ -159,7 +172,9 @@ async function main() {
     params.videoBitrate = Math.round((width * height * fps * 0.097) / 100000) * 100000
 
     const kind = flag('kind', 'recording')
-    if (kind !== 'recording') throw new Error(`--kind=${kind} is not wired into this script yet`)
+    if (!['recording', 'streaming', 'replay', 'vcam'].includes(kind)) throw new Error(`Unknown --kind=${kind}`)
+    const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+    let receiver = null
 
     let flasher = null
     if (withSync) {
@@ -170,8 +185,23 @@ async function main() {
     }
 
     const startedAt = Date.now()
-    const file = await invoke('start_recording', { outputPath: outFile, format: 'mkv', params })
-    log('recording to', file, `(${params.width}x${params.height}@${params.fps}, ${params.videoBitrate / 1e6} Mbps)`)
+    let file = outFile
+    if (kind === 'recording') {
+      file = await invoke('start_recording', { outputPath: outFile, format: 'mkv', params })
+    } else if (kind === 'streaming') {
+      // A local RTMP server to stream to: FFmpeg listening, writing what arrives to a file.
+      file = path.join(scratch, 'received.flv')
+      receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-listen', '1', '-i', 'rtmp://127.0.0.1:1935/live/e2e', '-c', 'copy', file], { stdio: 'ignore' })
+      await sleep(1500)
+      await invoke('start_streaming', { rtmpUrl: 'rtmp://127.0.0.1:1935/live', streamKey: 'e2e', params })
+    } else if (kind === 'replay') {
+      await invoke('start_replay_buffer', { bufferSecs: 20, params })
+    } else if (kind === 'vcam') {
+      file = path.join(scratch, 'vcam.mkv')
+      const url = await invoke('start_virtual_camera', { params })
+      receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-i', url + '?fifo_size=5000000&overrun_nonfatal=1', '-c', 'copy', file], { stdio: 'ignore' })
+    }
+    log(kind, 'started', file, `(${params.width}x${params.height}@${params.fps}, ${params.videoBitrate / 1e6} Mbps)`)
 
     // Watch the host while it works.
     const hostPage = (await targets()).find((t) => /host\.html/.test(t.url))
@@ -182,9 +212,20 @@ async function main() {
     const memory = []
     let lastAudio = null
     let samples = 0
+    let lastCpu = null
     while (Date.now() - startedAt < seconds * 1000) {
       await sleep(5000)
       if (child.exitCode !== null) throw new Error('The app exited during the recording')
+      if (samples % 3 === 1) {
+        const now = cpuSeconds(scratch)
+        const at = Date.now()
+        if (lastCpu) {
+          const wall = (at - lastCpu.at) / 1000
+          const rows = Object.entries(now).map(([k, v]) => [k, (v - (lastCpu.v[k] ?? v)) / wall]).filter(([, c]) => c > 0.03).sort((a, b) => b[1] - a[1])
+          log('cpu (cores):', rows.map(([k, c]) => `${k}=${c.toFixed(2)}`).join(' '))
+        }
+        lastCpu = { v: now, at }
+      }
       if (++samples % 3 === 0) {
         const mb = memoryMb(scratch)
         memory.push(mb)
@@ -204,11 +245,18 @@ async function main() {
       }
     }
 
-    await invoke('stop_recording')
+    if (kind === 'recording') await invoke('stop_recording')
+    else if (kind === 'streaming') await invoke('stop_streaming')
+    else if (kind === 'vcam') await invoke('stop_virtual_camera')
+    else if (kind === 'replay') {
+      file = await invoke('save_replay', { outputPath: path.join(scratch, 'replay.mkv') })
+      await invoke('stop_replay_buffer')
+    }
+    if (receiver) { await sleep(1500); receiver.kill('SIGINT'); await sleep(1500) }
     if (flasher) { spawnSync('taskkill', ['/F', '/T', '/PID', String(flasher.pid)], { windowsHide: true }) }
     log('stopped; recorded for', ((Date.now() - startedAt) / 1000).toFixed(1), 's')
     await sleep(1500)
-    return { file: outFile, wallSeconds: (Date.now() - startedAt) / 1000, appLog, memory }
+    return { file, wallSeconds: (Date.now() - startedAt) / 1000, appLog, memory }
   } finally {
     ui?.close()
     child.kill()
@@ -227,9 +275,13 @@ main()
     }
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)
-    if (!args.includes('--keep')) console.log(`(kept ${r.file}; delete ${scratch} when done)`)
+    // The recording is of the real screen and may show private things; it is
+    // measured, not looked at, and removed unless asked to keep it.
+    if (args.includes('--keep')) console.log(`(kept ${r.file}; delete ${scratch} when done)`)
+    else fs.rmSync(scratch, { recursive: true, force: true })
   })
   .catch((e) => {
     console.error('E2E FAILED:', e.message)
+    if (!args.includes('--keep')) fs.rmSync(scratch, { recursive: true, force: true })
     process.exit(1)
   })

@@ -14,6 +14,8 @@ app.whenReady().then(() => {
     fullscreen: true, frame: false, backgroundColor: '#000', show: true, alwaysOnTop: true,
     webPreferences: { autoplayPolicy: 'no-user-gesture-required', backgroundThrottling: false },
   })
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.focus()
   const page = `<body style="margin:0;background:#000"><script>
     const ac = new AudioContext()
     const t0 = ac.currentTime + 1

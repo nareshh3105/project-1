@@ -23,7 +23,7 @@ export async function createAudioRig(onBlock: (block: AudioBlock) => void): Prom
   // meant about 7% of the audio was lost. Without a device the context renders
   // on a timer and measures 99.8%. Nothing needs to be audible here anyway.
   const context = new AudioContext({
-    sampleRate: SAMPLE_RATE, latencyHint: 'interactive', sinkId: { type: 'none' },
+    sampleRate: SAMPLE_RATE, latencyHint: 'balanced', sinkId: { type: 'none' },
   } as AudioContextOptions)
   if (context.state === 'suspended') await context.resume()
 
