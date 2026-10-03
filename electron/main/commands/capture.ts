@@ -1,4 +1,4 @@
-import { desktopCapturer, type Session } from 'electron'
+import { desktopCapturer, webContents, type Session } from 'electron'
 import { command } from '../ipc'
 import { CaptureBroker, type CaptureKind } from '../capture/broker'
 
@@ -19,9 +19,10 @@ export const captureBroker = new CaptureBroker(async (kinds: CaptureKind[]) =>
  * picker is granted; anything else is refused.
  */
 export function installDisplayMediaHandler(ses: Session) {
-  ses.setDisplayMediaRequestHandler((_request, callback) => {
+  ses.setDisplayMediaRequestHandler((request, callback) => {
+    const owner = request.frame ? webContents.fromFrame(request.frame)?.id : undefined
     captureBroker
-      .resolve()
+      .resolve(owner)
       .then((grant) => callback(grant ?? {}))
       .catch(() => callback({}))
   })
@@ -33,7 +34,7 @@ export function registerCaptureCommands() {
     return captureBroker.listSources(wanted)
   })
 
-  command('prepare_capture', ({ sourceId, audio }) => {
-    captureBroker.prepare(String(sourceId ?? ''), Boolean(audio))
+  command('prepare_capture', ({ sourceId, audio }, { senderId }) => {
+    captureBroker.prepare(String(sourceId ?? ''), Boolean(audio), senderId)
   })
 }

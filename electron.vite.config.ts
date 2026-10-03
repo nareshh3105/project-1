@@ -50,8 +50,14 @@ export default defineConfig({
     build: {
       outDir: 'out/renderer',
       // index.html lives at the repo root rather than electron-vite's
-      // conventional src/renderer, so the entry has to be named explicitly.
-      rollupOptions: { input: path.resolve(__dirname, 'index.html') },
+      // conventional src/renderer, so the entries have to be named explicitly.
+      // host.html is the output engine: a second window that composes and encodes.
+      rollupOptions: {
+        input: {
+          index: path.resolve(__dirname, 'index.html'),
+          host: path.resolve(__dirname, 'host.html'),
+        },
+      },
     } as never,
     server: { port: 1420, strictPort: true },
   },

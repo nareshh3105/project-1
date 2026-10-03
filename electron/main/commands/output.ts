@@ -4,55 +4,203 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { command, emit } from '../ipc'
 import {
-  DESKTOP_INPUT, RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
-  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT,
-  assertStartedOk, defaultRecordingPath, ensureParentDir, ffmpegAvailable,
-  ffmpegBinary, isActive, requireFfmpeg, setSession, spawnFfmpeg, stopGracefully,
-  takeSession, timestamp, uniquePath, videosDir, getSession,
+  RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
+  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT,
+  assertStartedOk, ensureParentDir, ffmpegAvailable, ffmpegBinary, finishPiped,
+  getSession, isActive, requireFfmpeg, setSession, spawnFfmpeg, takeSession,
+  timestamp, uniquePath, videosDir, type Session,
 } from '../output/ffmpeg'
-import { audioArgs, X264_ARCHIVE } from '../output/args'
+import {
+  recordingArgs, streamingArgs, replayArgs, virtualCameraArgs, type RecordingFormat,
+} from '../output/pipeArgs'
+import { normalizeParams } from '../output/params'
+import { registerSink, unregisterSink } from '../output/ingest'
+import { getHost, hostEvents } from '../host/instance'
+import { log } from '../diagnostics/logger'
+import type { HostEvent, OutputKind, SessionParams } from '../../../shared/host'
 
 const VIRTUAL_CAMERA_PORT = 12345
 const SEGMENT_SECONDS = 5
 
+/** How long to wait, once the host is sending, to see whether FFmpeg objected. */
+const STARTUP_CHECK_MS = { recording: 1200, streaming: 2500, replay: 1000, virtualCamera: 1000 } as const
+
+/** Outputs being shut down. A new one of the same kind must wait for the old to finish. */
+const closing = new Set<OutputKind>()
+
+const STATUS_EVENT: Record<OutputKind, string> = {
+  recording: RECORDING_STATUS_EVENT,
+  streaming: STREAMING_STATUS_EVENT,
+  replay: REPLAY_STATUS_EVENT,
+  virtualCamera: VIRTUAL_CAMERA_STATUS_EVENT,
+}
+
+const LABEL: Record<OutputKind, string> = {
+  recording: 'recording',
+  streaming: 'stream',
+  replay: 'replay buffer',
+  virtualCamera: 'virtual camera',
+}
+
+function announce(kind: OutputKind, active: boolean, extra: Record<string, unknown> = {}) {
+  emit(STATUS_EVENT[kind], { active, ...extra })
+}
+
+/** FFmpeg's last few lines, which are usually what explains a failure. */
+const detail = (session: Session) => session.stderr.slice(-4).join('\n').trim()
+
+interface OpenOptions {
+  kind: OutputKind
+  ffmpegArgs: string[]
+  params: SessionParams
+  /** Kept on the session for later commands (the file written, the segment folder, ...). */
+  extra?: Record<string, unknown>
+}
+
+/**
+ * Starts an output: FFmpeg waiting for the host's stream, then the host's
+ * session that produces it.
+ *
+ * FFmpeg goes first so the sink exists before the first chunk arrives. If
+ * either half fails, both are torn down: a half-started output would show as
+ * running in the interface while producing nothing.
+ */
+async function openOutput({ kind, ffmpegArgs, params, extra = {} }: OpenOptions): Promise<Session> {
+  if (closing.has(kind)) throw new Error(`The previous ${LABEL[kind]} is still finishing. Try again in a moment.`)
+  requireFfmpeg()
+
+  const session = spawnFfmpeg(ffmpegArgs, { piped: true })
+  registerSink(kind, session.child.stdin)
+
+  try {
+    await getHost().request('openSession', { kind, params })
+    // Errors such as a bad output path or a refused connection only surface once
+    // FFmpeg has input to work on, so the check comes after the host starts.
+    await assertStartedOk(session, STARTUP_CHECK_MS[kind])
+  } catch (err) {
+    unregisterSink(kind)
+    abandon(session)
+    // Best effort: the host may never have opened it.
+    void getHost().request('closeSession', { kind }).catch(() => {})
+    const reason = err instanceof Error ? err.message : String(err)
+    throw new Error(reason)
+  }
+
+  const live: Session = { ...session, ...extra }
+  setSession(kind, live)
+  watchForExit(kind, live)
+  return live
+}
+
+function abandon(session: Session) {
+  try { session.child.stdin.end() } catch { /* already closed */ }
+  if (session.child.exitCode === null) session.child.kill('SIGKILL')
+}
+
+/**
+ * Ends an output cleanly: the host flushes its encoders (so the last chunks
+ * reach FFmpeg), then the pipe is closed so FFmpeg finishes the file.
+ */
+async function closeOutput(kind: OutputKind): Promise<Session | undefined> {
+  const session = takeSession(kind)
+  if (!session) return undefined
+
+  closing.add(kind)
+  try {
+    try {
+      await getHost().request('closeSession', { kind })
+    } catch (err) {
+      // The host is gone or stuck; still finish what FFmpeg already has.
+      log.warn(`host did not close the ${kind} session`, { error: String(err) })
+    }
+    unregisterSink(kind)
+    const clean = await finishPiped(session)
+    if (!clean) log.warn(`ffmpeg had to be stopped for the ${kind} output`)
+  } finally {
+    closing.delete(kind)
+  }
+  return session
+}
+
+/**
+ * If FFmpeg dies while an output is running (a dropped RTMP connection, a full
+ * disk) say so. This was never handled: the interface kept showing a stream as
+ * live long after it had ended.
+ */
+function watchForExit(kind: OutputKind, session: Session) {
+  session.child.once('exit', (code) => {
+    if (getSession(kind) !== session) return // a normal stop took it first
+
+    takeSession(kind)
+    unregisterSink(kind)
+    void getHost().request('closeSession', { kind }).catch(() => {})
+
+    const why = detail(session)
+    log.error(`${kind} output ended unexpectedly`, { code, ffmpeg: why })
+    announce(kind, false, kind === 'recording' ? { filePath: null } : kind === 'virtualCamera' ? { url: null } : {})
+    emit(OUTPUT_ERROR_EVENT, {
+      kind,
+      message: `The ${LABEL[kind]} stopped unexpectedly (ffmpeg exit ${code}).${why ? `\n${why}` : ''}`,
+    })
+  })
+}
+
+// A problem inside the host (an encoder failing mid-recording) ends that output.
+hostEvents.on('event', (event: HostEvent) => {
+  if (event.type !== 'sessionError') return
+  const { kind, message } = event
+  log.error(`host reported a ${kind} error`, { message })
+  emit(OUTPUT_ERROR_EVENT, { kind, message: `The ${LABEL[kind]} failed: ${message}` })
+  void stopOutput(kind)
+})
+
+async function stopOutput(kind: OutputKind) {
+  await closeOutput(kind)
+  announce(kind, false, kind === 'recording' ? { filePath: null } : kind === 'virtualCamera' ? { url: null } : {})
+}
+
+function recordingFormat(requested: unknown, file?: string): RecordingFormat {
+  if (requested === 'mp4' || requested === 'mkv') return requested
+  return file?.toLowerCase().endsWith('.mp4') ? 'mp4' : 'mkv'
+}
+
 export function registerOutputCommands() {
   command('check_ffmpeg', () => ffmpegAvailable(true))
 
-  command('get_recording_path', () => defaultRecordingPath())
+  command('get_recording_path', () =>
+    uniquePath(path.join(videosDir(), `CodeBuilders_${timestamp()}.mkv`)),
+  )
 
   // ── Recording ────────────────────────────────────────────────────────────
 
-  command('start_recording', async ({ outputPath, audioTracks, noiseSuppression }) => {
+  command('start_recording', async ({ outputPath, format, params }) => {
     if (isActive('recording')) throw new Error('Recording is already active')
     requireFfmpeg()
 
-    const file = (outputPath as string) || defaultRecordingPath()
+    const requested = typeof outputPath === 'string' && outputPath ? outputPath : undefined
+    const fmt = recordingFormat(format, requested)
+    const file = requested ?? uniquePath(path.join(videosDir(), `CodeBuilders_${timestamp()}.${fmt}`))
     ensureParentDir(file)
 
-    const tracks = (audioTracks as string[]) ?? []
-    const ns = (noiseSuppression as boolean[]) ?? []
-    const { inputs, output } = audioArgs(tracks, ns)
+    const p = normalizeParams(params)
+    await openOutput({
+      kind: 'recording',
+      ffmpegArgs: recordingArgs(file, fmt, p.audioBitrate),
+      params: p,
+      extra: { filePath: file },
+    })
 
-    const session = spawnFfmpeg([
-      '-y', ...DESKTOP_INPUT, ...inputs, ...X264_ARCHIVE, ...output, file,
-    ])
-
-    await assertStartedOk(session)
-
-    setSession('recording', { ...session, filePath: file })
-    emit(RECORDING_STATUS_EVENT, { active: true, filePath: file })
+    announce('recording', true, { filePath: file })
     return file
   })
 
-  command('stop_recording', () => {
-    const session = takeSession('recording')
-    if (session) stopGracefully(session, 2000)
-    emit(RECORDING_STATUS_EVENT, { active: false, filePath: null })
+  command('stop_recording', async () => {
+    await stopOutput('recording')
   })
 
   // ── Streaming ────────────────────────────────────────────────────────────
 
-  command('start_streaming', async ({ rtmpUrl, streamKey }) => {
+  command('start_streaming', async ({ rtmpUrl, streamKey, params }) => {
     if (isActive('streaming')) throw new Error('Streaming is already active')
     requireFfmpeg()
 
@@ -62,35 +210,19 @@ export function registerOutputCommands() {
     const key = String(streamKey ?? '').trim()
     const target = key ? `${url.replace(/\/+$/, '')}/${key}` : url
 
-    const session = spawnFfmpeg([
-      '-y', ...DESKTOP_INPUT,
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-tune', 'zerolatency',
-      '-maxrate', '6000k',
-      '-bufsize', '12000k',
-      '-pix_fmt', 'yuv420p',
-      '-g', '60',
-      '-f', 'flv', target,
-    ])
+    const p = normalizeParams(params)
+    await openOutput({ kind: 'streaming', ffmpegArgs: streamingArgs(target, p.audioBitrate), params: p })
 
-    // Give the handshake longer than a local encode — a bad key or unreachable
-    // server only fails once the RTMP connection is refused.
-    await assertStartedOk(session, 1500)
-
-    setSession('streaming', session)
-    emit(STREAMING_STATUS_EVENT, { active: true })
+    announce('streaming', true)
   })
 
-  command('stop_streaming', () => {
-    const session = takeSession('streaming')
-    if (session) stopGracefully(session, 1000)
-    emit(STREAMING_STATUS_EVENT, { active: false })
+  command('stop_streaming', async () => {
+    await stopOutput('streaming')
   })
 
   // ── Replay buffer ────────────────────────────────────────────────────────
 
-  command('start_replay_buffer', async ({ bufferSecs }) => {
+  command('start_replay_buffer', async ({ bufferSecs, params }) => {
     if (isActive('replay')) throw new Error('Replay buffer is already running')
     requireFfmpeg()
 
@@ -102,31 +234,24 @@ export function registerOutputCommands() {
     // only copy of the oldest moment the user asked to keep.
     const maxFiles = Math.floor(secs / SEGMENT_SECONDS) + 3
 
-    const session = spawnFfmpeg([
-      '-y', ...DESKTOP_INPUT, ...X264_ARCHIVE,
-      '-f', 'segment',
-      '-segment_time', String(SEGMENT_SECONDS),
-      '-segment_wrap', String(maxFiles),
-      '-reset_timestamps', '1',
-      path.join(segmentDir, 'seg%05d.mkv'),
-    ])
+    await openOutput({
+      kind: 'replay',
+      ffmpegArgs: replayArgs(segmentDir, SEGMENT_SECONDS, maxFiles),
+      params: normalizeParams(params),
+      extra: { segmentDir, bufferSecs: secs },
+    })
 
-    await assertStartedOk(session)
-
-    setSession('replay', { ...session, segmentDir, bufferSecs: secs })
-    emit(REPLAY_STATUS_EVENT, { active: true })
+    announce('replay', true)
   })
 
-  command('stop_replay_buffer', () => {
-    const session = takeSession('replay')
+  command('stop_replay_buffer', async () => {
+    const session = await closeOutput('replay')
     if (session) {
-      stopGracefully(session, 500)
-      const dir = session.segmentDir as string
-      session.child.once('exit', () => {
-        fs.rm(dir, { recursive: true, force: true }, () => {})
-      })
+      // Waited for, so the buffer is not reported stopped while its segments
+      // (up to a few hundred megabytes) are still on disk.
+      await fs.promises.rm(session.segmentDir as string, { recursive: true, force: true }).catch(() => {})
     }
-    emit(REPLAY_STATUS_EVENT, { active: false })
+    announce('replay', false)
   })
 
   command('save_replay', ({ outputPath }) => {
@@ -177,9 +302,9 @@ export function registerOutputCommands() {
     fs.rmSync(listPath, { force: true })
 
     if (result.status !== 0) {
-      const detail = (result.stderr || '').trim().split('\n').slice(-4).join('\n')
+      const why = (result.stderr || '').trim().split('\n').slice(-4).join('\n')
       throw new Error(
-        `ffmpeg concat failed — replay segments may be incomplete.${detail ? `\n${detail}` : ''}`,
+        `ffmpeg concat failed — replay segments may be incomplete.${why ? `\n${why}` : ''}`,
       )
     }
 
@@ -188,60 +313,25 @@ export function registerOutputCommands() {
 
   // ── Virtual camera ───────────────────────────────────────────────────────
 
-  command('start_virtual_camera', async () => {
+  command('start_virtual_camera', async ({ params }) => {
     if (isActive('virtualCamera')) throw new Error('Virtual camera is already active')
     requireFfmpeg()
 
     const url = `udp://127.0.0.1:${VIRTUAL_CAMERA_PORT}`
 
-    const session = spawnFfmpeg([
-      '-y', ...DESKTOP_INPUT,
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-tune', 'zerolatency',
-      '-pix_fmt', 'yuv420p',
-      '-g', '30',
-      '-f', 'mpegts', url,
-    ])
+    await openOutput({
+      kind: 'virtualCamera',
+      ffmpegArgs: virtualCameraArgs(url),
+      // No sound goes to a camera.
+      params: { ...normalizeParams(params), audio: false },
+      extra: { url },
+    })
 
-    await assertStartedOk(session)
-
-    setSession('virtualCamera', { ...session, url })
-    emit(VIRTUAL_CAMERA_STATUS_EVENT, { active: true, url })
+    announce('virtualCamera', true, { url })
     return url
   })
 
-  command('stop_virtual_camera', () => {
-    const session = takeSession('virtualCamera')
-    if (session) stopGracefully(session, 500)
-    emit(VIRTUAL_CAMERA_STATUS_EVENT, { active: false, url: null })
-  })
-
-  // ── Audio device enumeration ─────────────────────────────────────────────
-
-  command('list_audio_devices', () => {
-    if (!ffmpegAvailable()) return []
-
-    // dshow device listing is written to stderr and always exits non-zero.
-    const r = spawnSync(
-      ffmpegBinary(),
-      ['-hide_banner', '-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'],
-      { windowsHide: true, encoding: 'utf8' },
-    )
-
-    const out = r.stderr || ''
-    const devices: string[] = []
-    let inAudio = false
-
-    for (const line of out.split(/\r?\n/)) {
-      if (/DirectShow audio devices/i.test(line)) { inAudio = true; continue }
-      if (/DirectShow video devices/i.test(line)) { inAudio = false; continue }
-      if (!inAudio) continue
-
-      const m = line.match(/"([^"]+)"/)
-      if (m && !/Alternative name/i.test(line)) devices.push(m[1])
-    }
-
-    return devices
+  command('stop_virtual_camera', async () => {
+    await stopOutput('virtualCamera')
   })
 }

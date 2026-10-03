@@ -3,6 +3,10 @@ import { Monitor } from 'lucide-react'
 import { useSourceStore, type SourceItem } from '@/stores/sourceStore'
 import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUIStore } from '@/stores/uiStore'
+import {
+  HANDLES, arrowStep, isArrowKey, moveBy, resizeBy, toCanvas, type Handle, type Placement,
+} from '@/lib/canvas/geometry'
 import { cn } from '@/lib/utils'
 
 /**
@@ -14,16 +18,18 @@ import { cn } from '@/lib/utils'
  * scaled to fit whatever space the panel has, which keeps placement resolution
  * independent — a source positioned on a 1920×1080 canvas lands in the same
  * relative spot in a small dock panel and in fullscreen.
+ *
+ * When interactive, a source can be dragged, resized from its handles and
+ * nudged with the arrow keys. The output host draws from the same positions,
+ * so what is arranged here is what is recorded.
  */
 
 interface SceneCanvasProps {
   sceneId: string | null
   /** Draws the empty-state hint. Off for thumbnails in the multiview grid. */
   showPlaceholder?: boolean
-  /** Renders selection affordances and allows dragging. */
+  /** Renders selection affordances and allows dragging and resizing. */
   interactive?: boolean
-  selectedId?: string | null
-  onSelect?: (id: string | null) => void
   className?: string
 }
 
@@ -55,8 +61,6 @@ export function SceneCanvas({
   sceneId,
   showPlaceholder = true,
   interactive = false,
-  selectedId = null,
-  onSelect,
   className,
 }: SceneCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -64,6 +68,10 @@ export function SceneCanvas({
 
   const sources = useSourceStore((s) => (sceneId ? s.byScene[sceneId] ?? [] : []))
   const activeIds = useCaptureStore((s) => s.activeIds)
+  const selectedId = useUIStore((s) => s.selectedSourceId)
+  const select = useUIStore((s) => s.selectSource)
+  const setTransform = useSourceStore((s) => s.setTransform)
+  const commitTransform = useSourceStore((s) => s.commitTransform)
 
   // Painted back to front: orderIndex 0 sits at the bottom of the stack.
   const layers = useMemo(
@@ -78,8 +86,18 @@ export function SceneCanvas({
   return (
     <div
       ref={containerRef}
-      className={cn('relative w-full h-full overflow-hidden bg-black', className)}
-      onPointerDown={interactive ? () => onSelect?.(null) : undefined}
+      className={cn('relative w-full h-full overflow-hidden bg-black outline-none', className)}
+      onPointerDown={interactive ? () => select(null) : undefined}
+      // Arrow keys nudge the selected source: one canvas pixel, ten with Shift.
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => {
+        const target = layers.find((l) => l.id === selectedId)
+        if (!target || target.locked || !sceneId || !isArrowKey(e.key)) return
+        e.preventDefault()
+        const { dx, dy } = arrowStep(e.key, e.shiftKey)
+        setTransform(sceneId, target.id, moveBy(target.transform, dx, dy))
+        void commitTransform(sceneId, target.id)
+      } : undefined}
     >
       {/* The canvas keeps its own coordinate space; only this wrapper scales. */}
       <div
@@ -100,7 +118,10 @@ export function SceneCanvas({
             live={activeIds.includes(source.id)}
             interactive={interactive}
             selected={selectedId === source.id}
-            onSelect={onSelect}
+            scale={canvas.scale}
+            onSelect={select}
+            onPlace={(patch) => { if (sceneId) setTransform(sceneId, source.id, patch) }}
+            onCommit={() => { if (sceneId) void commitTransform(sceneId, source.id) }}
           />
         ))}
       </div>
@@ -121,17 +142,29 @@ export function SceneCanvas({
 // ── One layer ──────────────────────────────────────────────────────────────
 
 function SourceLayer({
-  source, live, interactive, selected, onSelect,
+  source, live, interactive, selected, scale, onSelect, onPlace, onCommit,
 }: {
   source: SourceItem
   live: boolean
   interactive: boolean
   selected: boolean
+  /** How much the canvas is shrunk to fit, for turning pointer movement into canvas pixels. */
+  scale: number
   onSelect?: (id: string) => void
+  onPlace: (patch: Partial<Placement>) => void
+  onCommit: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const getStream = useCaptureStore((s) => s.getStream)
   const { x, y, width, height, rotation, scaleX, scaleY } = source.transform
+  const editable = interactive && !source.locked
+  /** Ends the drag in progress, if any, without saving it. */
+  const abandonDrag = useRef<(() => void) | null>(null)
+
+  // A drag must not outlive its layer: the scene switching, or the source being
+  // removed, mid-gesture would otherwise leave listeners on the window that
+  // later save a position for something no longer there.
+  useEffect(() => () => abandonDrag.current?.(), [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -149,16 +182,60 @@ function SourceLayer({
     transformOrigin: 'center',
   }
 
+  /**
+   * One drag, from pressing on the source or a handle to letting go. Escape puts
+   * the source back where it was. Only the end of the drag is saved: the
+   * position is written to the database once, not for every pixel.
+   */
+  function beginDrag(e: React.PointerEvent, mode: 'move' | Handle) {
+    if (!editable || e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    onSelect?.(source.id)
+
+    const start: Placement = { x, y, width, height }
+    const originX = e.clientX
+    const originY = e.clientY
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = toCanvas(ev.clientX - originX, scale)
+      const dy = toCanvas(ev.clientY - originY, scale)
+      onPlace(mode === 'move'
+        ? moveBy(start, dx, dy)
+        // Corners keep the proportions unless Shift is held, as in OBS.
+        : resizeBy(start, mode, dx, dy, { keepAspect: !ev.shiftKey }))
+    }
+    const finish = (commit: boolean) => {
+      abandonDrag.current = null
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('keydown', onKey)
+      if (commit) onCommit()
+      else onPlace(start)
+    }
+    const onUp = () => finish(true)
+    const onCancel = () => finish(false)
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') finish(false) }
+
+    abandonDrag.current?.()
+    abandonDrag.current = onCancel
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('keydown', onKey)
+  }
+
+  // Handles stay the same size on screen however far the canvas is shrunk.
+  const handleSize = 10 / (scale > 0 ? scale : 1)
+
   return (
     <div
       style={placement}
-      onPointerDown={
-        interactive && !source.locked
-          ? (e) => { e.stopPropagation(); onSelect?.(source.id) }
-          : undefined
-      }
+      data-source-id={source.id}
+      onPointerDown={editable ? (e) => beginDrag(e, 'move') : undefined}
       className={cn(
-        interactive && !source.locked && 'cursor-move',
+        editable && 'cursor-move',
         selected && 'outline outline-2 outline-accent-start',
       )}
     >
@@ -173,8 +250,34 @@ function SourceLayer({
       ) : (
         <SourcePlaceholder source={source} />
       )}
+
+      {selected && editable && HANDLES.map((h) => (
+        <div
+          key={h}
+          data-handle={h}
+          onPointerDown={(e) => beginDrag(e, h)}
+          style={handleStyle(h, handleSize)}
+          className="bg-accent-start border border-white/80"
+        />
+      ))}
     </div>
   )
+}
+
+/** Where a handle sits on its source, and the cursor that says which way it pulls. */
+function handleStyle(h: Handle, size: number): React.CSSProperties {
+  const half = size / 2
+  const place = (v: 'start' | 'mid' | 'end') =>
+    v === 'start' ? -half : v === 'end' ? `calc(100% - ${half}px)` : `calc(50% - ${half}px)`
+
+  const col = h.includes('w') ? 'start' : h.includes('e') ? 'end' : 'mid'
+  const row = h.includes('n') ? 'start' : h.includes('s') ? 'end' : 'mid'
+  const cursor =
+    h === 'n' || h === 's' ? 'ns-resize'
+      : h === 'e' || h === 'w' ? 'ew-resize'
+        : h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize'
+
+  return { position: 'absolute', width: size, height: size, left: place(col), top: place(row), cursor }
 }
 
 /**

@@ -54,8 +54,16 @@ export const CHOICE_TTL_MS = 15_000
 
 export const kindOf = (id: string): CaptureKind => (id.startsWith('screen:') ? 'screen' : 'window')
 
+/** Whoever asks without saying who they are (tests, older callers). */
+const ANONYMOUS = 0
+
 export class CaptureBroker {
-  private pending: Pending | null = null
+  /**
+   * One choice waiting per window. The interface and the output host each open
+   * captures, sometimes at the same moment, and a single shared slot let one's
+   * choice be taken by the other's request.
+   */
+  private readonly pending = new Map<number, Pending>()
 
   constructor(
     private readonly list: SourceLister,
@@ -78,19 +86,19 @@ export class CaptureBroker {
       }))
   }
 
-  /** Records the choice for the next capture request. Replaces any earlier one. */
-  prepare(sourceId: string, audio = false): void {
+  /** Records the choice for the owner's next capture request. Replaces that owner's earlier one. */
+  prepare(sourceId: string, audio = false, owner: number = ANONYMOUS): void {
     if (!sourceId) throw new Error('No capture source given')
-    this.pending = { sourceId, audio, expiresAt: this.now() + CHOICE_TTL_MS }
+    this.pending.set(owner, { sourceId, audio, expiresAt: this.now() + CHOICE_TTL_MS })
   }
 
   /**
    * What to grant the request that is being handled now, or null to refuse.
    * Consumes the prepared choice whether or not it can be honoured.
    */
-  async resolve(): Promise<Grant | null> {
-    const choice = this.pending
-    this.pending = null
+  async resolve(owner: number = ANONYMOUS): Promise<Grant | null> {
+    const choice = this.pending.get(owner)
+    this.pending.delete(owner)
 
     if (!choice || choice.expiresAt < this.now()) return null
 

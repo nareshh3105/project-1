@@ -17,6 +17,8 @@ import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
 import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
 import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
+import { useHostState }         from '@/hooks/useHostState'
+import { useNotifyStore }       from '@/stores/notifyStore'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
 import { MultiviewModal }       from '@/components/modals/MultiviewModal'
@@ -30,6 +32,7 @@ import {
   onStatsUpdate,
   onReplayStatus,
   onVirtualCameraStatus,
+  onOutputError,
 } from '@/ipc'
 
 export function AppShell() {
@@ -84,6 +87,7 @@ export function AppShell() {
     let unlistenStats:  (() => void) | null = null
     let unlistenReplay: (() => void) | null = null
     let unlistenVcam:   (() => void) | null = null
+    let unlistenError:  (() => void) | null = null
 
     onRecordingStatus((p) => setRecordingStatus(p.active, p.filePath))
       .then((u) => { unlistenRec = u })
@@ -100,14 +104,22 @@ export function AppShell() {
     onVirtualCameraStatus((p) => setVirtualCameraStatus(p.active, p.url))
       .then((u) => { unlistenVcam = u })
 
+    // An output that stops by itself (a dropped connection, a full disk, an encoder
+    // failing) must say why, or it just looks like the button stopped working.
+    onOutputError((p) => useNotifyStore.getState().notify('error', p.message))
+      .then((u) => { unlistenError = u })
+
     return () => {
       unlistenRec?.()
       unlistenStream?.()
       unlistenStats?.()
       unlistenReplay?.()
       unlistenVcam?.()
+      unlistenError?.()
     }
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
+
+  useHostState()
 
   // Elapsed timer — ticks every second when recording/streaming is active
   useEffect(() => {

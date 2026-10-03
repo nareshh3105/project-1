@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { useAudioStore, type AudioChannel } from '@/stores/audioStore'
+import { useAudioStore, rememberInput, rememberedInputs, type AudioChannel } from '@/stores/audioStore'
 import {
   AudioEngine, requestMicrophone, requestDesktopAudio, type ChannelId,
 } from '@/lib/audio/engine'
@@ -409,6 +409,29 @@ export function AudioMixerPanel() {
     setNoiseSuppression(id, enabled)
   }, [setNoiseSuppression])
 
+  const connect = useCallback(async (id: string) => {
+    const request = CONNECTABLE[id]
+    if (!engineRef.current || !request) return
+
+    setConnecting(id)
+    setChannelError(id, null)
+    try {
+      const stream = await request()
+      // The panel may have gone while the input was opening; its engine with it.
+      const engine = engineRef.current
+      if (!engine) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
+      engine.attach(id as ChannelId, stream)
+      setConnected(id, true)
+    } catch (err) {
+      setChannelError(id, err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnecting(null)
+    }
+  }, [setConnected, setChannelError])
+
   const handleConnect = useCallback(async (id: string) => {
     const engine = engineRef.current
     if (!engine) return
@@ -416,23 +439,25 @@ export function AudioMixerPanel() {
     if (connected.includes(id)) {
       engine.detach(id as ChannelId)
       setConnected(id, false)
+      rememberInput(id, false)
       return
     }
 
-    const request = CONNECTABLE[id]
-    if (!request) return
+    rememberInput(id, true)
+    await connect(id)
+  }, [connected, connect, setConnected])
 
-    setConnecting(id)
-    setChannelError(id, null)
-    try {
-      engine.attach(id as ChannelId, await request())
-      setConnected(id, true)
-    } catch (err) {
-      setChannelError(id, err instanceof Error ? err.message : String(err))
-    } finally {
-      setConnecting(null)
-    }
-  }, [connected, setConnected, setChannelError])
+  // Reconnect what was connected last time. This runs whenever the panel opens,
+  // not once per launch: closing the panel disposes its engine, and the inputs
+  // it held would otherwise still read as connected with nothing behind them.
+  // A failure (the microphone is gone, access was denied) shows on the button.
+  useEffect(() => {
+    void (async () => {
+      for (const id of rememberedInputs()) {
+        if (id in CONNECTABLE) await connect(id)
+      }
+    })()
+  }, [connect])
 
   const firstError = Object.values(errors).find(Boolean)
 

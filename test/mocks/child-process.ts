@@ -9,10 +9,18 @@ import { vi } from 'vitest'
  * chunks, kill(), and exit events.
  */
 export class FakeChild extends EventEmitter {
-  stdin = {
+  /** A real FFmpeg finishes and exits once its input is closed. Tests can turn that off. */
+  exitsWhenInputCloses = true
+
+  stdin = Object.assign(new EventEmitter(), {
     write: vi.fn(),
-    end: vi.fn(),
-  }
+    end: vi.fn(() => {
+      if (this.exitsWhenInputCloses && this.exitCode === null) {
+        queueMicrotask(() => { if (this.exitCode === null) this.exit(0) })
+      }
+    }),
+    writable: true,
+  })
 
   stderr = Object.assign(new EventEmitter(), {
     setEncoding: vi.fn(),

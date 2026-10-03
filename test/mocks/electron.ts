@@ -44,6 +44,7 @@ export const globalShortcut = {
 export const ipcMain = {
   handle: vi.fn(),
   removeHandler: vi.fn(),
+  on: vi.fn(),
 }
 
 export const BrowserWindow = Object.assign(

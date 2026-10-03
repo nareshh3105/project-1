@@ -12,6 +12,7 @@ import { unregisterAllShortcuts } from './commands/hotkeys'
 import { initLogger, log } from './diagnostics/logger'
 import { installCrashHandlers, watchWindow } from './diagnostics/crash'
 import { describeStartupFailure } from './startup'
+import { installHostIpc, shutdownHost } from './host/instance'
 
 const isDev = !app.isPackaged
 
@@ -126,6 +127,7 @@ app.whenReady().then(() => {
   registerCommands()
   installDisplayMediaHandler(session.defaultSession)
   installDispatcher()
+  installHostIpc()
   createWindow()
 
   app.on('activate', () => {
@@ -142,6 +144,7 @@ app.on('before-quit', () => {
   // Orphaned ffmpeg processes would keep holding the capture device and the
   // output file after the window is gone.
   killAllSessions()
+  shutdownHost()
   stopStatsPolling()
   unregisterAllShortcuts()
   closeDatabase()

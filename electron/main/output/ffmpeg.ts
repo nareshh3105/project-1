@@ -16,17 +16,10 @@ export const STREAMING_STATUS_EVENT = IPC_EVENTS.STREAM_STATUS
 export const REPLAY_STATUS_EVENT = IPC_EVENTS.REPLAY_STATUS
 export const VIRTUAL_CAMERA_STATUS_EVENT = IPC_EVENTS.VCAM_STATUS
 export const STATS_UPDATE_EVENT = IPC_EVENTS.STATS_UPDATE
+export const OUTPUT_ERROR_EVENT = IPC_EVENTS.OUTPUT_ERROR
 
 export const FFMPEG_MISSING =
   'ffmpeg not found in PATH. Download ffmpeg from https://ffmpeg.org and add it to PATH.'
-
-/** Screen capture input, identical for every output path. */
-export const DESKTOP_INPUT = [
-  '-f', 'gdigrab',
-  '-framerate', '30',
-  '-draw_mouse', '1',
-  '-i', 'desktop',
-]
 
 export interface FfmpegLocation {
   /** Electron's resources directory; undefined outside a packaged app. */
@@ -136,6 +129,12 @@ export interface Session {
   child: FfmpegProcess
   /** Tail of FFmpeg's stderr, kept so a failure can be explained. */
   stderr: string[]
+  /**
+   * True when FFmpeg reads its input from standard input (the output host's
+   * stream). Such a session must be ended by closing the pipe: the usual "q"
+   * written to stdin would be read as data and corrupt the stream.
+   */
+  piped?: boolean
   [key: string]: unknown
 }
 
@@ -161,7 +160,7 @@ const STDERR_LINES = 40
  * surfaced as a bare non-zero exit with nothing to act on. Keeping the last
  * few lines is what lets start/stop report why something did not work.
  */
-export function spawnFfmpeg(args: string[]): Session {
+export function spawnFfmpeg(args: string[], options: { piped?: boolean } = {}): Session {
   const child: FfmpegProcess = spawn(ffmpegBinary(), args, {
     stdio: ['pipe', 'ignore', 'pipe'],
     windowsHide: true,
@@ -177,7 +176,17 @@ export function spawnFfmpeg(args: string[]): Session {
     }
   })
 
-  return { child, stderr }
+  if (options.piped) {
+    // Writing to a pipe whose reader has died raises an 'error' on stdin. With
+    // no listener that is an uncaught exception, which takes down the whole
+    // application, so it is recorded alongside FFmpeg's own output instead.
+    child.stdin.on('error', (e: Error) => {
+      stderr.push(`stdin: ${e.message}`)
+      if (stderr.length > STDERR_LINES) stderr.shift()
+    })
+  }
+
+  return options.piped ? { child, stderr, piped: true } : { child, stderr }
 }
 
 /**
@@ -215,7 +224,8 @@ export function assertStartedOk(session: Session, waitMs = 700): Promise<void> {
 export function stopGracefully(session: Session, graceMs = 2000) {
   const { child } = session
   try {
-    child.stdin.write('q')
+    // 'q' is a command to FFmpeg only when stdin is not carrying data.
+    if (!session.piped) child.stdin.write('q')
     child.stdin.end()
   } catch {
     /* stdin already gone */
@@ -226,6 +236,41 @@ export function stopGracefully(session: Session, graceMs = 2000) {
   }, graceMs)
 
   child.once('exit', () => clearTimeout(timer))
+}
+
+/**
+ * Ends a piped session: close the pipe so FFmpeg reads end-of-input, finishes
+ * the file and exits on its own, and resolve when it has. Forced after the
+ * grace period so a stuck process cannot hold a recording open forever.
+ *
+ * Resolves true if FFmpeg exited by itself in time, false if it had to be killed.
+ */
+export function finishPiped(session: Session, graceMs = 5000): Promise<boolean> {
+  const { child } = session
+
+  return new Promise((resolve) => {
+    if (child.exitCode !== null) {
+      resolve(true)
+      return
+    }
+
+    let killed = false
+    const timer = setTimeout(() => {
+      killed = true
+      if (child.exitCode === null) child.kill('SIGKILL')
+    }, graceMs)
+
+    child.once('exit', () => {
+      clearTimeout(timer)
+      resolve(!killed)
+    })
+
+    try {
+      child.stdin.end()
+    } catch {
+      /* stdin already gone; the exit handler still fires */
+    }
+  })
 }
 
 export function killAllSessions() {

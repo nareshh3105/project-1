@@ -60,10 +60,17 @@ function flashTimes(file) {
   const samples = [...out.matchAll(/pts_time:\s*([\d.]+)\s*\r?\n\s*lavfi\.signalstats\.YAVG=([\d.]+)/g)].map(
     (m) => ({ t: Number(m[1]), y: Number(m[2]) }),
   )
+  // "White" is relative to what this recording shows: a recording of a real
+  // screen may never reach pure white, and one with other windows showing has
+  // a baseline well above black.
+  const ys = samples.map((s) => s.y)
+  const lo = Math.min(...ys)
+  const hi = Math.max(...ys)
+  const threshold = hi - lo > 60 ? lo + 0.6 * (hi - lo) : 230
   const onsets = []
   let was = false
   for (const s of samples) {
-    const white = s.y >= 230
+    const white = s.y >= threshold
     if (white && !was) onsets.push(s.t)
     was = white
   }

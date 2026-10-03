@@ -6,12 +6,12 @@ import { ipc } from '@/ipc'
 import { cn } from '@/lib/utils'
 
 const STACK = [
-  { label: 'Framework',  value: 'Tauri 2 + React 18' },
-  { label: 'Language',   value: 'TypeScript + Rust' },
+  { label: 'Framework',  value: 'Electron + React 18' },
+  { label: 'Language',   value: 'TypeScript' },
   { label: 'UI',         value: 'Tailwind CSS + Radix UI' },
   { label: 'State',      value: 'Zustand + Immer' },
-  { label: 'Database',   value: 'SQLite (sqlx)' },
-  { label: 'Video',      value: 'FFmpeg' },
+  { label: 'Database',   value: 'SQLite (better-sqlite3)' },
+  { label: 'Video',      value: 'WebCodecs + FFmpeg' },
 ]
 
 export function AboutModal() {

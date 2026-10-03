@@ -13,8 +13,6 @@ import {
   formatBinding, keyEventToBinding,
 } from '@/stores/hotkeyStore'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
-import type { AudioSettings } from '@/types/audio'
-import { ipc } from '@/ipc'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
@@ -108,15 +106,12 @@ function GeneralTab({
         <Sel
           value={draft.language}
           onChange={(v) => set({ language: v })}
-          options={[
-            { value: 'en-US', label: 'English (US)' },
-            { value: 'en-GB', label: 'English (UK)' },
-            { value: 'ja-JP', label: '日本語' },
-            { value: 'ko-KR', label: '한국어' },
-            { value: 'zh-CN', label: '中文 (简体)' },
-          ]}
+          options={[{ value: 'en-US', label: 'English (US)' }]}
         />
       </Row>
+      <p className="text-caption text-text-muted -mt-1 mb-2">
+        The interface is in English only for now.
+      </p>
       <Row label="Update channel">
         <Sel
           value={draft.updateChannel}
@@ -241,58 +236,27 @@ function VideoTab({
 
 // ── Tab: Audio ──────────────────────────────────────────────────────────────
 
-const DEVICE_OPTIONS = [
-  { value: 'default',  label: 'Default' },
-  { value: 'disabled', label: 'Disabled' },
-]
-
-function AudioTab({
-  draft, set,
-}: {
-  draft: AudioSettings
-  set: (patch: Partial<AudioSettings>) => void
-}) {
+function AudioTab() {
   return (
     <div>
-      <SectionHeader title="Global Audio Devices" />
-      <Row label="Desktop Audio">
-        <Sel value={draft.desktopDevice1} onChange={(v) => set({ desktopDevice1: v })} options={DEVICE_OPTIONS} />
-      </Row>
-      <Row label="Desktop Audio 2">
-        <Sel value={draft.desktopDevice2} onChange={(v) => set({ desktopDevice2: v })} options={DEVICE_OPTIONS} />
-      </Row>
-      <Row label="Mic / Auxiliary Audio">
-        <Sel value={draft.auxDevice1} onChange={(v) => set({ auxDevice1: v })} options={DEVICE_OPTIONS} />
-      </Row>
-      <Row label="Mic / Auxiliary Audio 2">
-        <Sel value={draft.auxDevice2} onChange={(v) => set({ auxDevice2: v })} options={DEVICE_OPTIONS} />
-      </Row>
-      <Row label="Mic / Auxiliary Audio 3">
-        <Sel value={draft.auxDevice3} onChange={(v) => set({ auxDevice3: v })} options={DEVICE_OPTIONS} />
-      </Row>
+      <SectionHeader title="Audio Devices" />
+      <p className="text-caption text-text-secondary mb-3">
+        Sound is set up in the Audio Mixer: press Desktop to capture everything your computer plays,
+        and Mic to capture your default microphone. The inputs you connect are remembered and
+        reconnected when the app starts.
+      </p>
 
-      <SectionHeader title="Advanced" />
+      <SectionHeader title="Recorded format" />
       <Row label="Sample Rate">
-        <Sel
-          value={draft.sampleRate}
-          onChange={(v) => set({ sampleRate: Number(v) as AudioSettings['sampleRate'] })}
-          options={[
-            { value: 44100,  label: '44.1 kHz' },
-            { value: 48000,  label: '48 kHz (Recommended)' },
-            { value: 192000, label: '192 kHz' },
-          ]}
-        />
+        <span className="text-body text-text-primary">48 kHz</span>
       </Row>
       <Row label="Channels">
-        <Sel
-          value={draft.channels}
-          onChange={(v) => set({ channels: Number(v) as AudioSettings['channels'] })}
-          options={[
-            { value: 1, label: 'Mono' },
-            { value: 2, label: 'Stereo (Recommended)' },
-          ]}
-        />
+        <span className="text-body text-text-primary">Stereo</span>
       </Row>
+      <p className="text-caption text-text-muted mt-3">
+        Choosing a specific device, or another sample rate, is not available yet. The audio bitrate
+        is set under Output.
+      </p>
     </div>
   )
 }
@@ -305,25 +269,6 @@ function OutputTab({
   draft: RecordingConfig
   set:   (patch: Partial<RecordingConfig>) => void
 }) {
-  const [devices,  setDevices]  = useState<string[]>([])
-  const [loading,  setLoading]  = useState(false)
-  const [devError, setDevError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    ipc.output.listAudioDevices()
-      .then(setDevices)
-      .catch((e) => setDevError(String(e)))
-      .finally(() => setLoading(false))
-  }, [])
-
-  function toggleTrack(device: string) {
-    const next = draft.audioTracks.includes(device)
-      ? draft.audioTracks.filter((d) => d !== device)
-      : [...draft.audioTracks, device]
-    set({ audioTracks: next })
-  }
-
   return (
     <div>
       <SectionHeader title="Recording" />
@@ -338,51 +283,41 @@ function OutputTab({
         />
       </Row>
 
-      <SectionHeader title="Audio Tracks" />
-      <p className="text-caption text-text-muted mb-2">
-        Select audio devices to embed as separate tracks in the recording.
-        Leave empty to record without audio.
+      <SectionHeader title="Encoding" />
+      <Row label="Video Encoder">
+        <Sel
+          value={draft.encoder}
+          onChange={(v) => set({ encoder: v as RecordingConfig['encoder'] })}
+          options={[
+            { value: 'auto', label: 'Automatic (hardware if available)' },
+            { value: 'hardware', label: 'Hardware only' },
+            { value: 'software', label: 'Software (x264-class, more CPU)' },
+          ]}
+        />
+      </Row>
+      <Row label="Video Bitrate">
+        <Sel
+          value={String(draft.videoBitrateKbps)}
+          onChange={(v) => set({ videoBitrateKbps: Number(v) })}
+          options={[
+            { value: '0', label: 'Automatic (suits the resolution)' },
+            ...[2500, 4000, 6000, 8000, 12000, 20000, 35000].map((k) => ({
+              value: String(k), label: `${(k / 1000).toFixed(1)} Mbps`,
+            })),
+          ]}
+        />
+      </Row>
+      <Row label="Audio Bitrate">
+        <Sel
+          value={String(draft.audioBitrateKbps)}
+          onChange={(v) => set({ audioBitrateKbps: Number(v) })}
+          options={[96, 128, 160, 192, 256, 320].map((k) => ({ value: String(k), label: `${k} kbps` }))}
+        />
+      </Row>
+      <p className="text-caption text-text-muted mt-3">
+        Resolution and frame rate come from the Video tab. What you hear in the audio mixer,
+        at the levels you set, is what is recorded and streamed.
       </p>
-
-      {loading && (
-        <p className="text-caption text-text-muted py-2">Loading audio devices…</p>
-      )}
-      {devError && (
-        <p className="text-caption text-state-danger py-2">{devError}</p>
-      )}
-      {!loading && !devError && devices.length === 0 && (
-        <p className="text-caption text-text-muted py-2">
-          No audio devices found. Make sure ffmpeg is installed and audio devices are available.
-        </p>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        {devices.map((device) => {
-          const checked = draft.audioTracks.includes(device)
-          return (
-            <label
-              key={device}
-              className="flex items-center gap-2.5 py-1.5 border-b border-bg-divider/40 last:border-0 cursor-pointer group"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleTrack(device)}
-                className="w-4 h-4 rounded accent-accent-primary cursor-pointer"
-              />
-              <span className="text-body text-text-secondary group-hover:text-text-primary transition-colors">
-                {device}
-              </span>
-            </label>
-          )
-        })}
-      </div>
-
-      {draft.audioTracks.length > 0 && (
-        <p className="text-caption text-text-muted mt-3">
-          {draft.audioTracks.length} track{draft.audioTracks.length > 1 ? 's' : ''} will be embedded: each can be independently adjusted in post-production.
-        </p>
-      )}
     </div>
   )
 }
@@ -495,9 +430,6 @@ export function SettingsModal() {
   function patchVideo(patch: Partial<VideoSettings>) {
     setDraft((d) => ({ ...d, video: { ...d.video, ...patch } }))
   }
-  function patchAudio(patch: Partial<AudioSettings>) {
-    setDraft((d) => ({ ...d, audio: { ...d.audio, ...patch } }))
-  }
   function patchRecording(patch: Partial<RecordingConfig>) {
     setDraft((d) => ({ ...d, recording: { ...d.recording, ...patch } }))
   }
@@ -568,7 +500,7 @@ export function SettingsModal() {
                 <VideoTab draft={draft.video} set={patchVideo} />
               )}
               {activeTab === 'audio' && (
-                <AudioTab draft={draft.audio} set={patchAudio} />
+                <AudioTab />
               )}
               {activeTab === 'output' && (
                 <OutputTab draft={draft.recording} set={patchRecording} />

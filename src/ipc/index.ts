@@ -14,6 +14,9 @@ interface Bridge {
   on(event: string, callback: (payload: unknown) => void): UnlistenFn
 }
 
+/** What an output is asked to produce. Mirrors SessionParams in shared/host.ts. */
+export type OutputParams = import('../../shared/host').SessionParams
+
 declare global {
   interface Window {
     codebuilders?: Bridge
@@ -173,19 +176,24 @@ export const ipc = {
   output: {
     checkFfmpeg:      () => cmd<boolean>('check_ffmpeg'),
     getRecordingPath: () => cmd<string>('get_recording_path'),
-    startRecording:   (outputPath?: string, audioTracks?: string[], noiseSuppression?: boolean[]) =>
-      cmd<string>('start_recording', { outputPath: outputPath ?? null, audioTracks: audioTracks ?? null, noiseSuppression: noiseSuppression ?? null }),
+    startRecording:   (outputPath: string | undefined, format: 'mkv' | 'mp4', params: OutputParams) =>
+      cmd<string>('start_recording', { outputPath: outputPath ?? null, format, params }),
     stopRecording:    () => cmd<void>('stop_recording'),
-    startStreaming:   (rtmpUrl: string, streamKey: string) =>
-      cmd<void>('start_streaming', { rtmpUrl, streamKey }),
+    startStreaming:   (rtmpUrl: string, streamKey: string, params: OutputParams) =>
+      cmd<void>('start_streaming', { rtmpUrl, streamKey, params }),
     stopStreaming:    () => cmd<void>('stop_streaming'),
     openRecordingsFolder:  () => cmd<void>('open_recordings_folder'),
     openLogsFolder:        () => cmd<void>('open_logs_folder'),
     getLogsPath:           () => cmd<string>('get_logs_path'),
     openScreenshotsFolder: () => cmd<void>('open_screenshots_folder'),
-    startVirtualCamera:  () => cmd<string>('start_virtual_camera'),
+    startVirtualCamera:  (params: OutputParams) => cmd<string>('start_virtual_camera', { params }),
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
-    listAudioDevices:    () => cmd<string[]>('list_audio_devices'),
+  },
+
+  host: {
+    /** Publishes the scene and mixer state the output host composes and mixes from. */
+    pushState: (snapshot: import('../../shared/host').HostSnapshot) =>
+      cmd<void>('host_push_state', { snapshot }),
   },
 
   stats: {
@@ -219,7 +227,7 @@ export const ipc = {
   },
 
   replay: {
-    start:  (bufferSecs?: number) => cmd<void>('start_replay_buffer', { bufferSecs: bufferSecs ?? null }),
+    start:  (bufferSecs: number, params: OutputParams) => cmd<void>('start_replay_buffer', { bufferSecs, params }),
     stop:   () => cmd<void>('stop_replay_buffer'),
     save:   (outputPath?: string) => cmd<string>('save_replay', { outputPath: outputPath ?? null }),
   },
@@ -331,6 +339,12 @@ export interface VirtualCameraStatusPayload {
 
 export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
   return listen<VirtualCameraStatusPayload>(IPC_EVENTS.VCAM_STATUS, (e) => cb(e.payload))
+}
+
+export interface OutputErrorPayload { kind: string; message: string }
+
+export function onOutputError(cb: (p: OutputErrorPayload) => void): Promise<UnlistenFn> {
+  return listen<OutputErrorPayload>(IPC_EVENTS.OUTPUT_ERROR, (e) => cb(e.payload))
 }
 
 export function onHotkeyPressed(cb: (action: string) => void): Promise<UnlistenFn> {
