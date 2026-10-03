@@ -38,7 +38,7 @@ export function installDispatcher() {
     if (!handler) throw `Unknown command: ${name}`
 
     try {
-      return await handler(args ?? {}, { senderId: event.sender.id })
+      return await handler(args ?? {}, { senderId: event?.sender?.id ?? 0 })
     } catch (err) {
       throw err instanceof Error ? err.message : String(err)
     }

@@ -63,14 +63,23 @@ describe('dispatch', () => {
     const spy = vi.fn(() => null)
     ipc.command('with_args', spy)
     await invoke('with_args', { id: 'abc', count: 3 })
-    expect(spy).toHaveBeenCalledWith({ id: 'abc', count: 3 })
+    expect(spy).toHaveBeenCalledWith({ id: 'abc', count: 3 }, expect.anything())
   })
 
   it('substitutes an empty object when arguments are omitted', async () => {
     const spy = vi.fn(() => null)
     ipc.command('no_args', spy)
     await invoke('no_args', undefined as never)
-    expect(spy).toHaveBeenCalledWith({})
+    expect(spy).toHaveBeenCalledWith({}, expect.anything())
+  })
+
+  // Per-window state (such as a capture choice) depends on knowing who is asking.
+  it('tells the handler which window is asking', async () => {
+    const spy = vi.fn(() => null)
+    ipc.command('who', spy)
+    const handler = (ipcMain.handle as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
+    await handler({ sender: { id: 42 } }, 'who', {})
+    expect(spy).toHaveBeenCalledWith({}, { senderId: 42 })
   })
 
   it('rejects an unknown command instead of resolving undefined', async () => {
