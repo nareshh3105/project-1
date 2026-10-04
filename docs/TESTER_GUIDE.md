@@ -45,6 +45,10 @@ well as anything that is broken.
       Shift on a corner to stretch freely. Arrow keys nudge it (Shift for 10 pixels).
       Press Escape mid-drag to put it back.
 - [ ] Record with the sources arranged like that: the recording shows the same arrangement.
+- [ ] Add a Text source and a Color source. Change the words, font, size and colors in
+      Properties (right-click the source). Add an Image source and choose a picture.
+- [ ] Right-click a source, choose Filters, and try Color Correction, Crop, Chroma Key,
+      Blur and Sharpen. The preview and the recording both show them.
 
 **Scenes and sources**
 - [ ] Add, rename, duplicate and delete scenes. New scenes get sensible names.
@@ -60,7 +64,12 @@ well as anything that is broken.
 - [ ] Replay buffer: start it, wait, save a replay.
 - [ ] Streaming, only if you have a test stream key. **Do not paste a real stream key into a bug report.**
 
+**Studio Mode and transitions**
+- [ ] Turn on Studio Mode, stage another scene, choose Fade, Slide or Wipe, and press
+      Transition while recording. The recording shows the same change as the preview.
+
 **Audio**
+- [ ] In Settings → Audio, pick a microphone. The mixer switches to it.
 - [ ] Connect the microphone and the desktop audio from the Audio Mixer header. The meters move.
 - [ ] Mute a channel. The strip dims. Record a few seconds: that channel is silent in the file.
 - [ ] Move a fader, close the app and open it again. The fader is where you left it, and the
@@ -85,16 +94,19 @@ that, and the newest file from `%APPDATA%\CodeBuilders\logs`.
 
 ## Known limitations
 
-- Only Display, Window, Game (captures the game's window) and Video Capture
-  sources are drawn into recordings. The other source types are shown greyed
-  out in the Add Source dialog.
-- 1080p at 60 fps is at the edge of what this build manages on a typical
-  laptop: expect an occasional dropped frame. 1080p at 30 fps and 720p at 30 fps
-  are steady. If a 60 fps recording looks uneven, drop to 30 fps in Settings → Video.
-- Sound can be up to about 70 ms ahead of or behind the picture. Nothing drifts
-  over a long recording, but it is not frame-exact.
-- Sound is the system default microphone and everything the computer plays.
-  Choosing a specific device is not available yet.
+- Media (video file), Browser and Scene sources are not available yet; they are
+  greyed out in the Add Source dialog. Image, Color, Text, Display, Window, Game
+  (captures the game's window) and Video Capture sources all work.
+- 1080p at 60 fps held 60.0 fps with no dropped frames on the test laptop. A
+  weaker computer may not manage it; if a 60 fps recording looks uneven, drop to
+  30 fps in Settings → Video.
+- Sound can be up to about 60 ms behind the picture. Nothing drifts over a long
+  recording, but it is not frame-exact.
+- Sound is the microphone you choose in Settings → Audio (or the system default)
+  and everything the computer plays. Windows does not allow capturing a single
+  output device, and the file has one audio track.
+- Transitions play in Studio Mode (the Transition button). Clicking a scene in
+  normal mode changes at once, as a cut.
 - The virtual camera is a video stream on `udp://127.0.0.1:12345` for other
   programs that can open a network stream (OBS, VLC, FFmpeg). It does not
   appear as a webcam in Zoom or Teams yet.
