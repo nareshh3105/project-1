@@ -43,6 +43,9 @@ let drawn: number
 let filterDefs: string[]
 let filtersSet: string[]
 let mediaVideos: Array<{ src: string }>
+let browserAttached: string[]
+let browserDetached: string[]
+let pushPage: (id: string, update: { width: number; height: number; x: number; y: number; w: number; h: number; bgra: Uint8Array }) => void
 let streamsAttached: Array<{ id: string; gain: number; detached: boolean }>
 let drawImages: unknown[][]
 let ctxCalls: unknown[][]
@@ -88,6 +91,13 @@ function build(): HostDeps {
       createAudioData: () => ({ close: () => {} }),
     },
     setFilterDefs: (markup) => { filterDefs.push(markup) },
+    browser: {
+      attach: async (id) => { browserAttached.push(id) },
+      detach: (id) => { browserDetached.push(id) },
+      onFrame: (cb) => { pushPage = cb; return () => {} },
+      onFailure: () => () => {},
+      createSurface: (w, h) => ({ canvas: {} as CanvasImageSource, width: w, height: h, draw: () => {} }),
+    },
     media: {
       resolveUrl: async (p) => `cbmedia://media/${p}`,
       createVideo: () => {
@@ -148,7 +158,7 @@ function build(): HostDeps {
 }
 
 beforeEach(() => {
-  sent = []; handlers = {}; filterDefs = []; filtersSet = []; mediaVideos = []; streamsAttached = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
+  sent = []; handlers = {}; filterDefs = []; filtersSet = []; mediaVideos = []; browserAttached = []; browserDetached = []; streamsAttached = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
   encoded = { frames: 0, audio: 0, closed: 0, flushed: 0, aborted: 0 }
   encoderFails = null; createAudioFails = false; encoderSupported = true
   tick = () => {}
@@ -682,5 +692,58 @@ describe('media files', () => {
     pushState(snap({ sources: [clip('m')] }))
     await settle()
     expect(mediaVideos).toHaveLength(0)
+  })
+})
+
+describe('web pages', () => {
+  const web = (id: string, settings: SnapshotSource['settings'] = { url: 'https://example.com/overlay' }): SnapshotSource => ({
+    ...src(id), type: 'browser_source', target: null, settings,
+  })
+
+  it('starts a page for the output and draws its picture over the scene', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushPage('w', { width: 1280, height: 720, x: 0, y: 0, w: 1280, h: 720, bgra: new Uint8Array(4) })
+    drawImages.length = 0
+    tick()
+
+    expect(browserAttached).toEqual(['w'])
+    expect(opens).toBe(0)
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('draws nothing for a page that has not painted yet', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    drawImages.length = 0
+    tick()
+    expect(drawImages).toHaveLength(0)
+  })
+
+  it('lets go of the page when its source is removed', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [] }))
+    expect(browserDetached).toEqual(['w'])
+  })
+
+  it('lets go of every page when the output ends', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await request(2, 'closeSession', { kind: 'recording' })
+    expect(browserDetached).toEqual(['w'])
+  })
+
+  it('does not start a page while no output is running', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await settle()
+    expect(browserAttached).toEqual([])
+  })
+
+  it('does not start a page twice for the same scene', async () => {
+    pushState(snap({ sources: [web('w')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [web('w')] }))
+    expect(browserAttached).toHaveLength(1)
   })
 })

@@ -32,6 +32,7 @@ const filtersTest = args.includes('--filters')
 const transitionType = flag('transition', '')
 const weakCores = Number(flag('weak', 0))
 const mediaFile = flag('media', '')
+const webPage = args.includes('--browser')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -214,6 +215,28 @@ function mediaCheck(file) {
   }
 }
 
+/**
+ * The page: the red box is red and steady, the animated box changes colour over
+ * time, and where the page paints nothing the scene behind it shows through.
+ */
+function pageCheck(file, outW) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const k = outW / 1920
+  const series = (x, y, w, h, key) => {
+    const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(':')
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+      `fps=10,crop=${crop},signalstats,metadata=mode=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    return [...r.stdout.matchAll(new RegExp('lavfi.signalstats.' + key + '=([0-9.]+)', 'g'))].map((m) => Number(m[1]))
+  }
+  const range = (xs) => (xs.length ? [Math.round(Math.min(...xs)), Math.round(Math.max(...xs))] : null)
+  return {
+    redBoxU: range(series(150, 150, 300, 200, 'UAVG')), redBoxV: range(series(150, 150, 300, 200, 'VAVG')),
+    animatedBoxU: range(series(1050, 150, 300, 200, 'UAVG')),
+    behindThePage: range(series(100, 700, 400, 200, 'YAVG')),
+  }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -292,6 +315,22 @@ async function main() {
       secondScene = await invoke('create_scene', { collectionId: init.collectionId, name: 'Blue scene' })
       await invoke('add_source', { sceneId: secondScene.id, name: 'Blue', sourceType: 'color_source', settings: JSON.stringify({ color: '#0000ff' }) })
       await ui.eval(`localStorage.setItem('cb:transition', JSON.stringify({ type: '${transitionType}', durationMs: 2000 }))`)
+    }
+    let pageServer = null
+    if (webPage) {
+      // A page with a still red box, a box that animates blue to green, and nothing behind them.
+      const html = `<!doctype html><html><body style="margin:0;background:transparent">
+        <div style="position:fixed;left:100px;top:100px;width:400px;height:300px;background:#f00"></div>
+        <div style="position:fixed;left:1000px;top:100px;width:400px;height:300px;animation:shift 2s linear infinite alternate"></div>
+        <style>@keyframes shift{from{background:#00f}to{background:#0f0}}</style></body></html>`
+      pageServer = require('node:http').createServer((_q, res) => { res.setHeader('Content-Type', 'text/html'); res.end(html) })
+      await new Promise((r) => pageServer.listen(0, '127.0.0.1', r))
+      const port = pageServer.address().port
+      const src = await invoke('add_source', { sceneId, name: 'Page', sourceType: 'browser_source',
+        settings: JSON.stringify({ url: `http://127.0.0.1:${port}/`, width: 1920, height: 1080, fps: 30 }) })
+      await invoke('set_source_transform', {
+        id: src.id, transform: JSON.stringify({ x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1 }),
+      })
     }
     if (mediaFile) {
       // A video file played as a source, covering the canvas.
@@ -480,7 +519,11 @@ async function main() {
     if (flasher) { spawnSync('taskkill', ['/F', '/T', '/PID', String(flasher.pid)], { windowsHide: true }) }
     log('stopped; recorded for', ((Date.now() - startedAt) / 1000).toFixed(1), 's')
     await sleep(1500)
+    if (args.includes('--show-log')) console.log('--- app output ---', appLog.slice(-3000))
     return { file, wallSeconds: (Date.now() - startedAt) / 1000, appLog, memory }
+  } catch (e) {
+    if (appLog.trim()) console.error('--- app output (last 2000 characters) ---', appLog.slice(-2000))
+    throw e
   } finally {
     ui?.close()
     child.kill()
@@ -499,6 +542,7 @@ main()
     }
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
     if (mediaFile) console.log(JSON.stringify(mediaCheck(r.file)))
+    if (webPage) console.log(JSON.stringify(pageCheck(r.file, width)))
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))

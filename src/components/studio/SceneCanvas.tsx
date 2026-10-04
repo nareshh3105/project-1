@@ -10,7 +10,9 @@ import {
 import { isStaticType } from '@/lib/sources/static'
 import { StaticView } from './StaticView'
 import { MediaView } from './MediaView'
+import { BrowserView } from './BrowserView'
 import { isMediaType } from '@/lib/sources/media'
+import { isBrowserType } from '@/lib/sources/browser'
 import { useFilterStore, type SourceFilter } from '@/stores/filterStore'
 import { toSnapshotFilter } from '@/lib/hostSnapshot'
 import { planFilters, cropViewBox, type FilterPlan } from '@/lib/filters/plan'
@@ -212,7 +214,7 @@ function SourceLayer({
   }, [live, source.id, getStream])
 
   // Colors and text are drawn at the size of their box, so that is their size.
-  const knownSize = isCaptureType(source.sourceType) || source.sourceType === 'image' || isMediaType(source.sourceType)
+  const knownSize = isCaptureType(source.sourceType) || source.sourceType === 'image' || isMediaType(source.sourceType) || isBrowserType(source.sourceType)
     ? natural
     : { w: Math.round(width), h: Math.round(height) }
   const appearance: React.CSSProperties = {
@@ -296,6 +298,8 @@ function SourceLayer({
           style={appearance}
           className="w-full h-full object-contain pointer-events-none"
         />
+      ) : isBrowserType(source.sourceType) ? (
+        <BrowserView sourceId={source.id} settings={source.settings} style={appearance} onNaturalSize={setNatural} />
       ) : isMediaType(source.sourceType) ? (
         <MediaView settings={source.settings} style={appearance} onNaturalSize={setNatural} />
       ) : isStaticType(source.sourceType) ? (

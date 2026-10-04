@@ -1,5 +1,6 @@
 import { registerAppCommands } from './app'
 import { registerAudioCommands } from './audio'
+import { registerBrowserCommands } from './browser'
 import { registerCaptureCommands } from './capture'
 import { registerCollectionCommands } from './collections'
 import { registerHostCommands } from './host'
@@ -19,6 +20,7 @@ import { registeredCommands } from '../ipc'
 export function registerCommands() {
   registerAppCommands()
   registerAudioCommands()
+  registerBrowserCommands()
   registerCaptureCommands()
   registerCollectionCommands()
   registerHostCommands()

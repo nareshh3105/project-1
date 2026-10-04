@@ -2,6 +2,7 @@ import { IPC_EVENTS } from '@/lib/constants'
 import { IpcError } from '@/lib/errors'
 import type { RuntimeStats } from '@/stores/uiStore'
 import type { SourceType } from '@/types'
+import type { PageUpdate } from '../../shared/host'
 
 // ── Bridge ────────────────────────────────────────────────────────────────
 // Exposed by electron/preload. Deliberately the only place the renderer
@@ -12,6 +13,8 @@ export type UnlistenFn = () => void
 interface Bridge {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
   on(event: string, callback: (payload: unknown) => void): UnlistenFn
+  /** Listens on one of the fixed channels from the main process to this window. */
+  listen(channel: string, callback: (...args: unknown[]) => void): UnlistenFn
 }
 
 /** What an output is asked to produce. Mirrors SessionParams in shared/host.ts. */
@@ -190,6 +193,14 @@ export const ipc = {
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
   },
 
+  browser: {
+    /** Starts showing a web page; resolves with the address and sizes as the main process understood them. */
+    attach: (id: string, spec: { url: string; width: number; height: number; fps: number }) =>
+      cmd<{ url: string; width: number; height: number; fps: number }>('browser_attach', { id, ...spec }),
+    detach: (id: string) => cmd<void>('browser_detach', { id }),
+    reload: (id: string) => cmd<void>('browser_reload', { id }),
+  },
+
   media: {
     /** The address a chosen video or sound file can be played from. */
     url: (filePath: string) => cmd<string>('media_url', { filePath }),
@@ -346,6 +357,15 @@ export interface VirtualCameraStatusPayload {
 
 export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => void): Promise<UnlistenFn> {
   return listen<VirtualCameraStatusPayload>(IPC_EVENTS.VCAM_STATUS, (e) => cb(e.payload))
+}
+
+/** A changed region of a browser source's picture. */
+export function onBrowserFrame(cb: (id: string, update: PageUpdate) => void): UnlistenFn {
+  return bridge().listen('cb:browser-frame', (id, update) => cb(id as string, update as PageUpdate))
+}
+
+export function onBrowserFailure(cb: (id: string, message: string) => void): UnlistenFn {
+  return bridge().listen('cb:browser-failure', (id, message) => cb(id as string, message as string))
 }
 
 export interface OutputHealthPayload { kind: string; struggling: boolean; dropRatio: number }

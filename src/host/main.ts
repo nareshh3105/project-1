@@ -5,8 +5,9 @@ import type { MediaVideo } from './mediaLayers'
 import { createAudioRig } from './audioRig'
 import { SAMPLE_RATE, type SessionDeps } from './session'
 import { openCaptureStream } from '@/lib/capture/open'
-import { ipc } from '@/ipc'
+import { ipc, onBrowserFrame, onBrowserFailure } from '@/ipc'
 import { setFilterDefs } from '@/lib/filters/defs'
+import { createSurface } from '@/lib/sources/pageSurface'
 import type { PaintContext } from '@/lib/sources/static'
 
 /**
@@ -57,6 +58,16 @@ const app = new HostApp({
     },
   },
   setFilterDefs: (markup) => setFilterDefs(document, markup),
+  browser: {
+    attach: (id, spec) => ipc.browser.attach(id, spec),
+    detach: (id) => ipc.browser.detach(id),
+    onFrame: (cb) => onBrowserFrame(cb),
+    onFailure: (cb) => onBrowserFailure(cb),
+    createSurface: (width, height) => {
+      const surface = createSurface(width, height)
+      return { canvas: surface.canvas, width, height, draw: surface.draw }
+    },
+  },
   media: {
     resolveUrl: (filePath) => ipc.media.url(filePath),
     createVideo: () => {

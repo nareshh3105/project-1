@@ -12,6 +12,7 @@ import {
 } from '@/lib/sources/static'
 import { fitWithin } from '@/lib/sources/placement'
 import { isMediaType, parseMedia, fileNameOf, MEDIA_FILE_FILTER, playbackProblem } from '@/lib/sources/media'
+import { isBrowserType, parseBrowser, checkAddress } from '@/lib/sources/browser'
 
 /** Opened with this as the modal payload. */
 export interface SourcePropertiesPayload {
@@ -74,7 +75,7 @@ export function SourcePropertiesModal() {
     closeModal()
   }
 
-  if (!open || !payload || !source || !(isStaticType(source.sourceType) || isMediaType(source.sourceType))) {
+  if (!open || !payload || !source || !(isStaticType(source.sourceType) || isMediaType(source.sourceType) || isBrowserType(source.sourceType))) {
     return <Dialog.Root open={false}><span /></Dialog.Root>
   }
   const type = source.sourceType
@@ -105,6 +106,7 @@ export function SourcePropertiesModal() {
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
             {type === 'color_source' && <ColorFields draft={draft} change={change} />}
             {type === 'text_gdi_plus' && <TextFields draft={draft} change={change} />}
+            {isBrowserType(type) && <BrowserFields draft={draft} change={change} sourceId={source.id} />}
             {isMediaType(type) && (
               <MediaFields draft={draft} change={change} sceneId={payload.sceneId} sourceId={source.id} />
             )}
@@ -389,4 +391,62 @@ function probeMedia(url: string): Promise<{ width: number; height: number } | nu
     video.onerror = () => reject(new Error(playbackProblem(video.error?.code)))
     video.src = url
   })
+}
+
+function BrowserFields({ draft, change, sourceId }: { draft: Draft; change: Change; sourceId: string }) {
+  const b = parseBrowser(draft)
+  const typed = typeof draft.url === 'string' ? draft.url : b.url
+  const problem = checkAddress(typed)
+
+  const number = (key: 'width' | 'height' | 'fps', value: string) => {
+    const n = Number(value)
+    if (Number.isFinite(n)) change({ [key]: n })
+  }
+
+  return (
+    <>
+      <label className="flex flex-col gap-1 text-body text-text-secondary">
+        <span>Address</span>
+        <input
+          type="text"
+          aria-label="Address"
+          value={typed}
+          placeholder="https://example.com/overlay"
+          maxLength={2048}
+          spellCheck={false}
+          onChange={(e) => change({ url: e.target.value })}
+          className={cn(inputClass, 'w-full', problem && 'border-state-danger')}
+        />
+      </label>
+      {problem && <p role="alert" className="text-caption text-state-danger">{problem}</p>}
+
+      <Field label="Page width">
+        <input type="number" aria-label="Page width" min={16} max={4096} value={b.width}
+          onChange={(e) => number('width', e.target.value)} className={cn(inputClass, 'w-28')} />
+      </Field>
+      <Field label="Page height">
+        <input type="number" aria-label="Page height" min={16} max={4096} value={b.height}
+          onChange={(e) => number('height', e.target.value)} className={cn(inputClass, 'w-28')} />
+      </Field>
+      <Field label="Frame rate">
+        <input type="number" aria-label="Frame rate" min={1} max={60} value={b.fps}
+          onChange={(e) => number('fps', e.target.value)} className={cn(inputClass, 'w-28')} />
+      </Field>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => void ipc.browser.reload(sourceId).catch(() => {})}
+          className="px-3 h-7 rounded-button bg-bg-surface border border-bg-divider text-body text-text-primary hover:border-text-muted"
+        >
+          Refresh the page
+        </button>
+      </div>
+
+      <p className="text-caption text-text-muted">
+        The page is drawn with a transparent background. Its sound is not used. Smaller and slower pages
+        take less of the computer, so use only the size and frame rate the page needs.
+      </p>
+    </>
+  )
 }

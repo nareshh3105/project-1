@@ -10,6 +10,7 @@ import { easeInOut, transitionFrame, transitionProgress } from './transition'
 import { FrameLoop, type LoopDeps } from './frameLoop'
 import { StaticLayers, type StaticDeps } from './staticLayers'
 import { MediaLayers, type MediaDeps } from './mediaLayers'
+import { BrowserLayers, type BrowserDeps } from './browserLayers'
 import type { InputControl } from './mixer'
 import { EncoderSession, type SessionDeps } from './session'
 import type { SnapshotChannel, SnapshotSource } from '../../shared/host'
@@ -54,6 +55,7 @@ export interface HostDeps {
   pool: PoolDeps
   statics: StaticDeps
   media: MediaDeps
+  browser: BrowserDeps
   /** Puts the SVG filters the sources refer to into the page, replacing the last set. */
   setFilterDefs(markup: string): void
   loop: LoopDeps
@@ -86,6 +88,7 @@ export class HostApp {
   private readonly pool: CapturePool
   private readonly statics: StaticLayers
   private readonly media: MediaLayers
+  private readonly browser: BrowserLayers
   /** The sound of media files currently in the mix. */
   private readonly mediaAudio = new Map<string, { stream: MediaStream; control: InputControl }>()
   private readonly loop: FrameLoop
@@ -101,6 +104,7 @@ export class HostApp {
     this.pool = new CapturePool(deps.pool)
     this.statics = new StaticLayers(deps.statics)
     this.media = new MediaLayers(deps.media, () => this.reconcileMediaAudio())
+    this.browser = new BrowserLayers(deps.browser)
     this.loop = new FrameLoop(deps.loop)
     this.loop.onError = (id, err) => this.report(id as OutputKind, `drawing failed: ${messageOf(err)}`)
   }
@@ -118,6 +122,7 @@ export class HostApp {
   dispose(): void {
     this.unlisten.forEach((u) => u())
     this.unlisten = []
+    this.browser.dispose()
     for (const kind of [...this.running.keys()]) this.abort(kind)
     this.releaseIdle()
   }
@@ -197,6 +202,7 @@ export class HostApp {
       // Bring captures and audio up to date for the scene being output.
       this.pool.sync(involved(this.snapshot))
       this.media.sync(involved(this.snapshot))
+      this.browser.sync(involved(this.snapshot))
       this.syncFilterDefs(this.snapshot)
       this.audio?.apply(this.snapshot.audio)
       this.reconcileMediaAudio()
@@ -236,6 +242,7 @@ export class HostApp {
     if (this.running.size === 0) return
     this.pool.sync(involved(snapshot))
     this.media.sync(involved(snapshot))
+    this.browser.sync(involved(snapshot))
     this.statics.prune(involved(snapshot))
     this.syncFilterDefs(snapshot)
     this.audio?.apply(snapshot.audio)
@@ -286,7 +293,7 @@ export class HostApp {
   private layersFor(sources: readonly SnapshotSource[], scale: number): ReadyLayer[] {
     const layers: ReadyLayer[] = []
     for (const source of [...sources].sort((a, b) => a.order - b.order)) {
-      const frame = this.pool.frameFor(source.id) ?? this.media.frameFor(source.id) ?? this.statics.frameFor(source)
+      const frame = this.pool.frameFor(source.id) ?? this.media.frameFor(source.id) ?? this.browser.frameFor(source.id) ?? this.statics.frameFor(source)
       if (!frame) continue
 
       const plan = this.planFor(source, scale)
@@ -373,6 +380,7 @@ export class HostApp {
     this.pool.stopAll()
     this.detachMediaAudio()
     this.media.stopAll()
+    this.browser.stopAll()
     this.statics.clear()
     this.audio?.dispose()
     this.audio = null

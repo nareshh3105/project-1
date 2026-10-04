@@ -19,6 +19,7 @@ import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
 import { parseCaptureTarget } from '@/lib/capture/target'
 import { isStaticType, DEFAULT_PLACEMENT } from '@/lib/sources/static'
 import { isMediaType, DEFAULT_MEDIA_PLACEMENT } from '@/lib/sources/media'
+import { isBrowserType, DEFAULT_BROWSER_PLACEMENT } from '@/lib/sources/browser'
 
 function sourceIcon(type: SourceType) {
   const props = { size: 12, className: 'flex-shrink-0' }
@@ -87,8 +88,9 @@ export function SourcesPanel() {
     // A capture source has nothing to show until it is told what to capture.
     if (isCaptureType(type)) { chooseTarget(created); return }
     // A color, some text or a picture starts at a sensible size and asks how it should look.
-    if (isStaticType(type) || isMediaType(type)) {
-      setTransform(activeSceneId, created.id, isStaticType(type) ? DEFAULT_PLACEMENT[type] : DEFAULT_MEDIA_PLACEMENT)
+    if (isStaticType(type) || isMediaType(type) || isBrowserType(type)) {
+      setTransform(activeSceneId, created.id,
+        isStaticType(type) ? DEFAULT_PLACEMENT[type] : isMediaType(type) ? DEFAULT_MEDIA_PLACEMENT : DEFAULT_BROWSER_PLACEMENT)
       void commitTransform(activeSceneId, created.id)
       openProperties(created)
     }
@@ -341,7 +343,7 @@ function SourceRow({
           <ContextMenu.Item className="context-menu-item" onSelect={onFilters}>
             <SlidersHorizontal size={12} /> Filters…
           </ContextMenu.Item>
-          {(isStaticType(source.sourceType) || isMediaType(source.sourceType)) && (
+          {(isStaticType(source.sourceType) || isMediaType(source.sourceType) || isBrowserType(source.sourceType)) && (
             <ContextMenu.Item className="context-menu-item" onSelect={onProperties}>
               <Edit2 size={12} /> Properties…
             </ContextMenu.Item>

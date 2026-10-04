@@ -76,6 +76,7 @@ export const net = {
 
 export const webContents = {
   fromFrame: vi.fn(() => undefined),
+  fromId: vi.fn(() => undefined),
 }
 
 export default {

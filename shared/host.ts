@@ -27,6 +27,10 @@ export const HOST_CHANNELS = {
   ingest: 'cb:ingest',
   /** host -> main: something happened that nobody asked about. */
   event: 'cb:host-event',
+  /** main -> a window: a new picture of a browser source. */
+  browserFrame: 'cb:browser-frame',
+  /** main -> a window: a browser source could not be loaded. */
+  browserFailure: 'cb:browser-failure',
 } as const
 
 export type HostChannel = (typeof HOST_CHANNELS)[keyof typeof HOST_CHANNELS]
@@ -36,8 +40,23 @@ export const SEND_CHANNELS: readonly string[] = [
   HOST_CHANNELS.ready, HOST_CHANNELS.response, HOST_CHANNELS.ingest, HOST_CHANNELS.event,
 ]
 export const RECEIVE_CHANNELS: readonly string[] = [
-  HOST_CHANNELS.request, HOST_CHANNELS.state,
+  HOST_CHANNELS.request, HOST_CHANNELS.state, HOST_CHANNELS.browserFrame, HOST_CHANNELS.browserFailure,
 ]
+
+// ── Browser sources ────────────────────────────────────────────────────────
+
+/** A changed region of a web page's picture: BGRA bytes, `w * h * 4` of them. */
+export interface PageUpdate {
+  /** Size of the whole page. */
+  width: number
+  height: number
+  /** Where the changed region is, and how large. */
+  x: number
+  y: number
+  w: number
+  h: number
+  bgra: Uint8Array
+}
 
 // ── Sessions ───────────────────────────────────────────────────────────────
 
