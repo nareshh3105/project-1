@@ -16,8 +16,10 @@ import { PluginsModal }          from '@/components/modals/PluginsModal'
 import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
 import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
+import { SourcePropertiesModal } from '@/components/modals/SourcePropertiesModal'
 import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { useHostState }         from '@/hooks/useHostState'
+import { useAudioDevices }      from '@/hooks/useAudioDevices'
 import { useNotifyStore }       from '@/stores/notifyStore'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
@@ -120,6 +122,7 @@ export function AppShell() {
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 
   useHostState()
+  useAudioDevices()
 
   // Elapsed timer — ticks every second when recording/streaming is active
   useEffect(() => {
@@ -150,6 +153,7 @@ export function AppShell() {
       <MultiviewModal />
       <FfmpegMissingModal />
       <CapturePickerModal />
+      <SourcePropertiesModal />
       <NoticeHost />
     </div>
   )

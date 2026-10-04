@@ -240,23 +240,9 @@ textarea {
 }
 
 /* ── Studio Mode scene transition keyframes ─────────────────────────────── */
-/* Applied via inline animationName style on ProgramCanvas (duration is dynamic) */
+/* The incoming scene goes over the outgoing one; the recorder draws the same. */
 
-@keyframes program-fade {
-  0%   { opacity: 1; }
-  50%  { opacity: 0; }
-  100% { opacity: 1; }
-}
-
-@keyframes program-slide {
-  0%   { opacity: 1; transform: translateX(0); }
-  35%  { opacity: 0; transform: translateX(-6%); }
-  65%  { opacity: 0; transform: translateX(6%); }
-  100% { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes program-wipe {
-  0%   { clip-path: inset(0 0% 0 0); }
-  50%  { clip-path: inset(0 100% 0 0); }
-  100% { clip-path: inset(0 0% 0 0); }
-}
+@keyframes xfade-out  { from { opacity: 1; } to { opacity: 0; } }
+@keyframes xslide-out { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes xslide-in  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes xwipe-in   { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }

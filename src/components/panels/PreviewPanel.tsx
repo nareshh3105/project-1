@@ -103,28 +103,39 @@ function StageCard({ scene }: { scene: SceneItem | null }) {
 // ── Live program canvas ────────────────────────────────────────────────────
 
 function ProgramCanvas({ scene }: { scene: SceneItem | null }) {
-  const { isTransitioning, type, durationMs } = useTransitionStore((s) => ({
-    isTransitioning: s.isTransitioning,
-    type:            s.type,
-    durationMs:      s.durationMs,
-  }))
+  const active = useTransitionStore((s) => s.active)
 
-  const animStyle: React.CSSProperties =
-    isTransitioning && type !== 'cut'
-      ? {
-          animationName:           `program-${type}`,
-          animationDuration:       `${durationMs}ms`,
-          animationTimingFunction: 'ease-in-out',
-          animationFillMode:       'both',
-        }
-      : {}
+  // Only while this scene is the one being brought in.
+  const moving = active && scene && active.toSceneId === scene.id && active.fromSceneId ? active : null
+  const motion = (name: string): React.CSSProperties => ({
+    animationName:           name,
+    animationDuration:       `${moving?.durationMs ?? 0}ms`,
+    animationTimingFunction: 'ease-in-out',
+    animationFillMode:       'both',
+  })
 
   return (
-    <div className="flex-1 relative bg-black overflow-hidden" style={animStyle}>
+    <div className="flex-1 relative bg-black overflow-hidden">
       {/* Live red border */}
       <div className="absolute inset-0 border border-state-danger/25 pointer-events-none z-10" />
 
-      <SceneCanvas sceneId={scene?.id ?? null} />
+      {moving ? (
+        <>
+          {/* Fade: the old scene fades out over the new. Slide: both move left. Wipe: the new is uncovered. */}
+          <div className="absolute inset-0" style={moving.type === 'slide' ? motion('xslide-out') : undefined}>
+            <SceneCanvas sceneId={moving.type === 'fade' ? scene!.id : moving.fromSceneId} showPlaceholder={false} />
+          </div>
+          <div
+            className="absolute inset-0"
+            style={moving.type === 'fade' ? motion('xfade-out')
+              : moving.type === 'slide' ? motion('xslide-in') : motion('xwipe-in')}
+          >
+            <SceneCanvas sceneId={moving.type === 'fade' ? moving.fromSceneId : scene!.id} showPlaceholder={false} />
+          </div>
+        </>
+      ) : (
+        <SceneCanvas sceneId={scene?.id ?? null} />
+      )}
 
       {/* LIVE badge */}
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-state-danger px-2 py-0.5 rounded text-[10px] text-white font-bold">

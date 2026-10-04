@@ -14,7 +14,7 @@ const PARAMS: SessionParams = {
 }
 
 const src = (id: string, order = 0): SnapshotSource => ({
-  id, type: 'display_capture', order,
+  id, type: 'display_capture', order, settings: {}, filters: [],
   transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
 })
@@ -40,7 +40,12 @@ let timers: number
 let createAudioFails: boolean
 let encoderSupported: boolean
 let drawn: number
+let filterDefs: string[]
+let filtersSet: string[]
+let drawImages: unknown[][]
+let ctxCalls: unknown[][]
 let clockMs: number
+let wallMs: number
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
 const request = async (id: number, method: string, args?: unknown) => {
@@ -80,6 +85,14 @@ function build(): HostDeps {
       createVideoFrame: () => ({ close: () => {} }),
       createAudioData: () => ({ close: () => {} }),
     },
+    setFilterDefs: (markup) => { filterDefs.push(markup) },
+    statics: {
+      createCanvas: () => ({
+        canvas: {} as CanvasImageSource,
+        context: new Proxy({}, { get: () => () => ({ width: 0 }), set: () => true }) as never,
+      }),
+      loadImage: async () => ({ image: {} as CanvasImageSource, width: 10, height: 10 }),
+    },
     pool: {
       open: async () => { opens++; return { getTracks: () => [], getVideoTracks: () => [] } as unknown as MediaStream },
       createVideo: () => ({ srcObject: null, muted: false, readyState: 4, videoWidth: 1920, videoHeight: 1080, play: async () => {} }),
@@ -90,9 +103,13 @@ function build(): HostDeps {
       clearTimer: () => { timers = Math.max(0, timers - 1) },
     },
     now: () => 0,
+    wallNow: () => wallMs,
     createCanvas: () => ({
       canvas: {},
-      context: new Proxy({}, { get: () => () => { drawn++ }, set: () => true }) as unknown as CanvasRenderingContext2D,
+      context: new Proxy({}, {
+        get: (_t, key) => (...args: unknown[]) => { drawn++; ctxCalls.push([String(key), ...args]); if (key === 'drawImage') drawImages.push(args) },
+        set: (_t, key, value) => { if (key === 'filter') filtersSet.push(String(value)); if (key === 'globalAlpha') ctxCalls.push(['globalAlpha', value]); return true },
+      }) as unknown as CanvasRenderingContext2D,
     }),
     createAudio: async (cb) => {
       if (createAudioFails) throw new Error('No audio device.')
@@ -106,7 +123,7 @@ function build(): HostDeps {
 }
 
 beforeEach(() => {
-  sent = []; handlers = {}; clockMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
+  sent = []; handlers = {}; filterDefs = []; filtersSet = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
   encoded = { frames: 0, audio: 0, closed: 0, flushed: 0, aborted: 0 }
   encoderFails = null; createAudioFails = false; encoderSupported = true
   tick = () => {}
@@ -162,6 +179,17 @@ describe('opening an output', () => {
     pushState(snap({ sources: [src('a'), src('b')] }))
     await request(1, 'openSession', { kind: 'recording', params: PARAMS })
     expect(opens).toBe(2)
+  })
+
+  it('draws color, text and image sources without opening any capture', async () => {
+    const staticSource = (id: string, type: string): SnapshotSource => ({ ...src(id), type, target: null, settings: { color: '#ff0000' } })
+    pushState(snap({ sources: [staticSource('c', 'color_source'), staticSource('t', 'text_gdi_plus')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+
+    expect(opens).toBe(0)
+    expect(encoded.frames).toBe(1)
+    expect(drawn).toBeGreaterThan(0)
   })
 
   it('follows scene changes while running', async () => {
@@ -392,5 +420,176 @@ describe('shutting down', () => {
     expect(app.active).toEqual([])
     expect(audioRigs[0].disposed).toBe(true)
     expect(handlers[HOST_CHANNELS.request]).toBeUndefined()
+  })
+})
+
+describe('filters', () => {
+  const filtered = (id: string, filters: SnapshotSource['filters']): SnapshotSource => ({ ...src(id), filters })
+  const blur = { id: 'f1', type: 'blur' as const, radius: 10 }
+  const key = { id: 'k1', type: 'chroma-key' as const, keyColor: '#00ff00', similarity: 80, smoothness: 50, opacity: 1 }
+
+  it('draws a filtered source with its filter', async () => {
+    pushState(snap({ sources: [filtered('a', [blur])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    // 1280 wide output of a 1920 canvas: blur shrinks with the picture.
+    expect(filtersSet).toContain('blur(6.6667px)')
+  })
+
+  it('fits a cropped source by what is left of it, not by its whole picture', async () => {
+    // The fake capture is 1920 x 1080; half of it is cropped away and the box is 1920 x 1080.
+    pushState(snap({ sources: [filtered('a', [{ id: 'c', type: 'crop', left: 960, right: 0, top: 0, bottom: 0 }])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+
+    const [, sx, sy, sw, sh, dx, , dw, dh] = drawImages.at(-1) as number[]
+    expect([sx, sy, sw, sh]).toEqual([960, 0, 960, 1080])
+    expect([dw, dh]).toEqual([960, 1080]) // not stretched to fill the box
+    expect(dx).toBe(-480)
+  })
+
+  it('draws an uncropped source with the plain form', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    expect(drawImages.at(-1)).toHaveLength(5)
+  })
+
+  it('draws an unfiltered source with none', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    expect(filtersSet.every((f) => f === 'none')).toBe(true)
+  })
+
+  it('puts SVG filters in the page before drawing with them', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    expect(filterDefs.at(-1)).toContain('id="cbf-k1"')
+  })
+
+  it('does not rewrite the page when the filters have not changed', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    const before = filterDefs.length
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    expect(filterDefs.length).toBe(before)
+  })
+
+  it('updates the page when a filter changes', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [filtered('a', [{ ...key, similarity: 300 }])] }))
+    expect(new Set(filterDefs).size).toBeGreaterThan(1)
+  })
+
+  it('clears the page of filters for a source that has gone', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [] }))
+    expect(filterDefs.at(-1)).toBe('')
+  })
+
+  it('picks up a changed filter on the next frame', async () => {
+    pushState(snap({ sources: [filtered('a', [blur])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    filtersSet.length = 0
+
+    pushState(snap({ sources: [filtered('a', [{ ...blur, radius: 30 }])] }))
+    clockMs = 100
+    tick()
+    expect(filtersSet).toContain('blur(20px)')
+  })
+})
+
+describe('scene transitions', () => {
+  const old = (id: string): SnapshotSource => ({ ...src(id), settings: {}, filters: [] })
+  const moving = (type: 'fade' | 'slide' | 'wipe', startedAt = 0, durationMs = 1000) => ({
+    type, durationMs, startedAt, from: [old('old')],
+  })
+  const names = () => ctxCalls.map((c) => c[0])
+  const alphas = () => ctxCalls.filter((c) => c[0] === 'globalAlpha').map((c) => c[1])
+
+  async function onAir(transition?: ReturnType<typeof moving>) {
+    pushState({ ...snap({ sources: [src('new')] }), ...(transition ? { transition } : {}) })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    ctxCalls.length = 0
+    drawImages.length = 0
+  }
+
+  it('draws one scene when no transition is under way', async () => {
+    await onAir()
+    tick()
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('draws the outgoing scene, then the incoming one over it, while a transition runs', async () => {
+    await onAir(moving('fade'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    expect(drawImages).toHaveLength(2)
+    // Black is painted once, before the first; the second goes over without clearing.
+    expect(names().filter((n) => n === 'fillRect')).toHaveLength(1)
+  })
+
+  it('brings a fade in by its eased amount', async () => {
+    await onAir(moving('fade'))
+    wallMs = 500 // half way: eased 0.5
+    clockMs = 100
+    tick()
+    expect(alphas().some((a) => Math.abs((a as number) - 0.5) < 0.01)).toBe(true)
+  })
+
+  it('starts a fade from nothing and so shows only the old scene at first', async () => {
+    await onAir(moving('fade'))
+    wallMs = 0
+    clockMs = 100
+    tick()
+    expect(alphas()).toContain(0)
+  })
+
+  it('moves both scenes for a slide', async () => {
+    await onAir(moving('slide'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    const shifts = ctxCalls.filter((c) => c[0] === 'translate' && c[2] === 0 && Math.abs(c[1] as number) > 1).map((c) => Math.round(c[1] as number))
+    expect(shifts.sort((a, b) => a - b)).toEqual([-960, 960])
+  })
+
+  it('clips the incoming scene to the part uncovered so far for a wipe', async () => {
+    await onAir(moving('wipe'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    const rects = ctxCalls.filter((c) => c[0] === 'rect' && c[3] !== 1080).map((c) => c.slice(1))
+    expect(rects.some((r) => Math.abs((r[2] as number) - 960) < 1)).toBe(true)
+  })
+
+  it('goes back to drawing one scene once the transition is over', async () => {
+    await onAir(moving('fade'))
+    wallMs = 5000
+    clockMs = 100
+    tick()
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('opens captures for the outgoing scene while it is still showing', async () => {
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    expect(opens).toBe(2)
+  })
+
+  it('lets go of the outgoing scene captures after the transition', async () => {
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [src('new')] }))
+    // The outgoing source is no longer wanted, so asking for it again opens it afresh.
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await settle()
+    expect(opens).toBe(3)
   })
 })

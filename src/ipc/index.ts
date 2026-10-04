@@ -215,6 +215,8 @@ export const ipc = {
     openDialog: (filters?: { name: string; extensions: string[] }[]) =>
       cmd<string | null>('show_open_dialog', { filters }),
     readText:   (path: string) => cmd<string>('read_text_file', { path }),
+    /** A picture the user chose, as a data URL. */
+    readImage:  (path: string) => cmd<string>('read_image_file', { path }),
     writeText:  (path: string, contents: string) =>
       cmd<void>('write_text_file', { path, contents }),
   },

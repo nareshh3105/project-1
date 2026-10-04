@@ -1,39 +1,35 @@
 import type { SnapshotChannel } from '../../shared/host'
 
 /**
- * The audio that goes into every output: the channels the user has connected,
- * each at its own fader position and mute, summed into one stereo mix.
+ * Which inputs the mix has open, and at what level.
  *
  * The host opens its own inputs, because the interface's inputs feed its meters
- * and cannot be shared across windows. The mix therefore follows the snapshot:
- * a channel the interface has connected is opened here, one it has disconnected
- * is released, and volume and mute apply to what is recorded.
+ * and cannot be shared across windows. They follow the snapshot: a channel the
+ * interface has connected is opened here, one it has disconnected is released,
+ * a different microphone is switched to, and volume and mute apply to what is
+ * recorded. Where the sound goes from there is `attach`'s business.
  *
- * The Web Audio pieces are injected so the rules can be tested without a browser.
+ * Everything the browser does is injected so the rules can be tested without one.
  */
 
-export interface GainLike {
-  gain: { value: number; setTargetAtTime?(v: number, t: number, c: number): void }
-  connect(to: unknown): void
-  disconnect(): void
-}
-
-export interface SourceLike {
-  connect(to: unknown): void
-  disconnect(): void
+/** What an attached input offers the mix. */
+export interface InputControl {
+  setGain(gain: number): void
+  /** Stops feeding the mix. */
+  detach(): void
 }
 
 export interface MixerDeps {
   /** Opens the input behind a channel, or rejects with a message worth showing. */
-  openInput(channel: string): Promise<MediaStream>
-  createGain(): GainLike
-  createSource(stream: MediaStream): SourceLike
+  openInput(channel: string, deviceId: string): Promise<MediaStream>
+  /** Starts feeding a stream into the mix under this channel name. */
+  attach(channel: string, stream: MediaStream): InputControl
 }
 
 interface Open {
+  deviceId: string
   stream: MediaStream
-  source: SourceLike
-  gain: GainLike
+  control: InputControl
 }
 
 /** Channels that have an input to open; the others are placeholders in the mixer. */
@@ -42,33 +38,33 @@ const OPENABLE = new Set(['mic', 'desktop'])
 export class Mixer {
   private readonly open = new Map<string, Open>()
   /** Channels being opened right now, so a second snapshot does not open them twice. */
-  private readonly opening = new Map<string, symbol>()
-  private readonly failures = new Map<string, string>()
+  private readonly opening = new Map<string, { ticket: symbol; deviceId: string }>()
+  private readonly failures = new Map<string, { message: string; deviceId: string }>()
   private last = new Map<string, SnapshotChannel>()
 
   constructor(
     private readonly deps: MixerDeps,
-    /** Where the mix goes. */
-    private readonly destination: unknown,
     private readonly onChange: () => void = () => {},
   ) {}
 
   /** Brings the inputs and levels in line with the interface. */
   apply(channels: readonly SnapshotChannel[]): void {
-    this.last = new Map(channels.map((c) => [c.id, c]))
+    // A channel with no device named uses the system default.
+    this.last = new Map(channels.map((c) => [c.id, { ...c, deviceId: c.deviceId ?? '' }]))
 
     for (const id of [...this.open.keys()]) {
       const want = this.last.get(id)
-      if (!want || !want.connected) this.release(id)
+      // A different device is chosen: let go of the old one and open the new.
+      if (!want || !want.connected || want.deviceId !== this.open.get(id)!.deviceId) this.release(id)
     }
-    for (const id of [...this.opening.keys()]) {
+    for (const [id, ticket] of [...this.opening]) {
       const want = this.last.get(id)
-      if (!want || !want.connected) this.opening.delete(id)
+      if (!want || !want.connected || want.deviceId !== ticket.deviceId) this.opening.delete(id)
     }
-    // Reconnecting is how the user asks for another try.
-    for (const id of [...this.failures.keys()]) {
+    // Reconnecting, or choosing another device, is how the user asks for another try.
+    for (const [id, failure] of [...this.failures]) {
       const want = this.last.get(id)
-      if (!want || !want.connected) this.failures.delete(id)
+      if (!want || !want.connected || want.deviceId !== failure.deviceId) this.failures.delete(id)
     }
 
     for (const ch of channels) {
@@ -85,7 +81,7 @@ export class Mixer {
 
   /** Channels that could not be opened, and why. */
   errors(): Record<string, string> {
-    return Object.fromEntries(this.failures)
+    return Object.fromEntries([...this.failures].map(([id, f]) => [id, f.message]))
   }
 
   get openChannels(): string[] {
@@ -101,35 +97,32 @@ export class Mixer {
   // ── internals ──
 
   private async openChannel(id: string): Promise<void> {
-    const ticket = Symbol(id)
-    this.opening.set(id, ticket)
+    const deviceId = this.last.get(id)?.deviceId ?? ''
+    const mine = { ticket: Symbol(id), deviceId }
+    this.opening.set(id, mine)
     this.failures.delete(id)
 
     let stream: MediaStream
     try {
-      stream = await this.deps.openInput(id)
+      stream = await this.deps.openInput(id, deviceId)
     } catch (err) {
-      if (this.opening.get(id) === ticket) {
+      if (this.opening.get(id) === mine) {
         this.opening.delete(id)
-        this.failures.set(id, err instanceof Error && err.message ? err.message : 'Could not open the input.')
+        this.failures.set(id, { deviceId, message: err instanceof Error && err.message ? err.message : 'Could not open the input.' })
         this.onChange()
       }
       return
     }
 
-    // Disconnected, or the mixer disposed, while the input was opening.
-    if (this.opening.get(id) !== ticket) {
+    // Disconnected, changed to another device, or the mixer disposed, while the input was opening.
+    if (this.opening.get(id) !== mine) {
       stream.getTracks().forEach((t) => t.stop())
       return
     }
     this.opening.delete(id)
 
-    const source = this.deps.createSource(stream)
-    const gain = this.deps.createGain()
-    source.connect(gain)
-    gain.connect(this.destination)
-
-    this.open.set(id, { stream, source, gain })
+    const control = this.deps.attach(id, stream)
+    this.open.set(id, { deviceId, stream, control })
     this.setLevel(id)
 
     // A device unplugged, or sharing stopped: the channel goes quiet, and says why.
@@ -137,7 +130,7 @@ export class Mixer {
       track.addEventListener('ended', () => {
         if (this.open.get(id)?.stream !== stream) return
         this.release(id)
-        this.failures.set(id, 'The input was disconnected.')
+        this.failures.set(id, { deviceId, message: 'The input was disconnected.' })
         this.onChange()
       })
     }
@@ -150,7 +143,7 @@ export class Mixer {
     if (!input || !want) return
 
     const volume = Number.isFinite(want.volume) ? Math.min(1, Math.max(0, want.volume)) : 0
-    input.gain.gain.value = want.muted ? 0 : volume
+    input.control.setGain(want.muted ? 0 : volume)
   }
 
   private release(id: string): void {
@@ -158,8 +151,7 @@ export class Mixer {
     if (!input) return
     this.open.delete(id)
 
-    try { input.source.disconnect() } catch { /* already gone */ }
-    try { input.gain.disconnect() } catch { /* already gone */ }
+    try { input.control.detach() } catch { /* already gone */ }
     input.stream.getTracks().forEach((t) => t.stop())
   }
 }

@@ -79,6 +79,8 @@ function saveChannels(channels: AudioChannel[]): void {
 
 interface AudioState {
   channels: AudioChannel[]
+  /** The device chosen for each channel, if not the system default. Set from Settings → Audio. */
+  devices: Record<string, string>
   /** Channels with a real input attached. Others read silent by design. */
   connected: string[]
   /** Why a channel could not be connected, keyed by channel id. */
@@ -92,12 +94,14 @@ interface AudioActions {
   updateLevels:        (id: string, levels: ChannelLevels) => void
   setAllLevels:        (levels: Record<string, ChannelLevels>) => void
   setConnected:        (id: string, connected: boolean) => void
+  setDevice:           (id: string, deviceId: string) => void
   setChannelError:     (id: string, message: string | null) => void
 }
 
 export const useAudioStore = create<AudioState & AudioActions>()(
   immer((set) => ({
     channels: CHANNEL_DEFS.map(({ id, name }) => makeChannel(id, name, remembered().channels[id] as RememberedChannel | undefined)),
+    devices: {},
     connected: [],
     errors: {},
 
@@ -144,6 +148,12 @@ export const useAudioStore = create<AudioState & AudioActions>()(
         if (connected && !has) s.connected.push(id)
         if (!connected && has) s.connected = s.connected.filter((x) => x !== id)
         if (connected) delete s.errors[id]
+      }),
+
+    setDevice: (id, deviceId) =>
+      set((s) => {
+        if (deviceId) s.devices[id] = deviceId
+        else delete s.devices[id]
       }),
 
     setChannelError: (id, message) =>

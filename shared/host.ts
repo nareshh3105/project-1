@@ -93,6 +93,14 @@ export interface SnapshotTransform {
   scaleY: number
 }
 
+/** A filter on a source, as the host applies it. Ranges are enforced by the main process. */
+export type SnapshotFilter =
+  | { id: string; type: 'color-correction'; brightness: number; contrast: number; saturation: number; hue: number; opacity: number }
+  | { id: string; type: 'crop'; left: number; right: number; top: number; bottom: number }
+  | { id: string; type: 'chroma-key'; keyColor: string; similarity: number; smoothness: number; opacity: number }
+  | { id: string; type: 'blur'; radius: number }
+  | { id: string; type: 'sharpen'; strength: number }
+
 export interface SnapshotSource {
   id: string
   /** What it is: only the capture types draw anything. */
@@ -102,6 +110,13 @@ export interface SnapshotSource {
   transform: SnapshotTransform
   /** What it captures, or null if it has not been set up. */
   target: { kind: 'screen' | 'window' | 'camera'; id: string; name: string } | null
+  /**
+   * Settings for sources drawn from their settings alone (color, text, image).
+   * Plain values only; the main process drops anything else.
+   */
+  settings: Record<string, string | number | boolean>
+  /** Enabled filters, in the order they apply. */
+  filters: SnapshotFilter[]
 }
 
 export interface SnapshotChannel {
@@ -111,6 +126,17 @@ export interface SnapshotChannel {
   noiseSuppression: boolean
   /** Whether the interface has a real input attached to this channel. */
   connected: boolean
+  /** The device chosen for this channel; empty for the system default. */
+  deviceId: string
+}
+
+/** A scene change in progress: the new scene is `sources`, the one it replaces is `from`. */
+export interface SnapshotTransition {
+  type: 'fade' | 'slide' | 'wipe'
+  durationMs: number
+  /** Milliseconds since the epoch (Date.now), so any window can work out how far along it is. */
+  startedAt: number
+  from: SnapshotSource[]
 }
 
 export interface HostSnapshot {
@@ -119,6 +145,8 @@ export interface HostSnapshot {
   /** Visible sources of the scene being output, bottom first. */
   sources: SnapshotSource[]
   audio: SnapshotChannel[]
+  /** Present only while a transition is under way. */
+  transition?: SnapshotTransition
 }
 
 export const EMPTY_SNAPSHOT: HostSnapshot = {

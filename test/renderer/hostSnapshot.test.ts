@@ -74,8 +74,8 @@ describe('buildSnapshot', () => {
       channels: [channel('mic', { volume: 0.5, muted: true }), channel('desktop')],
     })
     expect(snap.audio).toEqual([
-      { id: 'mic', volume: 0.5, muted: true, noiseSuppression: false, connected: true },
-      { id: 'desktop', volume: 1, muted: false, noiseSuppression: false, connected: false },
+      { id: 'mic', volume: 0.5, muted: true, noiseSuppression: false, connected: true, deviceId: '' },
+      { id: 'desktop', volume: 1, muted: false, noiseSuppression: false, connected: false, deviceId: '' },
     ])
   })
 
@@ -134,5 +134,65 @@ describe('suggestedVideoBitrate', () => {
   it('never goes below a usable floor or above the limit', () => {
     expect(suggestedVideoBitrate(64, 64, 1)).toBe(1_000_000)
     expect(suggestedVideoBitrate(7680, 4320, 120)).toBe(100_000_000)
+  })
+})
+
+describe('audio devices in the snapshot', () => {
+  it('carries the device chosen for a channel', () => {
+    const snap = buildSnapshot({ sources: [], base: BASE, channels: [channel('mic'), channel('desktop')], connected: [], devices: { mic: 'usb-1' } })
+    expect(snap.audio.map((c) => c.deviceId)).toEqual(['usb-1', ''])
+  })
+})
+
+describe('filters in the snapshot', () => {
+  const blur = (id: string, enabled = true) => ({ id, type: 'blur' as const, name: 'Gaussian Blur', enabled, radius: 5 })
+
+  it('carries a source\'s enabled filters in order, without the editor-only fields', () => {
+    const snap = buildSnapshot({
+      sources: [source('a')], base: BASE, channels: [], connected: [],
+      filters: { a: [blur('f1'), blur('f2', false), blur('f3')] },
+    })
+    expect(snap.sources[0].filters).toEqual([
+      { id: 'f1', type: 'blur', radius: 5 },
+      { id: 'f3', type: 'blur', radius: 5 },
+    ])
+  })
+
+  it('gives no filters to a source that has none', () => {
+    expect(buildSnapshot({ sources: [source('a')], base: BASE, channels: [], connected: [] }).sources[0].filters).toEqual([])
+  })
+
+  it('keeps one source\'s filters off another', () => {
+    const snap = buildSnapshot({
+      sources: [source('a', { orderIndex: 0 }), source('b', { orderIndex: 1 })], base: BASE, channels: [], connected: [],
+      filters: { b: [blur('f1')] },
+    })
+    expect(snap.sources.map((s) => s.filters.length)).toEqual([0, 1])
+  })
+})
+
+describe('a transition in the snapshot', () => {
+  const when = { type: 'slide' as const, durationMs: 500, startedAt: 123 }
+
+  it('carries the scene being replaced, built like any other', () => {
+    const snap = buildSnapshot({
+      sources: [source('new')], base: BASE, channels: [], connected: [],
+      transition: { ...when, from: [source('old-top', { orderIndex: 1 }), source('old-bottom', { orderIndex: 0 })] },
+    })
+    expect(snap.transition).toMatchObject(when)
+    expect(snap.transition!.from.map((s) => s.id)).toEqual(['old-bottom', 'old-top'])
+    expect(snap.sources.map((s) => s.id)).toEqual(['new'])
+  })
+
+  it('has no transition key when none is under way', () => {
+    expect('transition' in buildSnapshot({ sources: [], base: BASE, channels: [], connected: [] })).toBe(false)
+  })
+
+  it('leaves hidden sources of the old scene out', () => {
+    const snap = buildSnapshot({
+      sources: [], base: BASE, channels: [], connected: [],
+      transition: { ...when, from: [source('shown'), source('hidden', { visible: false })] },
+    })
+    expect(snap.transition!.from.map((s) => s.id)).toEqual(['shown'])
   })
 })

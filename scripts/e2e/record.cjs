@@ -27,6 +27,9 @@ const [width, height] = flag('res', '1280x720').split('x').map(Number)
 const minimize = !args.includes('--no-minimize')
 const withSync = args.includes('--sync')
 const arrange = args.includes('--arrange')
+const overlay = args.includes('--overlay')
+const filtersTest = args.includes('--filters')
+const transitionType = flag('transition', '')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -112,6 +115,71 @@ function arrangeCheck(file) {
   return { cornerPeak: peak('iw*0.15:ih*0.15:0:0'), centrePeak: peak('iw*0.3:ih*0.3:iw*0.35:ih*0.35') }
 }
 
+/** Average and peak color in the two overlay boxes, in the recording. */
+function overlayCheck(file, outW, outH) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const k = outW / 1920
+  const region = (x, y, w, h) => {
+    const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(':')
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+      `crop=${crop},signalstats,metadata=mode=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    const get = (key) => {
+      const vs = [...r.stdout.matchAll(new RegExp('lavfi.signalstats.' + key + '=([0-9.]+)', 'g'))].map((m) => Number(m[1]))
+      return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null
+    }
+    return { y: get('YAVG'), u: get('UAVG'), v: get('VAVG'), yMax: get('YMAX') }
+  }
+  // Green is low U and low V; red is low U and high V. White text raises the peak brightness.
+  return { green: region(120, 120, 480, 240), words: region(1200, 120, 600, 240) }
+}
+
+/**
+ * The three filtered boxes, as the recording shows them.
+ *  keyed:   green with a chroma key should show what is behind it, not green.
+ *  grey:    red with no saturation should have no colour at all (U and V at 128).
+ *  cropped: blue with its left half cropped is half as wide, so the left of its box is not blue.
+ */
+function filtersCheck(file, outW) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const k = outW / 1920
+  const region = (x, y, w, h) => {
+    const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(':')
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+      `crop=${crop},signalstats,metadata=mode=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    const get = (key) => {
+      const vs = [...r.stdout.matchAll(new RegExp('lavfi.signalstats.' + key + '=([0-9.]+)', 'g'))].map((m) => Number(m[1]))
+      return vs.length ? Number((vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(1)) : null
+    }
+    return { y: get('YAVG'), u: get('UAVG'), v: get('VAVG') }
+  }
+  return {
+    keyed: region(150, 150, 420, 180),
+    grey: region(730, 150, 420, 180),
+    croppedLeftEdge: region(1250, 150, 60, 180),
+    croppedCentre: region(1480, 150, 80, 180),
+  }
+}
+
+/**
+ * Left-half and right-half blue (U) every quarter second around the transition.
+ * Red has U about 90 and blue about 240.
+ *  fade:  both halves rise together through the middle values.
+ *  slide: halfway through, the left half is still red and the right half already blue.
+ *  wipe:  halfway through, the left half is blue and the right half still red.
+ */
+function transitionCheck(file, outW, outH, at) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const half = (x) => {
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', String(Math.max(0, at - 1)), '-i', file, '-t', '4.5', '-map', '0:v:0', '-vf',
+      `fps=4,crop=${Math.floor(outW / 2)}:${outH}:${x}:0,signalstats,metadata=mode=print:key=lavfi.signalstats.UAVG:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    return [...r.stdout.matchAll(/UAVG=([0-9.]+)/g)].map((m) => Math.round(Number(m[1])))
+  }
+  return { fromSecondsBefore: 1, leftU: half(0), rightU: half(Math.floor(outW / 2)) }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -121,9 +189,14 @@ async function waitFor(fn, what, ms = 30000) {
   }
 }
 
+let transitionAt = 0
+
 async function main() {
-  const electron = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
-  const child = spawn(electron, [root, `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(scratch, 'profile')}`], {
+  // Either the built sources run by Electron, or an installed/unpacked app (--exe=...).
+  const exe = flag('exe', '')
+  const electron = exe || path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+  const launchArgs = exe ? [] : [root]
+  const child = spawn(electron, [...launchArgs, `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(scratch, 'profile')}`], {
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: false,
   })
   let appLog = ''
@@ -148,6 +221,44 @@ async function main() {
       sceneId, name: 'Screen', sourceType: 'display_capture',
       settings: JSON.stringify({ capture: target }),
     })
+    if (overlay) {
+      // A green box and a red text box over the screen; the recording must show both.
+      const box = async (name, sourceType, settings, x, y, width, height) => {
+        const src = await invoke('add_source', { sceneId, name, sourceType, settings: JSON.stringify(settings) })
+        await invoke('set_source_transform', {
+          id: src.id, transform: JSON.stringify({ x, y, width, height, rotation: 0, scaleX: 1, scaleY: 1 }),
+        })
+      }
+      await box('Green', 'color_source', { color: '#00ff00' }, 120, 120, 480, 240)
+      await box('Words', 'text_gdi_plus',
+        { text: 'HELLO', fontSize: 140, bold: true, color: '#ffffff', backgroundColor: '#ff0000', align: 'center' },
+        1200, 120, 600, 240)
+    }
+    if (filtersTest) {
+      // Three boxes, each with a filter. Filters are kept in the interface page's storage.
+      const stored = {}
+      const box = async (name, color, x, y, w, h, filters) => {
+        const src = await invoke('add_source', { sceneId, name, sourceType: 'color_source', settings: JSON.stringify({ color }) })
+        await invoke('set_source_transform', {
+          id: src.id, transform: JSON.stringify({ x, y, width: w, height: h, rotation: 0, scaleX: 1, scaleY: 1 }),
+        })
+        stored[src.id] = filters.map((f, i) => ({ id: `${name}-${i}`, name: f.type, enabled: true, ...f }))
+      }
+      await box('keyed', '#00ff00', 120, 120, 480, 240, [{ type: 'chroma-key', keyColor: '#00ff00', similarity: 80, smoothness: 50, opacity: 1 }])
+      await box('grey', '#ff0000', 700, 120, 480, 240, [{ type: 'color-correction', brightness: 0, contrast: 1, saturation: 0, hue: 0, opacity: 1 }])
+      await box('cropped', '#0000ff', 1240, 120, 560, 240, [{ type: 'crop', left: 280, right: 0, top: 0, bottom: 0 }])
+      await ui.eval(`localStorage.setItem('cb:filters', ${JSON.stringify(JSON.stringify(stored))})`)
+    }
+    let secondScene = null
+    if (transitionType) {
+      // Scene 1 is all red; scene 2 is all blue. Both are drawn from settings alone, so nothing
+      // on the real screen is involved.
+      const first = await invoke('add_source', { sceneId, name: 'Red', sourceType: 'color_source', settings: JSON.stringify({ color: '#ff0000' }) })
+      void first
+      secondScene = await invoke('create_scene', { collectionId: init.collectionId, name: 'Blue scene' })
+      await invoke('add_source', { sceneId: secondScene.id, name: 'Blue', sourceType: 'color_source', settings: JSON.stringify({ color: '#0000ff' }) })
+      await ui.eval(`localStorage.setItem('cb:transition', JSON.stringify({ type: '${transitionType}', durationMs: 2000 }))`)
+    }
     if (arrange) {
       // Half size, centred: the corners of the recording must stay black.
       await invoke('set_source_transform', {
@@ -165,6 +276,14 @@ async function main() {
     await sleep(2500) // let the interface publish the scene to the host
     log('scene ready:', target.name)
 
+    const click = (js) => ui.eval(`(() => { ${js} })()`)
+    if (transitionType) {
+      await click(`const b = document.querySelector('button[title="Studio Mode"]'); if (b) b.click()`)
+      await sleep(500)
+      await click(`const s = document.querySelector('[aria-label="Blue scene"]'); if (s) s.click()`)
+      await sleep(500)
+    }
+
     // Connect system audio the way a user does: with the Desktop button in the mixer.
     if (withSync) {
       const clicked = await ui.eval(`(() => {
@@ -175,6 +294,15 @@ async function main() {
       if (!clicked) throw new Error('No Desktop button in the mixer')
       await waitFor(() => ui.eval(`!!document.querySelector('[title="Receiving audio"]')`), 'system audio to connect', 15000)
       log('system audio connected')
+      if (args.includes('--mic')) {
+        const mic = await ui.eval(`(() => {
+          const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Mic')
+          if (!b) return false
+          b.click(); return true
+        })()`)
+        await sleep(2500)
+        log('microphone button', mic ? 'pressed' : 'not found')
+      }
       await sleep(1500)
     }
 
@@ -235,6 +363,22 @@ async function main() {
 
     const hostCdp = hostPage ? new Cdp(hostPage.webSocketDebuggerUrl) : null
     await hostCdp?.ready
+    if (transitionType) {
+      await sleep(4000)
+      log('before:', await ui.eval(`JSON.stringify({
+        scenes: [...document.querySelectorAll('[role=button][aria-label]')].map((b) => [b.getAttribute('aria-label'), b.getAttribute('aria-current')]).slice(0, 8),
+        transition: (() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Transition'); return b ? { disabled: b.disabled } : null })(),
+      })`))
+      await click(`const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Transition'); if (b) b.click()`)
+      log('transition triggered (' + transitionType + ')')
+      transitionAt = (Date.now() - startedAt) / 1000
+    }
+    // Run a script inside the output host and print what it returns (for experiments).
+    const probeFile = flag('probe', '')
+    if (probeFile && hostCdp) {
+      const result = await hostCdp.eval(fs.readFileSync(path.resolve(probeFile), 'utf8'))
+      console.log('PROBE:', typeof result === 'string' ? result : JSON.stringify(result))
+    }
     const memory = []
     let lastAudio = null
     let samples = 0
@@ -260,14 +404,11 @@ async function main() {
       if (hostCdp) {
         const d = await hostCdp.eval(`JSON.stringify(window.__host.debug())`).then(JSON.parse)
         const a = d.audio
-        if (a) {
-          if (lastAudio) log(`audio clock: ${(((a.ctxSec - lastAudio.ctxSec) * 1000) / (a.perfMs - lastAudio.perfMs) * 100).toFixed(2)}% of real time (${a.state})`)
-          lastAudio = a
-        }
+        if (a) log(`audio: ${a.inputs} input(s), ${a.blocks} blocks, ${a.blocksSentLate} late, clock offset ${a.offsetMs === null ? 'n/a' : Math.round(a.offsetMs)} ms`)
         const c = d.captures[0]
         const sess = d.sessions[0]
         log('host:', c ? `capture ${c.state} t=${c.time.toFixed(1)} ${c.width}x${c.height} rs=${c.readyState} ${c.error || ''}` : 'no capture',
-          sess ? `| in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware}` : '')
+          sess ? `| compose=${sess.composeMs.toFixed(1)}ms submit=${sess.submitMs.toFixed(1)}ms worst=${sess.worstMs.toFixed(0)}ms in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware}` : '')
       }
     }
 
@@ -299,6 +440,9 @@ main()
       console.log('--- app log ---\n' + r.appLog.slice(-3000))
       process.exit(1)
     }
+    if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
+    if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
+    if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
-  EncoderSession, h264Codec, MAX_ENCODE_QUEUE, SAMPLE_RATE, type SessionDeps, type MuxerOptions,
+  EncoderSession, h264Codec, MAX_ENCODE_QUEUE, WARMUP_MS, queueLimit, SAMPLE_RATE, type SessionDeps, type MuxerOptions,
 } from '../../src/host/session'
 import type { SessionParams } from '../../shared/host'
 
@@ -228,12 +228,14 @@ describe('video', () => {
   })
 
   describe('when the encoder falls behind', () => {
+    const SETTLED = 10_000 // well past the warm-up
+
     it('drops frames rather than let the queue grow', async () => {
       const s = await make()
       s.start(0)
       queueSize = MAX_ENCODE_QUEUE + 1
-      s.submitFrame({}, 0)
-      s.submitFrame({}, 33)
+      s.submitFrame({}, SETTLED)
+      s.submitFrame({}, SETTLED + 33)
 
       expect(videoEncodes).toEqual([])
       expect(s.stats().framesDropped).toBe(2)
@@ -244,7 +246,7 @@ describe('video', () => {
       const s = await make()
       s.start(0)
       queueSize = MAX_ENCODE_QUEUE
-      s.submitFrame({}, 0)
+      s.submitFrame({}, SETTLED)
 
       expect(videoEncodes).toHaveLength(1)
       expect(s.stats().framesDropped).toBe(0)
@@ -254,9 +256,9 @@ describe('video', () => {
       const s = await make()
       s.start(0)
       queueSize = 99
-      s.submitFrame({}, 0)
+      s.submitFrame({}, SETTLED)
       queueSize = 0
-      s.submitFrame({}, 33)
+      s.submitFrame({}, SETTLED + 33)
 
       expect(videoEncodes).toHaveLength(1)
     })
@@ -265,12 +267,56 @@ describe('video', () => {
       const s = await make()
       s.start(0)
       queueSize = 99
-      s.submitFrame({}, 0)
+      s.submitFrame({}, SETTLED)
       queueSize = 0
-      s.submitFrame({}, 33)
+      s.submitFrame({}, SETTLED + 33)
 
       expect(videoEncodes[0].key).toBe(true)
     })
+
+    // A hardware encoder takes a moment to start. The opening of a recording
+    // must not be thrown away while it does (30 frames were lost at 1080p60).
+    it('lets frames wait while the encoder is still starting up', async () => {
+      const s = await make()
+      s.start(0)
+      queueSize = MAX_ENCODE_QUEUE + 20
+      s.submitFrame({}, 100)
+
+      expect(videoEncodes).toHaveLength(1)
+      expect(s.stats().framesDropped).toBe(0)
+    })
+
+    it('still drops, even in the opening seconds, if the queue grows without end', async () => {
+      const s = await make()
+      s.start(0)
+      queueSize = 500
+      s.submitFrame({}, 100)
+      expect(s.stats().framesDropped).toBe(1)
+    })
+
+    it('stops being generous once the warm-up is over', async () => {
+      const s = await make()
+      s.start(0)
+      queueSize = MAX_ENCODE_QUEUE + 20
+      s.submitFrame({}, WARMUP_MS - 1)
+      s.submitFrame({}, WARMUP_MS + 1)
+
+      expect(videoEncodes).toHaveLength(1)
+      expect(s.stats().framesDropped).toBe(1)
+    })
+  })
+})
+
+describe('the allowance for a queue', () => {
+  it.each([
+    [30, 10_000, 30], [60, 10_000, 45], [120, 10_000, 90], [5, 10_000, 30],
+    [30, 0, 60], [60, 0, 120], [24, 1999, 48],
+  ])('at %s fps, %s ms in, allows %s frames', (fps, since, expected) => {
+    expect(queueLimit(fps, since)).toBe(expected)
+  })
+
+  it('never allows fewer than the minimum', () => {
+    expect(queueLimit(1, 99_999)).toBe(MAX_ENCODE_QUEUE)
   })
 })
 

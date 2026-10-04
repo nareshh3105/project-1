@@ -11,9 +11,11 @@ const goodSource = {
   id: 's1', type: 'display_capture', order: 0,
   transform: { x: 10, y: 20, width: 800, height: 600, rotation: 15, scaleX: 1.5, scaleY: 2 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
+  settings: {},
+  filters: [],
 }
 
-const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true }
+const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true, deviceId: '' }
 
 describe('the whole snapshot', () => {
   it.each([null, undefined, 42, 'x', [], true])('falls back to empty for %s', (bad) => {
@@ -143,5 +145,83 @@ describe('audio channels', () => {
   it('caps how many channels it accepts', () => {
     const many = Array.from({ length: 100 }, (_, i) => ({ ...goodChannel, id: `c${i}` }))
     expect(audioOf(many)).toHaveLength(16)
+  })
+})
+
+describe('source settings', () => {
+  const withSettings = (settings: unknown) =>
+    sanitizeSnapshot({ sources: [{ id: 'a', type: 'text_gdi_plus', transform: {}, settings }] }).sources[0]
+
+  it('keeps strings, numbers and booleans', () => {
+    expect(withSettings({ text: 'Hi', fontSize: 40, bold: true }).settings).toEqual({ text: 'Hi', fontSize: 40, bold: true })
+  })
+
+  it('drops anything else, which the host would have no use for', () => {
+    expect(withSettings({ ok: 'yes', obj: { a: 1 }, arr: [1], nul: null, fn: undefined, nan: NaN, inf: Infinity }).settings).toEqual({ ok: 'yes' })
+  })
+
+  it('has none when settings are missing or not an object', () => {
+    expect(withSettings(undefined).settings).toEqual({})
+    expect(withSettings('x').settings).toEqual({})
+    expect(withSettings([1, 2]).settings).toEqual({})
+  })
+
+  it('cuts very long strings and very many keys', () => {
+    expect(String(withSettings({ text: 'a'.repeat(100_000) }).settings.text)).toHaveLength(4000)
+    const many = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, i]))
+    expect(Object.keys(withSettings(many).settings)).toHaveLength(24)
+  })
+})
+
+describe('audio device', () => {
+  const channel = (deviceId: unknown) => sanitizeSnapshot({ audio: [{ id: 'mic', deviceId }] }).audio[0]
+
+  it('keeps the chosen device', () => expect(channel('usb-mic-1').deviceId).toBe('usb-mic-1'))
+  it('means the default when none is given', () => expect(channel(undefined).deviceId).toBe(''))
+  it.each([[5], [null], [{}], [['a']]])('means the default for %s', (bad) => expect(channel(bad).deviceId).toBe(''))
+  it('cuts an absurdly long id', () => expect(channel('x'.repeat(5000)).deviceId).toHaveLength(512))
+})
+
+describe('a transition in progress', () => {
+  const base = { width: 1920, height: 1080 }
+  const gone = { id: 'old', type: 'display_capture', transform: {}, settings: {}, filters: [] }
+  const make = (transition: unknown) => sanitizeSnapshot({ base, sources: [], audio: [], transition })
+
+  it('is kept when well formed', () => {
+    const t = make({ type: 'fade', durationMs: 400, startedAt: 1_700_000_000_000, from: [gone] }).transition!
+    expect(t).toMatchObject({ type: 'fade', durationMs: 400, startedAt: 1_700_000_000_000 })
+    expect(t.from.map((s) => s.id)).toEqual(['old'])
+  })
+
+  it.each(['fade', 'slide', 'wipe'])('accepts %s', (type) => {
+    expect(make({ type, durationMs: 300, startedAt: 1 }).transition?.type).toBe(type)
+  })
+
+  it.each([['cut'], ['spin'], [5], [null], [undefined]])('is dropped for a type of %s', (type) => {
+    expect(make({ type, durationMs: 300, startedAt: 1 }).transition).toBeUndefined()
+  })
+
+  it.each([[NaN], ['now'], [null], [undefined], [Infinity]])('is dropped for a start of %s', (startedAt) => {
+    expect(make({ type: 'fade', durationMs: 300, startedAt }).transition).toBeUndefined()
+  })
+
+  it('is absent from the snapshot when there is none, rather than present as nothing', () => {
+    expect('transition' in make(undefined)).toBe(false)
+    expect('transition' in make('fade')).toBe(false)
+  })
+
+  it('keeps its length inside what the interface offers', () => {
+    expect(make({ type: 'fade', durationMs: 1, startedAt: 1 }).transition?.durationMs).toBe(50)
+    expect(make({ type: 'fade', durationMs: 9e9, startedAt: 1 }).transition?.durationMs).toBe(5000)
+    expect(make({ type: 'fade', durationMs: 'long', startedAt: 1 }).transition?.durationMs).toBe(300)
+  })
+
+  it('checks the outgoing sources like any others', () => {
+    const t = make({ type: 'fade', durationMs: 300, startedAt: 1, from: [gone, { id: '' }, 'nope', null] }).transition!
+    expect(t.from.map((s) => s.id)).toEqual(['old'])
+  })
+
+  it('has no outgoing sources when the list is missing', () => {
+    expect(make({ type: 'fade', durationMs: 300, startedAt: 1 }).transition?.from).toEqual([])
   })
 })

@@ -216,3 +216,122 @@ describe('drawFrame', () => {
     expect(r.names().at(-1)).toBe('restore')
   })
 })
+
+describe('crop and filters', () => {
+  /** Records the filter in force at each draw. */
+  function filtering() {
+    const seen: string[] = []
+    const r = recorder()
+    const draw = r.ctx.drawImage.bind(r.ctx)
+    r.ctx.drawImage = ((...a: unknown[]) => { seen.push(r.ctx.filter); (draw as (...x: unknown[]) => void)(...a) }) as never
+    return { r, seen }
+  }
+
+  it('draws only the cropped part, then fits that inside the box', () => {
+    const r = recorder()
+    const cropped: ReadyLayer = {
+      ...layer('a', { width: 400, height: 200 }, 800, 400),
+      width: 400, height: 400, // the picture as it will look after cropping
+      crop: { sx: 200, sy: 0, sw: 400, sh: 400 },
+    }
+    drawFrame(r.ctx, BASE, BASE, [cropped])
+
+    const draw = r.calls.find((c) => c[0] === 'drawImage')!
+    expect(draw.slice(2, 6)).toEqual([200, 0, 400, 400]) // the source rectangle
+    // A square picture in a 400 x 200 box is fitted to 200 x 200, not stretched.
+    expect(draw.slice(8)).toEqual([200, 200])
+  })
+
+  it('uses the plain four-number form with no crop', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')])
+    expect(r.calls.find((c) => c[0] === 'drawImage')).toHaveLength(6)
+  })
+
+  it('applies the filter of a layer while drawing it', () => {
+    const { r, seen } = filtering()
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'blur(4px)' }])
+    expect(seen).toEqual(['blur(4px)'])
+  })
+
+  it('does not let the filter of one layer leak into the next', () => {
+    const { r, seen } = filtering()
+    r.ctx.filter = 'none'
+    // The recording fake does not restore state, so emulate the real context.
+    const stack: string[] = []
+    const save = r.ctx.save.bind(r.ctx); const restore = r.ctx.restore.bind(r.ctx)
+    r.ctx.save = () => { stack.push(r.ctx.filter); save() }
+    r.ctx.restore = () => { r.ctx.filter = stack.pop() ?? 'none'; restore() }
+
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'blur(4px)' }, layer('b')])
+    expect(seen).toEqual(['blur(4px)', 'none'])
+  })
+
+  it('treats none and missing alike', () => {
+    const { r, seen } = filtering()
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'none' }, layer('b')])
+    expect(seen).toEqual(['none', 'none'])
+  })
+})
+
+describe('drawing one of two scenes in a transition', () => {
+  it('paints black first by default, and not when asked to go over what is there', () => {
+    const first = recorder()
+    drawFrame(first.ctx, BASE, BASE, [layer('a')])
+    expect(first.calls.some((c) => c[0] === 'fillRect')).toBe(true)
+
+    const over = recorder()
+    drawFrame(over.ctx, BASE, BASE, [layer('a')], { clear: false })
+    expect(over.calls.some((c) => c[0] === 'fillRect')).toBe(false)
+  })
+
+  it('draws the scene at the given opacity, and puts the opacity back after', () => {
+    const r = recorder()
+    const alphaAtDraw: number[] = []
+    const draw = r.ctx.drawImage.bind(r.ctx)
+    r.ctx.drawImage = ((...a: unknown[]) => { alphaAtDraw.push(r.ctx.globalAlpha); (draw as (...x: unknown[]) => void)(...a) }) as never
+    const stack: number[] = []
+    const save = r.ctx.save.bind(r.ctx); const restore = r.ctx.restore.bind(r.ctx)
+    r.ctx.save = () => { stack.push(r.ctx.globalAlpha); save() }
+    r.ctx.restore = () => { r.ctx.globalAlpha = stack.pop() ?? 1; restore() }
+
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, alpha: 0.4 })
+    expect(alphaAtDraw).toEqual([0.4])
+    expect(r.ctx.globalAlpha).toBe(1)
+  })
+
+  it('keeps the opacity inside 0..1', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { alpha: 7 })
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { alpha: -2 })
+    expect(r.ctx.globalAlpha).toBeGreaterThanOrEqual(0)
+    expect(r.ctx.globalAlpha).toBeLessThanOrEqual(1)
+  })
+
+  it('shifts the scene sideways without moving the edge it is clipped to', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, offsetX: -500 })
+    const names = r.names()
+    expect(r.calls).toContainEqual(['translate', -500, 0])
+    expect(r.calls).toContainEqual(['rect', 0, 0, 1920, 1080])
+    expect(names.indexOf('clip')).toBeLessThan(names.indexOf('translate'))
+  })
+
+  it('does not shift at all by default', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')])
+    expect(r.calls.filter((c) => c[0] === 'translate' && c[2] === 0)).toHaveLength(0)
+  })
+
+  it('shows only the uncovered part of the scene for a wipe', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, revealWidth: 700 })
+    expect(r.calls).toContainEqual(['rect', 0, 0, 700, 1080])
+  })
+
+  it.each([[-50, 0], [99999, 1920]])('keeps a reveal of %s inside the canvas', (given, expected) => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { revealWidth: given })
+    expect(r.calls).toContainEqual(['rect', 0, 0, expected, 1080])
+  })
+})

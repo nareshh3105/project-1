@@ -4,6 +4,9 @@ import type { PoolVideo } from './capturePool'
 import { createAudioRig } from './audioRig'
 import { SAMPLE_RATE, type SessionDeps } from './session'
 import { openCaptureStream } from '@/lib/capture/open'
+import { ipc } from '@/ipc'
+import { setFilterDefs } from '@/lib/filters/defs'
+import type { PaintContext } from '@/lib/sources/static'
 
 /**
  * Entry point of the output host window. Binds the host to the browser's real
@@ -52,12 +55,28 @@ const app = new HostApp({
       return video as unknown as PoolVideo
     },
   },
+  setFilterDefs: (markup) => setFilterDefs(document, markup),
+  statics: {
+    createCanvas: (width, height) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Could not create a drawing surface.')
+      return { canvas, context: context as unknown as PaintContext }
+    },
+    loadImage: async (filePath) => {
+      const bitmap = await createImageBitmap(await (await fetch(await ipc.file.readImage(filePath))).blob())
+      return { image: bitmap, width: bitmap.width, height: bitmap.height }
+    },
+  },
   loop: {
     now: () => performance.now(),
     setTimer: (cb, ms) => setTimeout(cb, ms),
     clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   },
   now: () => performance.now(),
+  wallNow: () => Date.now(),
   createCanvas: (width, height) => {
     const canvas = document.createElement('canvas')
     canvas.width = width

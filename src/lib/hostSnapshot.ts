@@ -1,8 +1,10 @@
-import type { HostSnapshot, SessionParams, OutputKind } from '../../shared/host'
+import type { HostSnapshot, SessionParams, OutputKind, SnapshotFilter, SnapshotSource } from '../../shared/host'
+import type { SourceFilter } from '@/stores/filterStore'
 import type { SourceItem } from '@/stores/sourceStore'
 import type { AudioChannel } from '@/stores/audioStore'
 import type { SettingsState } from '@/stores/settingsStore'
 import { parseCaptureTarget } from '@/lib/capture/target'
+import { isStaticType } from '@/lib/sources/static'
 
 /**
  * What the output host needs from the interface, and what an output is asked
@@ -16,31 +18,80 @@ interface SnapshotInput {
   base: { width: number; height: number }
   channels: readonly AudioChannel[]
   connected: readonly string[]
+  /** The device chosen for each channel, if not the system default. */
+  devices?: Readonly<Record<string, string>>
+  /** Filters by source id, in the order they were added. */
+  filters?: Readonly<Record<string, readonly SourceFilter[]>>
+  /** A scene change in progress: the scene being replaced, and how the change plays. */
+  transition?: {
+    type: 'fade' | 'slide' | 'wipe'
+    durationMs: number
+    startedAt: number
+    /** The sources of the scene being replaced. */
+    from: readonly SourceItem[]
+  }
 }
 
-export function buildSnapshot({ sources, base, channels, connected }: SnapshotInput): HostSnapshot {
+/** The visible sources of a scene, bottom first, as the host draws them. */
+export function snapshotSources(
+  sources: readonly SourceItem[],
+  filters: Readonly<Record<string, readonly SourceFilter[]>> = {},
+): SnapshotSource[] {
   // The preview paints by orderIndex, lowest at the bottom. The recording has to
   // stack them the same way, whatever order the list happens to be held in.
-  const visible = sources.filter((s) => s.visible).sort((a, b) => a.orderIndex - b.orderIndex)
+  return sources
+    .filter((s) => s.visible)
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((s, i) => ({
+      id: s.id,
+      type: s.sourceType,
+      order: i,
+      transform: { ...s.transform },
+      target: parseCaptureTarget(s.settings),
+      settings: isStaticType(s.sourceType) ? plainValues(s.settings) : {},
+      filters: (filters[s.id] ?? []).filter((f) => f.enabled).map(toSnapshotFilter),
+    }))
+}
 
+export function buildSnapshot({ sources, base, channels, connected, devices = {}, filters = {}, transition }: SnapshotInput): HostSnapshot {
   return {
     base: { width: base.width, height: base.height },
-    sources: visible
-      .map((s, i) => ({
-        id: s.id,
-        type: s.sourceType,
-        order: i,
-        transform: { ...s.transform },
-        target: parseCaptureTarget(s.settings),
-      })),
+    sources: snapshotSources(sources, filters),
+    ...(transition ? {
+      transition: {
+        type: transition.type,
+        durationMs: transition.durationMs,
+        startedAt: transition.startedAt,
+        from: snapshotSources(transition.from, filters),
+      },
+    } : {}),
     audio: channels.map((c) => ({
       id: c.id,
       volume: c.volume,
       muted: c.muted,
       noiseSuppression: c.noiseSuppression,
       connected: connected.includes(c.id),
+      deviceId: devices[c.id] ?? '',
     })),
   }
+}
+
+/** A filter as the host takes it: the same fields without the editor's name and switch. */
+export function toSnapshotFilter(f: SourceFilter): SnapshotFilter {
+  const { name: _name, enabled: _enabled, ...rest } = f
+  void _name; void _enabled
+  return rest as SnapshotFilter
+}
+
+/** The strings, numbers and booleans in a settings object; the host draws from nothing else. */
+function plainValues(settings: Record<string, unknown>): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(settings ?? {})) {
+    if (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) {
+      out[key] = value
+    }
+  }
+  return out
 }
 
 /** A bitrate that suits a resolution and frame rate, for when the user leaves it on automatic. */

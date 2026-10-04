@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { AudioClockMap, AudioTimeline } from '../../src/host/audioClock'
+import { AudioTimeline } from '../../src/host/audioClock'
 
 /**
- * Video is stamped from the wall clock; audio comes from the audio clock, which
- * drifts against it and shares no origin. These tests drive the two pieces that
- * reconcile them with simulated drift and delivery jitter, because a mistake
- * here is invisible in a short test and shows up as lip-sync drift after an hour.
+ * Video is stamped from the wall clock; the audio mix arrives timed on the
+ * capture clock, with jitter. The timeline lays it end to end and corrects it
+ * only when it strays, because a mistake here is invisible in a short test and
+ * shows up as lip-sync drift after an hour.
  */
 
 const RATE = 48000
@@ -19,107 +19,6 @@ function rng(seed = 1) {
     return s / 4294967296
   }
 }
-
-interface Sim {
-  /** Wall-clock ms = ctxMs * rate + origin, i.e. audio clock speed relative to the wall. */
-  speed?: number
-  originMs?: number
-  /** Delivery lateness: at least `minLate`, plus up to `jitter` more. */
-  minLate?: number
-  jitter?: number
-  seconds: number
-  seed?: number
-}
-
-/** Feeds a map a stream of blocks and returns it with the true relation for checking. */
-function simulate(map: AudioClockMap, { speed = 1, originMs = 5000, minLate = 3, jitter = 25, seconds, seed = 7 }: Sim) {
-  const rand = rng(seed)
-  const blocks = Math.floor((seconds * 1000) / BLOCK_MS)
-
-  for (let i = 0; i < blocks; i++) {
-    const ctxStartMs = i * BLOCK_MS
-    const trueEndWall = originMs + (ctxStartMs + BLOCK_MS) / speed
-    map.observe(ctxStartMs / 1000, BLOCK_MS, trueEndWall + minLate + rand() * jitter)
-  }
-
-  /** The true wall time of a position on the audio clock. */
-  return (ctxSec: number) => originMs + (ctxSec * 1000) / speed
-}
-
-describe('AudioClockMap', () => {
-  it('uses the anchor until it has seen anything', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 2, perfMs: 10_000 } })
-    expect(map.toPerfMs(3)).toBe(11_000)
-  })
-
-  it('finds the offset between the clocks despite delivery jitter', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 0 } })
-    const truth = simulate(map, { seconds: 20 })
-
-    // Within the minimum delivery latency; jitter above that must not leak in.
-    expect(Math.abs(map.toPerfMs(15) - truth(15))).toBeLessThan(8)
-  })
-
-  it('is not thrown off by one very late delivery', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 0 } })
-    const truth = simulate(map, { seconds: 10 })
-    map.observe(10.0, BLOCK_MS, truth(10) + BLOCK_MS + 900) // a 900 ms stall
-
-    expect(Math.abs(map.toPerfMs(10) - truth(10))).toBeLessThan(8)
-  })
-
-  it.each([
-    ['a clock 0.5% slow', 0.995],
-    ['a clock 1.4% slow', 0.986],
-    ['a clock 0.5% fast', 1.005],
-    ['a real device, 50 ppm off', 1.00005],
-  ])('follows %s', (_label, speed) => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 5000 } })
-    const truth = simulate(map, { seconds: 60, speed })
-
-    // After a minute the error must stay small even as the drift accumulates.
-    expect(Math.abs(map.toPerfMs(58) - truth(58))).toBeLessThan(25)
-  })
-
-  it('does not let drift accumulate over a long session', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 5000 } })
-    const truth = simulate(map, { seconds: 600, speed: 0.99 })
-
-    // 1% over ten minutes is six seconds of drift; an uncorrected map would be that far out.
-    expect(Math.abs(map.toPerfMs(595) - truth(595))).toBeLessThan(25)
-  })
-
-  it('stays put when there is no drift', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 5000 } })
-    const truth = simulate(map, { seconds: 120, speed: 1 })
-
-    const errors = [10, 40, 80, 118].map((s) => Math.abs(map.toPerfMs(s) - truth(s)))
-    expect(Math.max(...errors)).toBeLessThan(10)
-  })
-
-  it('is monotonic: later audio never maps to an earlier time', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 0, perfMs: 5000 } })
-    simulate(map, { seconds: 30, speed: 0.99 })
-
-    let last = -Infinity
-    for (let s = 0; s <= 30; s += 0.5) {
-      const t = map.toPerfMs(s)
-      expect(t).toBeGreaterThan(last)
-      last = t
-    }
-  })
-
-  it('copes with a start that is not at audio time zero', () => {
-    const map = new AudioClockMap({ anchor: { ctxSec: 100, perfMs: 7000 } })
-    const rand = rng(3)
-    for (let i = 0; i < 400; i++) {
-      const ctxStartMs = 100_000 + i * BLOCK_MS
-      map.observe(ctxStartMs / 1000, BLOCK_MS, 7000 + (ctxStartMs - 100_000) + BLOCK_MS + 2 + rand() * 20)
-    }
-    const expected = 7000 + 5000
-    expect(Math.abs(map.toPerfMs(105) - expected)).toBeLessThan(8)
-  })
-})
 
 describe('AudioTimeline', () => {
   const frames = 1024
