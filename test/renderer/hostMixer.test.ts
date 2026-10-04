@@ -35,23 +35,25 @@ const deferred = <T,>() => {
 
 let opened: string[]
 let devicesAsked: string[]
-let gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }>
-let sources: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }>
+/** One entry per input the mixer attached: its level as last set, and whether it was detached. */
+let attached: Array<{ id: string; gain: number; detach: ReturnType<typeof vi.fn> }>
 let streams: Record<string, ReturnType<typeof fakeStream>>
 let openInput: (id: string) => Promise<MediaStream>
 let changes: number
 let mixer: Mixer
-const DEST = { dest: true }
 
 beforeEach(() => {
-  opened = []; devicesAsked = []; gains = []; sources = []; streams = {}; changes = 0
+  opened = []; devicesAsked = []; attached = []; streams = {}; changes = 0
   openInput = async (id) => { const s = fakeStream(); streams[id] = s; return s.stream }
   const deps: MixerDeps = {
     openInput: (id, deviceId) => { opened.push(id); devicesAsked.push(deviceId); return openInput(id) },
-    createGain: () => { const g = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }; gains.push(g); return g },
-    createSource: () => { const s = { connect: vi.fn(), disconnect: vi.fn() }; sources.push(s); return s },
+    attach: (id) => {
+      const entry = { id, gain: 1, detach: vi.fn() }
+      attached.push(entry)
+      return { setGain: (g) => { entry.gain = g }, detach: () => entry.detach() }
+    },
   }
-  mixer = new Mixer(deps, DEST, () => { changes++ })
+  mixer = new Mixer(deps, () => { changes++ })
 })
 
 describe('opening inputs', () => {
@@ -75,12 +77,11 @@ describe('opening inputs', () => {
     expect(opened).toEqual([])
   })
 
-  it('wires input through its own gain into the mix', async () => {
+  it('feeds the input into the mix', async () => {
     mixer.apply([ch('mic')])
     await settle()
 
-    expect(sources[0].connect).toHaveBeenCalledWith(gains[0])
-    expect(gains[0].connect).toHaveBeenCalledWith(DEST)
+    expect(attached.map((a) => a.id)).toEqual(['mic'])
   })
 
   it('opens each channel once, however many snapshots arrive', async () => {
@@ -104,14 +105,14 @@ describe('levels', () => {
   it('applies the fader', async () => {
     mixer.apply([ch('mic', { volume: 0.4 })])
     await settle()
-    expect(gains[0].gain.value).toBe(0.4)
+    expect(attached[0].gain).toBe(0.4)
   })
 
   it('silences a muted channel without closing it', async () => {
     mixer.apply([ch('mic', { volume: 0.8, muted: true })])
     await settle()
 
-    expect(gains[0].gain.value).toBe(0)
+    expect(attached[0].gain).toBe(0)
     expect(mixer.openChannels).toEqual(['mic'])
   })
 
@@ -120,13 +121,13 @@ describe('levels', () => {
     await settle()
 
     mixer.apply([ch('mic', { volume: 0.25 })])
-    expect(gains[0].gain.value).toBe(0.25)
+    expect(attached[0].gain).toBe(0.25)
 
     mixer.apply([ch('mic', { volume: 0.25, muted: true })])
-    expect(gains[0].gain.value).toBe(0)
+    expect(attached[0].gain).toBe(0)
 
     mixer.apply([ch('mic', { volume: 0.25, muted: false })])
-    expect(gains[0].gain.value).toBe(0.25)
+    expect(attached[0].gain).toBe(0.25)
   })
 
   it('applies a fader move made while the input was still opening', async () => {
@@ -138,20 +139,20 @@ describe('levels', () => {
     gate.resolve(fakeStream().stream)
     await settle()
 
-    expect(gains[0].gain.value).toBe(0.3)
+    expect(attached[0].gain).toBe(0.3)
   })
 
   it.each([[2, 1], [-1, 0], [NaN, 0], [Infinity, 0]])('clamps a volume of %s to %s', async (given, expected) => {
     mixer.apply([ch('mic', { volume: given })])
     await settle()
-    expect(gains[0].gain.value).toBe(expected)
+    expect(attached[0].gain).toBe(expected)
   })
 
   it('mixes channels independently', async () => {
     mixer.apply([ch('mic', { volume: 0.5 }), ch('desktop', { volume: 0.9, muted: true })])
     await settle()
 
-    const byOrder = opened.map((id, i) => [id, gains[i].gain.value])
+    const byOrder = opened.map((id, i) => [id, attached[i].gain])
     expect(Object.fromEntries(byOrder)).toEqual({ mic: 0.5, desktop: 0 })
   })
 })
@@ -164,8 +165,7 @@ describe('letting go', () => {
     mixer.apply([ch('mic', { connected: false })])
 
     expect(streams.mic.track.stop).toHaveBeenCalled()
-    expect(sources[0].disconnect).toHaveBeenCalled()
-    expect(gains[0].disconnect).toHaveBeenCalled()
+    expect(attached[0].detach).toHaveBeenCalled()
     expect(mixer.openChannels).toEqual([])
   })
 
@@ -212,7 +212,7 @@ describe('letting go', () => {
     await settle()
 
     expect(late.track.stop).toHaveBeenCalled()
-    expect(sources).toHaveLength(0)
+    expect(attached).toHaveLength(0)
   })
 
   it('disposes everything', async () => {
@@ -228,7 +228,7 @@ describe('letting go', () => {
   it('survives nodes that are already disconnected', async () => {
     mixer.apply([ch('mic')])
     await settle()
-    sources[0].disconnect.mockImplementation(() => { throw new Error('gone') })
+    attached[0].detach.mockImplementation(() => { throw new Error('gone') })
     expect(() => mixer.dispose()).not.toThrow()
   })
 })

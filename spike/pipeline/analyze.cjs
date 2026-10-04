@@ -108,10 +108,19 @@ function sync(file) {
   const num = ts.reduce((a, t, i) => a + (t - tBar) * (ms[i] - mBar), 0)
   const den = ts.reduce((a, t) => a + (t - tBar) ** 2, 0)
 
+  // A single mis-detected flash would skew a mean and a least-squares slope, so also
+  // give the median and a slope taken as the median of all pairwise slopes (Theil-Sen).
+  const sortedMs = [...ms].sort((a, b) => a - b)
+  const slopes = []
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (ts[j] !== ts[i]) slopes.push(((ms[j] - ms[i]) / (ts[j] - ts[i])) * 60)
+  slopes.sort((a, b) => a - b)
+
   return {
     flashes: flashes.length,
     beeps: beeps.length,
     matched: n,
+    medianOffsetMs: sortedMs[Math.floor(n / 2)],
+    robustDriftMsPerMin: slopes.length ? slopes[Math.floor(slopes.length / 2)] : 0,
     meanOffsetMs: mean(ms),
     minOffsetMs: Math.min(...ms),
     maxOffsetMs: Math.max(...ms),

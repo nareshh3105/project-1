@@ -294,6 +294,15 @@ async function main() {
       if (!clicked) throw new Error('No Desktop button in the mixer')
       await waitFor(() => ui.eval(`!!document.querySelector('[title="Receiving audio"]')`), 'system audio to connect', 15000)
       log('system audio connected')
+      if (args.includes('--mic')) {
+        const mic = await ui.eval(`(() => {
+          const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Mic')
+          if (!b) return false
+          b.click(); return true
+        })()`)
+        await sleep(2500)
+        log('microphone button', mic ? 'pressed' : 'not found')
+      }
       await sleep(1500)
     }
 
@@ -364,6 +373,12 @@ async function main() {
       log('transition triggered (' + transitionType + ')')
       transitionAt = (Date.now() - startedAt) / 1000
     }
+    // Run a script inside the output host and print what it returns (for experiments).
+    const probeFile = flag('probe', '')
+    if (probeFile && hostCdp) {
+      const result = await hostCdp.eval(fs.readFileSync(path.resolve(probeFile), 'utf8'))
+      console.log('PROBE:', typeof result === 'string' ? result : JSON.stringify(result))
+    }
     const memory = []
     let lastAudio = null
     let samples = 0
@@ -389,14 +404,11 @@ async function main() {
       if (hostCdp) {
         const d = await hostCdp.eval(`JSON.stringify(window.__host.debug())`).then(JSON.parse)
         const a = d.audio
-        if (a) {
-          if (lastAudio) log(`audio clock: ${(((a.ctxSec - lastAudio.ctxSec) * 1000) / (a.perfMs - lastAudio.perfMs) * 100).toFixed(2)}% of real time (${a.state})`)
-          lastAudio = a
-        }
+        if (a) log(`audio: ${a.inputs} input(s), ${a.blocks} blocks, ${a.blocksSentLate} late, clock offset ${a.offsetMs === null ? 'n/a' : Math.round(a.offsetMs)} ms`)
         const c = d.captures[0]
         const sess = d.sessions[0]
         log('host:', c ? `capture ${c.state} t=${c.time.toFixed(1)} ${c.width}x${c.height} rs=${c.readyState} ${c.error || ''}` : 'no capture',
-          sess ? `| in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware}` : '')
+          sess ? `| compose=${sess.composeMs.toFixed(1)}ms submit=${sess.submitMs.toFixed(1)}ms worst=${sess.worstMs.toFixed(0)}ms in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware}` : '')
       }
     }
 

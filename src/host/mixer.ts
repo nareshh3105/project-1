@@ -1,40 +1,35 @@
 import type { SnapshotChannel } from '../../shared/host'
 
 /**
- * The audio that goes into every output: the channels the user has connected,
- * each at its own fader position and mute, summed into one stereo mix.
+ * Which inputs the mix has open, and at what level.
  *
  * The host opens its own inputs, because the interface's inputs feed its meters
- * and cannot be shared across windows. The mix therefore follows the snapshot:
- * a channel the interface has connected is opened here, one it has disconnected
- * is released, and volume and mute apply to what is recorded.
+ * and cannot be shared across windows. They follow the snapshot: a channel the
+ * interface has connected is opened here, one it has disconnected is released,
+ * a different microphone is switched to, and volume and mute apply to what is
+ * recorded. Where the sound goes from there is `attach`'s business.
  *
- * The Web Audio pieces are injected so the rules can be tested without a browser.
+ * Everything the browser does is injected so the rules can be tested without one.
  */
 
-export interface GainLike {
-  gain: { value: number; setTargetAtTime?(v: number, t: number, c: number): void }
-  connect(to: unknown): void
-  disconnect(): void
-}
-
-export interface SourceLike {
-  connect(to: unknown): void
-  disconnect(): void
+/** What an attached input offers the mix. */
+export interface InputControl {
+  setGain(gain: number): void
+  /** Stops feeding the mix. */
+  detach(): void
 }
 
 export interface MixerDeps {
   /** Opens the input behind a channel, or rejects with a message worth showing. */
   openInput(channel: string, deviceId: string): Promise<MediaStream>
-  createGain(): GainLike
-  createSource(stream: MediaStream): SourceLike
+  /** Starts feeding a stream into the mix under this channel name. */
+  attach(channel: string, stream: MediaStream): InputControl
 }
 
 interface Open {
   deviceId: string
   stream: MediaStream
-  source: SourceLike
-  gain: GainLike
+  control: InputControl
 }
 
 /** Channels that have an input to open; the others are placeholders in the mixer. */
@@ -49,8 +44,6 @@ export class Mixer {
 
   constructor(
     private readonly deps: MixerDeps,
-    /** Where the mix goes. */
-    private readonly destination: unknown,
     private readonly onChange: () => void = () => {},
   ) {}
 
@@ -128,12 +121,8 @@ export class Mixer {
     }
     this.opening.delete(id)
 
-    const source = this.deps.createSource(stream)
-    const gain = this.deps.createGain()
-    source.connect(gain)
-    gain.connect(this.destination)
-
-    this.open.set(id, { deviceId, stream, source, gain })
+    const control = this.deps.attach(id, stream)
+    this.open.set(id, { deviceId, stream, control })
     this.setLevel(id)
 
     // A device unplugged, or sharing stopped: the channel goes quiet, and says why.
@@ -154,7 +143,7 @@ export class Mixer {
     if (!input || !want) return
 
     const volume = Number.isFinite(want.volume) ? Math.min(1, Math.max(0, want.volume)) : 0
-    input.gain.gain.value = want.muted ? 0 : volume
+    input.control.setGain(want.muted ? 0 : volume)
   }
 
   private release(id: string): void {
@@ -162,8 +151,7 @@ export class Mixer {
     if (!input) return
     this.open.delete(id)
 
-    try { input.source.disconnect() } catch { /* already gone */ }
-    try { input.gain.disconnect() } catch { /* already gone */ }
+    try { input.control.detach() } catch { /* already gone */ }
     input.stream.getTracks().forEach((t) => t.stop())
   }
 }

@@ -17,8 +17,25 @@ import { AudioTimeline } from './audioClock'
 export const SAMPLE_RATE = 48000
 const CHANNELS = 2
 
-/** Frames that may wait in the encoder before the output counts as behind. */
+/** The fewest frames that may wait in the encoder before the output counts as behind. */
 export const MAX_ENCODE_QUEUE = 30
+
+/** How long the encoder gets, from the start, to come up to speed. */
+export const WARMUP_MS = 2000
+
+/**
+ * How many frames may wait in the encoder before one is dropped.
+ *
+ * A hardware encoder takes a moment to start, and frames queue up meanwhile;
+ * dropping them would cut the opening of every recording (measured: 30 frames
+ * lost at 1080p60, none after). So the opening seconds get a generous allowance,
+ * and once running the allowance is three quarters of a second of frames, which
+ * is 30 frames at 30 fps and 45 at 60 fps.
+ */
+export function queueLimit(fps: number, sinceStartMs: number): number {
+  const seconds = sinceStartMs < WARMUP_MS ? 2 : 0.75
+  return Math.max(MAX_ENCODE_QUEUE, Math.round(fps * seconds))
+}
 
 // ── The browser pieces, as the session uses them ──
 
@@ -208,7 +225,7 @@ export class EncoderSession {
     this.counters.framesIn++
 
     // Falling behind: drop a frame rather than let latency grow without limit.
-    if (this.videoEncoder.encodeQueueSize > MAX_ENCODE_QUEUE) {
+    if (this.videoEncoder.encodeQueueSize > queueLimit(this.params.fps, nowMs - this.startedAtMs)) {
       this.counters.framesDropped++
       return
     }

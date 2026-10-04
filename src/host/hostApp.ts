@@ -30,10 +30,10 @@ export interface Bridge {
 export interface AudioRig {
   apply(channels: readonly SnapshotChannel[]): void
   dispose(): void
-  /** Maps a position on the audio clock to wall-clock ms. */
+  /** Maps a position on the capture clock to wall-clock ms. */
   toWallMs(ctxSec: number): number
-  /** Where the audio clock is, for checking that it keeps up with real time. */
-  debug?(): { state: string; ctxSec: number; perfMs: number; sinkId: string }
+  /** What the audio side is doing, for finding out why sound is missing. */
+  debug?(): Record<string, unknown>
 }
 
 export interface AudioBlock {
@@ -60,7 +60,11 @@ export interface HostDeps {
   createAudio(onBlock: (block: AudioBlock) => void): Promise<AudioRig>
 }
 
+/** Running averages of where a frame's time goes, to find out why a rate cannot be kept. */
+interface Timing { frames: number; composeMs: number; submitMs: number; lateMs: number; worstMs: number; lastDueMs: number }
+
 interface Running {
+  timing: Timing
   kind: OutputKind
   params: SessionParams
   session: EncoderSession
@@ -116,7 +120,13 @@ export class HostApp {
       captures: this.pool.debug(),
       audio: this.audio?.debug?.() ?? null,
       snapshot: this.snapshot,
-      sessions: [...this.running.values()].map((r) => ({ kind: r.kind, ...r.session.stats() })),
+      sessions: [...this.running.values()].map((r) => ({
+        kind: r.kind, ...r.session.stats(),
+        // Average milliseconds per frame spent drawing and handing to the encoder, and the slowest frame.
+        composeMs: r.timing.frames ? r.timing.composeMs / r.timing.frames : 0,
+        submitMs: r.timing.frames ? r.timing.submitMs / r.timing.frames : 0,
+        worstMs: r.timing.worstMs,
+      })),
     }
   }
 
@@ -168,6 +178,7 @@ export class HostApp {
       const { canvas, context } = this.deps.createCanvas(params.width, params.height)
 
       const entry: Running = {
+        timing: { frames: 0, composeMs: 0, submitMs: 0, lateMs: 0, worstMs: 0, lastDueMs: 0 },
         kind, params, session, canvas, context,
         statsTimer: setInterval(() => this.sendStats(entry), STATS_EVERY_MS),
       }
@@ -246,7 +257,15 @@ export class HostApp {
     } else {
       drawFrame(entry.context, out, base, this.layersFor(sources, scale))
     }
+    const composed = this.deps.now()
     entry.session.submitFrame(entry.canvas, nowMs)
+    const done = this.deps.now()
+
+    const t = entry.timing
+    t.frames++
+    t.composeMs += composed - nowMs
+    t.submitMs += done - composed
+    t.worstMs = Math.max(t.worstMs, done - nowMs)
   }
 
   /** The pictures of a scene's sources that are ready to draw, bottom first. */
