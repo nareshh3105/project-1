@@ -43,10 +43,16 @@ export function SourcePropertiesModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, payload?.sourceId])
 
+  // The save that runs when the dialog is taken away was set up when nothing was
+  // open; it must look at where the pending change belongs now, not then.
+  const target = useRef(payload)
+  target.current = payload ?? target.current
+
   const flush = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
-    if (pending.current && payload) {
-      void updateSettings(payload.sceneId, payload.sourceId, pending.current)
+    const to = target.current
+    if (pending.current && to) {
+      void updateSettings(to.sceneId, to.sourceId, pending.current)
       pending.current = null
     }
   }
