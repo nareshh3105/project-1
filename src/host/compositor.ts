@@ -11,6 +11,7 @@ import { layerPlan, outputMapping } from './geometry'
 
 /** The part of CanvasRenderingContext2D this uses. */
 export interface DrawContext {
+  globalAlpha: number
   fillStyle: string | CanvasGradient | CanvasPattern
   /** A CSS filter list, or 'none'. */
   filter: string
@@ -45,26 +46,46 @@ export interface ReadyLayer {
   filter?: string
 }
 
+/** How a scene is drawn when it is one of two taking part in a transition. */
+export interface SceneDrawOptions {
+  /** Paint black first. Off for the second scene of a transition, which goes over the first. */
+  clear?: boolean
+  /** Opacity of the whole scene. */
+  alpha?: number
+  /** Shift of the whole scene, in canvas pixels. */
+  offsetX?: number
+  /** Show only this much of the scene, from the left edge, in canvas pixels. */
+  revealWidth?: number | null
+}
+
 export function drawFrame(
   ctx: DrawContext,
   out: { width: number; height: number },
   base: { width: number; height: number },
   layers: readonly ReadyLayer[],
+  options: SceneDrawOptions = {},
 ): void {
+  const { clear = true, alpha = 1, offsetX = 0, revealWidth = null } = options
+
   // Start from black, whatever the previous frame left behind.
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, out.width, out.height)
+  if (clear) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, out.width, out.height)
+  }
 
   const m = outputMapping(base, out)
 
   ctx.save()
   ctx.setTransform(m.scale, 0, 0, m.scale, m.offsetX, m.offsetY)
+  if (alpha !== 1) ctx.globalAlpha = Math.min(1, Math.max(0, alpha))
 
-  // Nothing may spill outside the base canvas, as in the preview.
+  // Nothing may spill outside the base canvas, as in the preview. A wipe shows
+  // only the part of the canvas it has uncovered so far.
   ctx.beginPath()
-  ctx.rect(0, 0, base.width, base.height)
+  ctx.rect(0, 0, revealWidth === null ? base.width : Math.min(base.width, Math.max(0, revealWidth)), base.height)
   ctx.clip()
+  if (offsetX !== 0) ctx.translate(offsetX, 0)
 
   for (const layer of layers) {
     const p = layerPlan(layer.transform, layer)

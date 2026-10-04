@@ -181,3 +181,47 @@ describe('audio device', () => {
   it.each([[5], [null], [{}], [['a']]])('means the default for %s', (bad) => expect(channel(bad).deviceId).toBe(''))
   it('cuts an absurdly long id', () => expect(channel('x'.repeat(5000)).deviceId).toHaveLength(512))
 })
+
+describe('a transition in progress', () => {
+  const base = { width: 1920, height: 1080 }
+  const gone = { id: 'old', type: 'display_capture', transform: {}, settings: {}, filters: [] }
+  const make = (transition: unknown) => sanitizeSnapshot({ base, sources: [], audio: [], transition })
+
+  it('is kept when well formed', () => {
+    const t = make({ type: 'fade', durationMs: 400, startedAt: 1_700_000_000_000, from: [gone] }).transition!
+    expect(t).toMatchObject({ type: 'fade', durationMs: 400, startedAt: 1_700_000_000_000 })
+    expect(t.from.map((s) => s.id)).toEqual(['old'])
+  })
+
+  it.each(['fade', 'slide', 'wipe'])('accepts %s', (type) => {
+    expect(make({ type, durationMs: 300, startedAt: 1 }).transition?.type).toBe(type)
+  })
+
+  it.each([['cut'], ['spin'], [5], [null], [undefined]])('is dropped for a type of %s', (type) => {
+    expect(make({ type, durationMs: 300, startedAt: 1 }).transition).toBeUndefined()
+  })
+
+  it.each([[NaN], ['now'], [null], [undefined], [Infinity]])('is dropped for a start of %s', (startedAt) => {
+    expect(make({ type: 'fade', durationMs: 300, startedAt }).transition).toBeUndefined()
+  })
+
+  it('is absent from the snapshot when there is none, rather than present as nothing', () => {
+    expect('transition' in make(undefined)).toBe(false)
+    expect('transition' in make('fade')).toBe(false)
+  })
+
+  it('keeps its length inside what the interface offers', () => {
+    expect(make({ type: 'fade', durationMs: 1, startedAt: 1 }).transition?.durationMs).toBe(50)
+    expect(make({ type: 'fade', durationMs: 9e9, startedAt: 1 }).transition?.durationMs).toBe(5000)
+    expect(make({ type: 'fade', durationMs: 'long', startedAt: 1 }).transition?.durationMs).toBe(300)
+  })
+
+  it('checks the outgoing sources like any others', () => {
+    const t = make({ type: 'fade', durationMs: 300, startedAt: 1, from: [gone, { id: '' }, 'nope', null] }).transition!
+    expect(t.from.map((s) => s.id)).toEqual(['old'])
+  })
+
+  it('has no outgoing sources when the list is missing', () => {
+    expect(make({ type: 'fade', durationMs: 300, startedAt: 1 }).transition?.from).toEqual([])
+  })
+})

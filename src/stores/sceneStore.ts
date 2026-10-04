@@ -273,6 +273,9 @@ export const useSceneStore = create<SceneState & SceneActions>()(
 
     setPreviewScene: (id) => {
       set((s) => { s.previewSceneId = id })
+      // A staged scene is shown in the preview, and brought in by a transition,
+      // before it has ever been on air: its sources have to be there.
+      loadSourcesFor(id)
     },
   }))
 )

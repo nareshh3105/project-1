@@ -6,6 +6,7 @@ import { useSourceStore } from '@/stores/sourceStore'
 import { useAudioStore } from '@/stores/audioStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useFilterStore } from '@/stores/filterStore'
+import { useTransitionStore } from '@/stores/transitionStore'
 import { reportFailure } from '@/stores/notifyStore'
 
 /** Longest the host may be left with a stale scene while the user is dragging. */
@@ -32,7 +33,20 @@ export function useHostState() {
       const { channels, connected, devices } = useAudioStore.getState()
       const base = useSettingsStore.getState().video.baseResolution
 
-      const snapshot = buildSnapshot({ sources, base, channels, connected, devices, filters: useFilterStore.getState().filtersBySource })
+      // A transition counts only while the scene it brings in is the one on air;
+      // a scene clicked in the meantime has overtaken it.
+      const moving = useTransitionStore.getState().active
+      const transition = moving && moving.fromSceneId && moving.toSceneId === activeSceneId
+        ? {
+            type: moving.type, durationMs: moving.durationMs, startedAt: moving.startedAt,
+            from: useSourceStore.getState().byScene[moving.fromSceneId] ?? [],
+          }
+        : undefined
+
+      const snapshot = buildSnapshot({
+        sources, base, channels, connected, devices, transition,
+        filters: useFilterStore.getState().filtersBySource,
+      })
       const key = JSON.stringify(snapshot)
       if (key === last) return
       last = key
@@ -56,6 +70,7 @@ export function useHostState() {
       useAudioStore.subscribe(schedule),
       useSettingsStore.subscribe(schedule),
       useFilterStore.subscribe(schedule),
+      useTransitionStore.subscribe(schedule),
     ]
     schedule()
 

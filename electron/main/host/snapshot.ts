@@ -1,6 +1,7 @@
 import {
   EMPTY_SNAPSHOT,
   type HostSnapshot, type SnapshotChannel, type SnapshotFilter, type SnapshotSource, type SnapshotTransform,
+  type SnapshotTransition,
 } from '../../../shared/host'
 
 /**
@@ -132,6 +133,25 @@ function sourceOf(raw: unknown, index: number, base: { width: number; height: nu
   }
 }
 
+const TRANSITION_TYPES = ['fade', 'slide', 'wipe']
+
+/** A transition in progress, or nothing if it is not well formed. Cuts never reach the host. */
+function transitionOf(raw: unknown, base: { width: number; height: number }): SnapshotTransition | undefined {
+  if (!isRecord(raw)) return undefined
+  if (typeof raw.type !== 'string' || !TRANSITION_TYPES.includes(raw.type)) return undefined
+  if (typeof raw.startedAt !== 'number' || !Number.isFinite(raw.startedAt)) return undefined
+
+  return {
+    type: raw.type as SnapshotTransition['type'],
+    durationMs: range(raw.durationMs, 50, 5000, 300),
+    startedAt: raw.startedAt,
+    from: (Array.isArray(raw.from) ? raw.from : [])
+      .slice(0, MAX_SOURCES)
+      .map((s, i) => sourceOf(s, i, base))
+      .filter((s): s is SnapshotSource => s !== null),
+  }
+}
+
 function channelOf(raw: unknown): SnapshotChannel | null {
   if (!isRecord(raw)) return null
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null
@@ -166,5 +186,6 @@ export function sanitizeSnapshot(raw: unknown): HostSnapshot {
     .map(channelOf)
     .filter((c): c is SnapshotChannel => c !== null)
 
-  return { base, sources, audio }
+  const transition = transitionOf(raw.transition, base)
+  return transition ? { base, sources, audio, transition } : { base, sources, audio }
 }

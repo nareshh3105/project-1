@@ -130,12 +130,23 @@ export interface SnapshotChannel {
   deviceId: string
 }
 
+/** A scene change in progress: the new scene is `sources`, the one it replaces is `from`. */
+export interface SnapshotTransition {
+  type: 'fade' | 'slide' | 'wipe'
+  durationMs: number
+  /** Milliseconds since the epoch (Date.now), so any window can work out how far along it is. */
+  startedAt: number
+  from: SnapshotSource[]
+}
+
 export interface HostSnapshot {
   /** The canvas sources are positioned on. */
   base: { width: number; height: number }
   /** Visible sources of the scene being output, bottom first. */
   sources: SnapshotSource[]
   audio: SnapshotChannel[]
+  /** Present only while a transition is under way. */
+  transition?: SnapshotTransition
 }
 
 export const EMPTY_SNAPSHOT: HostSnapshot = {

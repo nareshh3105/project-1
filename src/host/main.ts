@@ -76,6 +76,7 @@ const app = new HostApp({
     clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   },
   now: () => performance.now(),
+  wallNow: () => Date.now(),
   createCanvas: (width, height) => {
     const canvas = document.createElement('canvas')
     canvas.width = width

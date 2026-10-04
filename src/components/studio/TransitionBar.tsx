@@ -27,7 +27,7 @@ export function TransitionBar() {
     if (!canTransition || isTransitioning) return
     const targetId = previewSceneId!
     const prevId   = activeSceneId
-    executeTransition(() => {
+    executeTransition({ fromSceneId: prevId, toSceneId: targetId }, () => {
       setActiveScene(targetId)
       if (prevId) setPreviewScene(prevId)
     })

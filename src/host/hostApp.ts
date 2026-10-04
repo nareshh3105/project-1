@@ -3,9 +3,10 @@ import {
   type HostEvent, type HostRequest, type HostResponse, type HostSnapshot, type OutputKind, type SessionParams,
 } from '../../shared/host'
 import { CapturePool, type PoolDeps } from './capturePool'
-import { drawFrame } from './compositor'
+import { drawFrame, type ReadyLayer } from './compositor'
 import { planFilters, croppedArea, type FilterPlan } from '@/lib/filters/plan'
 import { outputMapping } from './geometry'
+import { easeInOut, transitionFrame, transitionProgress } from './transition'
 import { FrameLoop, type LoopDeps } from './frameLoop'
 import { StaticLayers, type StaticDeps } from './staticLayers'
 import { EncoderSession, type SessionDeps } from './session'
@@ -52,6 +53,8 @@ export interface HostDeps {
   setFilterDefs(markup: string): void
   loop: LoopDeps
   now(): number
+  /** Milliseconds since the epoch, the clock a transition's start time is on. */
+  wallNow(): number
   createCanvas(width: number, height: number): { canvas: unknown; context: CanvasRenderingContext2D }
   /** Starts the audio rig; `onBlock` receives the mix as it is produced. */
   createAudio(onBlock: (block: AudioBlock) => void): Promise<AudioRig>
@@ -172,7 +175,7 @@ export class HostApp {
       this.running.set(kind, entry)
 
       // Bring captures and audio up to date for the scene being output.
-      this.pool.sync(this.snapshot.sources)
+      this.pool.sync(involved(this.snapshot))
       this.syncFilterDefs(this.snapshot)
       this.audio?.apply(this.snapshot.audio)
 
@@ -208,18 +211,19 @@ export class HostApp {
   private setSnapshot(snapshot: HostSnapshot): void {
     this.snapshot = snapshot
     if (this.running.size === 0) return
-    this.pool.sync(snapshot.sources)
-    this.statics.prune(snapshot.sources)
+    this.pool.sync(involved(snapshot))
+    this.statics.prune(involved(snapshot))
     this.syncFilterDefs(snapshot)
     this.audio?.apply(snapshot.audio)
   }
 
   /** Sharpen and chroma key are SVG filters; they have to be in the page before a frame refers to them. */
   private syncFilterDefs(snapshot: HostSnapshot): void {
-    const keep = new Set(snapshot.sources.map((s) => s.id))
+    const all = involved(snapshot)
+    const keep = new Set(all.map((s) => s.id))
     for (const id of [...this.plans.keys()]) if (!keep.has(id)) this.plans.delete(id)
 
-    const markup = snapshot.sources.map((s) => planFilters(s.filters, 1).defs).join('')
+    const markup = all.map((s) => planFilters(s.filters, 1).defs).join('')
     if (markup !== this.defsInPage) {
       this.defsInPage = markup
       this.deps.setFilterDefs(markup)
@@ -227,9 +231,27 @@ export class HostApp {
   }
 
   private compose(entry: Running, nowMs: number): void {
-    const { sources, base } = this.snapshot
-    const scale = outputMapping(base, { width: entry.params.width, height: entry.params.height }).scale
-    const layers = []
+    const { sources, base, transition } = this.snapshot
+    const out = { width: entry.params.width, height: entry.params.height }
+    const scale = outputMapping(base, out).scale
+
+    const progress = transition ? transitionProgress(this.deps.wallNow(), transition.startedAt, transition.durationMs) : 1
+    if (transition && progress < 1) {
+      // The incoming scene goes over the outgoing one, which stays drawn underneath.
+      const f = transitionFrame(transition.type, easeInOut(progress), base.width)
+      drawFrame(entry.context, out, base, this.layersFor(transition.from, scale), { offsetX: f.fromOffsetX })
+      drawFrame(entry.context, out, base, this.layersFor(sources, scale), {
+        clear: false, alpha: f.toAlpha, offsetX: f.toOffsetX, revealWidth: f.toRevealWidth,
+      })
+    } else {
+      drawFrame(entry.context, out, base, this.layersFor(sources, scale))
+    }
+    entry.session.submitFrame(entry.canvas, nowMs)
+  }
+
+  /** The pictures of a scene's sources that are ready to draw, bottom first. */
+  private layersFor(sources: readonly SnapshotSource[], scale: number): ReadyLayer[] {
+    const layers: ReadyLayer[] = []
     for (const source of [...sources].sort((a, b) => a.order - b.order)) {
       const frame = this.pool.frameFor(source.id) ?? this.statics.frameFor(source)
       if (!frame) continue
@@ -245,9 +267,7 @@ export class HostApp {
         filter: plan.css,
       })
     }
-
-    drawFrame(entry.context, { width: entry.params.width, height: entry.params.height }, base, layers)
-    entry.session.submitFrame(entry.canvas, nowMs)
+    return layers
   }
 
   /** The drawing plan for a source's filters, remembered until they change. */
@@ -320,6 +340,11 @@ export class HostApp {
   private emit(event: HostEvent): void {
     this.deps.bridge.send(HOST_CHANNELS.event, event)
   }
+}
+
+/** Every source that needs a picture now: the scene, and the one it is replacing during a transition. */
+function involved(snapshot: HostSnapshot): SnapshotSource[] {
+  return snapshot.transition ? [...snapshot.sources, ...snapshot.transition.from] : snapshot.sources
 }
 
 const messageOf = (err: unknown) => (err instanceof Error && err.message ? err.message : 'Something went wrong.')

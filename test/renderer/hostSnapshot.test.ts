@@ -170,3 +170,29 @@ describe('filters in the snapshot', () => {
     expect(snap.sources.map((s) => s.filters.length)).toEqual([0, 1])
   })
 })
+
+describe('a transition in the snapshot', () => {
+  const when = { type: 'slide' as const, durationMs: 500, startedAt: 123 }
+
+  it('carries the scene being replaced, built like any other', () => {
+    const snap = buildSnapshot({
+      sources: [source('new')], base: BASE, channels: [], connected: [],
+      transition: { ...when, from: [source('old-top', { orderIndex: 1 }), source('old-bottom', { orderIndex: 0 })] },
+    })
+    expect(snap.transition).toMatchObject(when)
+    expect(snap.transition!.from.map((s) => s.id)).toEqual(['old-bottom', 'old-top'])
+    expect(snap.sources.map((s) => s.id)).toEqual(['new'])
+  })
+
+  it('has no transition key when none is under way', () => {
+    expect('transition' in buildSnapshot({ sources: [], base: BASE, channels: [], connected: [] })).toBe(false)
+  })
+
+  it('leaves hidden sources of the old scene out', () => {
+    const snap = buildSnapshot({
+      sources: [], base: BASE, channels: [], connected: [],
+      transition: { ...when, from: [source('shown'), source('hidden', { visible: false })] },
+    })
+    expect(snap.transition!.from.map((s) => s.id)).toEqual(['shown'])
+  })
+})

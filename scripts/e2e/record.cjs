@@ -29,6 +29,7 @@ const withSync = args.includes('--sync')
 const arrange = args.includes('--arrange')
 const overlay = args.includes('--overlay')
 const filtersTest = args.includes('--filters')
+const transitionType = flag('transition', '')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -161,6 +162,24 @@ function filtersCheck(file, outW) {
   }
 }
 
+/**
+ * Left-half and right-half blue (U) every quarter second around the transition.
+ * Red has U about 90 and blue about 240.
+ *  fade:  both halves rise together through the middle values.
+ *  slide: halfway through, the left half is still red and the right half already blue.
+ *  wipe:  halfway through, the left half is blue and the right half still red.
+ */
+function transitionCheck(file, outW, outH, at) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const half = (x) => {
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', String(Math.max(0, at - 1)), '-i', file, '-t', '4.5', '-map', '0:v:0', '-vf',
+      `fps=4,crop=${Math.floor(outW / 2)}:${outH}:${x}:0,signalstats,metadata=mode=print:key=lavfi.signalstats.UAVG:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    return [...r.stdout.matchAll(/UAVG=([0-9.]+)/g)].map((m) => Math.round(Number(m[1])))
+  }
+  return { fromSecondsBefore: 1, leftU: half(0), rightU: half(Math.floor(outW / 2)) }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -169,6 +188,8 @@ async function waitFor(fn, what, ms = 30000) {
     await sleep(250)
   }
 }
+
+let transitionAt = 0
 
 async function main() {
   // Either the built sources run by Electron, or an installed/unpacked app (--exe=...).
@@ -228,6 +249,16 @@ async function main() {
       await box('cropped', '#0000ff', 1240, 120, 560, 240, [{ type: 'crop', left: 280, right: 0, top: 0, bottom: 0 }])
       await ui.eval(`localStorage.setItem('cb:filters', ${JSON.stringify(JSON.stringify(stored))})`)
     }
+    let secondScene = null
+    if (transitionType) {
+      // Scene 1 is all red; scene 2 is all blue. Both are drawn from settings alone, so nothing
+      // on the real screen is involved.
+      const first = await invoke('add_source', { sceneId, name: 'Red', sourceType: 'color_source', settings: JSON.stringify({ color: '#ff0000' }) })
+      void first
+      secondScene = await invoke('create_scene', { collectionId: init.collectionId, name: 'Blue scene' })
+      await invoke('add_source', { sceneId: secondScene.id, name: 'Blue', sourceType: 'color_source', settings: JSON.stringify({ color: '#0000ff' }) })
+      await ui.eval(`localStorage.setItem('cb:transition', JSON.stringify({ type: '${transitionType}', durationMs: 2000 }))`)
+    }
     if (arrange) {
       // Half size, centred: the corners of the recording must stay black.
       await invoke('set_source_transform', {
@@ -244,6 +275,14 @@ async function main() {
     await ui.ready
     await sleep(2500) // let the interface publish the scene to the host
     log('scene ready:', target.name)
+
+    const click = (js) => ui.eval(`(() => { ${js} })()`)
+    if (transitionType) {
+      await click(`const b = document.querySelector('button[title="Studio Mode"]'); if (b) b.click()`)
+      await sleep(500)
+      await click(`const s = document.querySelector('[aria-label="Blue scene"]'); if (s) s.click()`)
+      await sleep(500)
+    }
 
     // Connect system audio the way a user does: with the Desktop button in the mixer.
     if (withSync) {
@@ -315,6 +354,16 @@ async function main() {
 
     const hostCdp = hostPage ? new Cdp(hostPage.webSocketDebuggerUrl) : null
     await hostCdp?.ready
+    if (transitionType) {
+      await sleep(4000)
+      log('before:', await ui.eval(`JSON.stringify({
+        scenes: [...document.querySelectorAll('[role=button][aria-label]')].map((b) => [b.getAttribute('aria-label'), b.getAttribute('aria-current')]).slice(0, 8),
+        transition: (() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Transition'); return b ? { disabled: b.disabled } : null })(),
+      })`))
+      await click(`const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Transition'); if (b) b.click()`)
+      log('transition triggered (' + transitionType + ')')
+      transitionAt = (Date.now() - startedAt) / 1000
+    }
     const memory = []
     let lastAudio = null
     let samples = 0
@@ -380,6 +429,7 @@ main()
       process.exit(1)
     }
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
+    if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })

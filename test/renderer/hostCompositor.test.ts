@@ -273,3 +273,65 @@ describe('crop and filters', () => {
     expect(seen).toEqual(['none', 'none'])
   })
 })
+
+describe('drawing one of two scenes in a transition', () => {
+  it('paints black first by default, and not when asked to go over what is there', () => {
+    const first = recorder()
+    drawFrame(first.ctx, BASE, BASE, [layer('a')])
+    expect(first.calls.some((c) => c[0] === 'fillRect')).toBe(true)
+
+    const over = recorder()
+    drawFrame(over.ctx, BASE, BASE, [layer('a')], { clear: false })
+    expect(over.calls.some((c) => c[0] === 'fillRect')).toBe(false)
+  })
+
+  it('draws the scene at the given opacity, and puts the opacity back after', () => {
+    const r = recorder()
+    const alphaAtDraw: number[] = []
+    const draw = r.ctx.drawImage.bind(r.ctx)
+    r.ctx.drawImage = ((...a: unknown[]) => { alphaAtDraw.push(r.ctx.globalAlpha); (draw as (...x: unknown[]) => void)(...a) }) as never
+    const stack: number[] = []
+    const save = r.ctx.save.bind(r.ctx); const restore = r.ctx.restore.bind(r.ctx)
+    r.ctx.save = () => { stack.push(r.ctx.globalAlpha); save() }
+    r.ctx.restore = () => { r.ctx.globalAlpha = stack.pop() ?? 1; restore() }
+
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, alpha: 0.4 })
+    expect(alphaAtDraw).toEqual([0.4])
+    expect(r.ctx.globalAlpha).toBe(1)
+  })
+
+  it('keeps the opacity inside 0..1', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { alpha: 7 })
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { alpha: -2 })
+    expect(r.ctx.globalAlpha).toBeGreaterThanOrEqual(0)
+    expect(r.ctx.globalAlpha).toBeLessThanOrEqual(1)
+  })
+
+  it('shifts the scene sideways without moving the edge it is clipped to', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, offsetX: -500 })
+    const names = r.names()
+    expect(r.calls).toContainEqual(['translate', -500, 0])
+    expect(r.calls).toContainEqual(['rect', 0, 0, 1920, 1080])
+    expect(names.indexOf('clip')).toBeLessThan(names.indexOf('translate'))
+  })
+
+  it('does not shift at all by default', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')])
+    expect(r.calls.filter((c) => c[0] === 'translate' && c[2] === 0)).toHaveLength(0)
+  })
+
+  it('shows only the uncovered part of the scene for a wipe', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { clear: false, revealWidth: 700 })
+    expect(r.calls).toContainEqual(['rect', 0, 0, 700, 1080])
+  })
+
+  it.each([[-50, 0], [99999, 1920]])('keeps a reveal of %s inside the canvas', (given, expected) => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')], { revealWidth: given })
+    expect(r.calls).toContainEqual(['rect', 0, 0, expected, 1080])
+  })
+})

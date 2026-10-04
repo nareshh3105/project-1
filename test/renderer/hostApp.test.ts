@@ -43,7 +43,9 @@ let drawn: number
 let filterDefs: string[]
 let filtersSet: string[]
 let drawImages: unknown[][]
+let ctxCalls: unknown[][]
 let clockMs: number
+let wallMs: number
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
 const request = async (id: number, method: string, args?: unknown) => {
@@ -101,11 +103,12 @@ function build(): HostDeps {
       clearTimer: () => { timers = Math.max(0, timers - 1) },
     },
     now: () => 0,
+    wallNow: () => wallMs,
     createCanvas: () => ({
       canvas: {},
       context: new Proxy({}, {
-        get: (_t, key) => (...args: unknown[]) => { drawn++; if (key === 'drawImage') drawImages.push(args) },
-        set: (_t, key, value) => { if (key === 'filter') filtersSet.push(String(value)); return true },
+        get: (_t, key) => (...args: unknown[]) => { drawn++; ctxCalls.push([String(key), ...args]); if (key === 'drawImage') drawImages.push(args) },
+        set: (_t, key, value) => { if (key === 'filter') filtersSet.push(String(value)); if (key === 'globalAlpha') ctxCalls.push(['globalAlpha', value]); return true },
       }) as unknown as CanvasRenderingContext2D,
     }),
     createAudio: async (cb) => {
@@ -120,7 +123,7 @@ function build(): HostDeps {
 }
 
 beforeEach(() => {
-  sent = []; handlers = {}; filterDefs = []; filtersSet = []; drawImages = []; clockMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
+  sent = []; handlers = {}; filterDefs = []; filtersSet = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
   encoded = { frames: 0, audio: 0, closed: 0, flushed: 0, aborted: 0 }
   encoderFails = null; createAudioFails = false; encoderSupported = true
   tick = () => {}
@@ -498,5 +501,95 @@ describe('filters', () => {
     clockMs = 100
     tick()
     expect(filtersSet).toContain('blur(20px)')
+  })
+})
+
+describe('scene transitions', () => {
+  const old = (id: string): SnapshotSource => ({ ...src(id), settings: {}, filters: [] })
+  const moving = (type: 'fade' | 'slide' | 'wipe', startedAt = 0, durationMs = 1000) => ({
+    type, durationMs, startedAt, from: [old('old')],
+  })
+  const names = () => ctxCalls.map((c) => c[0])
+  const alphas = () => ctxCalls.filter((c) => c[0] === 'globalAlpha').map((c) => c[1])
+
+  async function onAir(transition?: ReturnType<typeof moving>) {
+    pushState({ ...snap({ sources: [src('new')] }), ...(transition ? { transition } : {}) })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    ctxCalls.length = 0
+    drawImages.length = 0
+  }
+
+  it('draws one scene when no transition is under way', async () => {
+    await onAir()
+    tick()
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('draws the outgoing scene, then the incoming one over it, while a transition runs', async () => {
+    await onAir(moving('fade'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    expect(drawImages).toHaveLength(2)
+    // Black is painted once, before the first; the second goes over without clearing.
+    expect(names().filter((n) => n === 'fillRect')).toHaveLength(1)
+  })
+
+  it('brings a fade in by its eased amount', async () => {
+    await onAir(moving('fade'))
+    wallMs = 500 // half way: eased 0.5
+    clockMs = 100
+    tick()
+    expect(alphas().some((a) => Math.abs((a as number) - 0.5) < 0.01)).toBe(true)
+  })
+
+  it('starts a fade from nothing and so shows only the old scene at first', async () => {
+    await onAir(moving('fade'))
+    wallMs = 0
+    clockMs = 100
+    tick()
+    expect(alphas()).toContain(0)
+  })
+
+  it('moves both scenes for a slide', async () => {
+    await onAir(moving('slide'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    const shifts = ctxCalls.filter((c) => c[0] === 'translate' && c[2] === 0 && Math.abs(c[1] as number) > 1).map((c) => Math.round(c[1] as number))
+    expect(shifts.sort((a, b) => a - b)).toEqual([-960, 960])
+  })
+
+  it('clips the incoming scene to the part uncovered so far for a wipe', async () => {
+    await onAir(moving('wipe'))
+    wallMs = 500
+    clockMs = 100
+    tick()
+    const rects = ctxCalls.filter((c) => c[0] === 'rect' && c[3] !== 1080).map((c) => c.slice(1))
+    expect(rects.some((r) => Math.abs((r[2] as number) - 960) < 1)).toBe(true)
+  })
+
+  it('goes back to drawing one scene once the transition is over', async () => {
+    await onAir(moving('fade'))
+    wallMs = 5000
+    clockMs = 100
+    tick()
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('opens captures for the outgoing scene while it is still showing', async () => {
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    expect(opens).toBe(2)
+  })
+
+  it('lets go of the outgoing scene captures after the transition', async () => {
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [src('new')] }))
+    // The outgoing source is no longer wanted, so asking for it again opens it afresh.
+    pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
+    await settle()
+    expect(opens).toBe(3)
   })
 })
