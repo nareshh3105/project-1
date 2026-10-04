@@ -4,6 +4,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useSceneStore, nextSceneName, type SceneItem } from '@/stores/sceneStore'
 import { useSourceStore } from '@/stores/sourceStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useTransitionStore, type TransitionType } from '@/stores/transitionStore'
 import { RenameModal } from '@/components/modals/RenameModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { cn } from '@/lib/utils'
@@ -35,8 +36,14 @@ export function ScenesPanel() {
       // In Studio Mode, clicking stages to PREVIEW (not program)
       setPreviewScene(scene.id)
     } else {
-      setActiveScene(scene.id)
+      if (scene.id === useSceneStore.getState().activeSceneId) return
+      // Its sources must be there before it comes in, or the transition would bring in an empty scene.
       await loadSources(scene.id)
+
+      const { isTransitioning, executeTransition } = useTransitionStore.getState()
+      const from = useSceneStore.getState().activeSceneId
+      if (isTransitioning) setActiveScene(scene.id) // a click during a change takes effect at once
+      else executeTransition({ fromSceneId: from, toSceneId: scene.id }, () => setActiveScene(scene.id))
     }
   }
 
@@ -88,6 +95,7 @@ export function ScenesPanel() {
         <button className="icon-btn" title="Add scene" onClick={handleAddScene}>
           <Plus size={12} />
         </button>
+        <TransitionChoice />
       </div>
 
       {/* Modals */}
@@ -190,5 +198,48 @@ function SceneRow({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+  )
+}
+
+/**
+ * How a scene is changed when one is clicked: a cut, or a fade, slide or wipe of
+ * a chosen length. The same choice is used by the Transition button in Studio Mode.
+ */
+function TransitionChoice() {
+  const type = useTransitionStore((s) => s.type)
+  const durationMs = useTransitionStore((s) => s.durationMs)
+  const setType = useTransitionStore((s) => s.setType)
+  const setDuration = useTransitionStore((s) => s.setDuration)
+
+  return (
+    <div className="flex items-center gap-1 ml-auto text-caption text-text-muted">
+      <select
+        aria-label="Transition"
+        value={type}
+        onChange={(e) => setType(e.target.value as TransitionType)}
+        className="h-6 px-1 rounded-input bg-bg-panel border border-bg-divider text-caption text-text-primary focus:outline-none focus:border-accent-start"
+      >
+        <option value="cut">Cut</option>
+        <option value="fade">Fade</option>
+        <option value="slide">Slide</option>
+        <option value="wipe">Wipe</option>
+      </select>
+      {type !== 'cut' && (
+        <input
+          type="number"
+          aria-label="Transition length in milliseconds"
+          min={50}
+          max={3000}
+          step={50}
+          value={durationMs}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            if (Number.isFinite(n)) setDuration(Math.max(50, Math.min(3000, n)))
+          }}
+          className="w-14 h-6 px-1 rounded-input bg-bg-panel border border-bg-divider text-caption text-text-primary text-center focus:outline-none focus:border-accent-start"
+        />
+      )}
+      {type !== 'cut' && <span>ms</span>}
+    </div>
   )
 }

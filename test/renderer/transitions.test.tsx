@@ -19,6 +19,7 @@ let TransitionBar: typeof import('../../src/components/studio/TransitionBar')['T
 let PreviewPanel: typeof import('../../src/components/panels/PreviewPanel')['PreviewPanel']
 let useUIStore: typeof import('../../src/stores/uiStore')['useUIStore']
 let useHostState: typeof import('../../src/hooks/useHostState')['useHostState']
+let ScenesPanel: typeof import('../../src/components/panels/ScenesPanel')['ScenesPanel']
 let bridge: BridgeStub
 
 const scene = (id: string) => ({ id, collectionId: 'c', name: id, orderIndex: 0, createdAt: 0, updatedAt: 0 })
@@ -45,6 +46,7 @@ beforeEach(async () => {
   PreviewPanel = (await import('../../src/components/panels/PreviewPanel')).PreviewPanel
   useUIStore = (await import('../../src/stores/uiStore')).useUIStore
   useHostState = (await import('../../src/hooks/useHostState')).useHostState
+  ScenesPanel = (await import('../../src/components/panels/ScenesPanel')).ScenesPanel
 })
 afterEach(() => { cleanup(); removeBridge(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
@@ -300,5 +302,128 @@ describe('telling the output window', () => {
     })
     await settle()
     expect(published().every((s) => s.transition === undefined)).toBe(true)
+  })
+})
+
+describe('clicking a scene in normal mode', () => {
+  const click = async (name: string) => {
+    await userEvent.click(screen.getByRole('button', { name }))
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)) })
+  }
+
+  beforeEach(() => {
+    seedScenes()
+    useUIStore.setState({ studioMode: false })
+    bridge.reply('list_sources', [])
+  })
+
+  it('brings the scene in with the chosen transition', async () => {
+    useTransitionStore.getState().setType('slide')
+    useTransitionStore.getState().setDuration(900)
+    render(<ScenesPanel />)
+    await click('B')
+
+    expect(useSceneStore.getState().activeSceneId).toBe('B')
+    expect(useTransitionStore.getState().active).toMatchObject({ fromSceneId: 'A', toSceneId: 'B', type: 'slide', durationMs: 900 })
+  })
+
+  it('just changes scene for a cut', async () => {
+    useTransitionStore.getState().setType('cut')
+    render(<ScenesPanel />)
+    await click('B')
+
+    expect(useSceneStore.getState().activeSceneId).toBe('B')
+    expect(useTransitionStore.getState().active).toBeNull()
+  })
+
+  it('does nothing when the scene is already on air', async () => {
+    useTransitionStore.getState().setType('fade')
+    render(<ScenesPanel />)
+    await click('A')
+    expect(useTransitionStore.getState().active).toBeNull()
+    expect(useSceneStore.getState().activeSceneId).toBe('A')
+  })
+
+  it('changes at once, without waiting, if another click comes mid-transition', async () => {
+    useTransitionStore.getState().setType('fade')
+    useTransitionStore.getState().setDuration(3000)
+    render(<ScenesPanel />)
+    await click('B')
+    await click('A')
+
+    expect(useSceneStore.getState().activeSceneId).toBe('A')
+  })
+
+  it('has the sources in place at the moment the transition starts', async () => {
+    useSourceStore.setState({ byScene: {} })
+    bridge.reply('list_sources', [{
+      id: 'sb', sceneId: 'B', name: 'sb', sourceType: 'color_source', settings: '{}', orderIndex: 0, visible: true, locked: false,
+      muted: false, volume: 1, transform: '{}', createdAt: 0, updatedAt: 0,
+    }])
+    let atStart = -1
+    const stop = useTransitionStore.subscribe((st) => {
+      if (st.active && atStart < 0) atStart = useSourceStore.getState().byScene.B?.length ?? 0
+    })
+    render(<ScenesPanel />)
+    await click('B')
+    stop()
+    expect(atStart).toBe(1)
+  })
+
+  it('loads the scene sources before bringing it in', async () => {
+    useSourceStore.setState({ byScene: {} })
+    render(<ScenesPanel />)
+    await click('B')
+    const listed = bridge.calls.filter((c) => c.command === 'list_sources').map((c) => c.args.sceneId)
+    expect(listed).toContain('B')
+  })
+
+  it('stages the scene instead in Studio Mode', async () => {
+    useUIStore.setState({ studioMode: true })
+    useSceneStore.setState({ previewSceneId: null })
+    render(<ScenesPanel />)
+    await click('B')
+    expect(useSceneStore.getState().previewSceneId).toBe('B')
+    expect(useSceneStore.getState().activeSceneId).toBe('A')
+  })
+})
+
+describe('the transition choice in the Scenes panel', () => {
+  beforeEach(() => seedScenes())
+
+  it('sets the transition', async () => {
+    render(<ScenesPanel />)
+    await userEvent.selectOptions(screen.getByLabelText('Transition'), 'wipe')
+    expect(useTransitionStore.getState().type).toBe('wipe')
+  })
+
+  it('sets its length, within limits', async () => {
+    useTransitionStore.getState().setType('fade')
+    render(<ScenesPanel />)
+    const box = screen.getByLabelText('Transition length in milliseconds')
+    await userEvent.clear(box)
+    await userEvent.type(box, '99999')
+    expect(useTransitionStore.getState().durationMs).toBeLessThanOrEqual(3000)
+  })
+
+  it('has no length for a cut', () => {
+    useTransitionStore.getState().setType('cut')
+    render(<ScenesPanel />)
+    expect(screen.queryByLabelText('Transition length in milliseconds')).toBeNull()
+  })
+})
+
+describe('the normal preview while a scene comes in', () => {
+  it('shows both scenes', async () => {
+    seedScenes()
+    useUIStore.setState({ studioMode: false })
+    useTransitionStore.getState().setType('fade')
+    const { container } = render(<PreviewPanel />)
+    await act(async () => {
+      useTransitionStore.getState().executeTransition({ fromSceneId: 'A', toSceneId: 'B' },
+        () => useSceneStore.setState({ activeSceneId: 'B' }))
+    })
+    const ids = [...container.querySelectorAll('[data-source-id]')].map((e) => e.getAttribute('data-source-id')).sort()
+    expect(ids).toEqual(['sa', 'sb'])
   })
 })
