@@ -1,4 +1,5 @@
-import type { HostSnapshot, SessionParams, OutputKind } from '../../shared/host'
+import type { HostSnapshot, SessionParams, OutputKind, SnapshotFilter } from '../../shared/host'
+import type { SourceFilter } from '@/stores/filterStore'
 import type { SourceItem } from '@/stores/sourceStore'
 import type { AudioChannel } from '@/stores/audioStore'
 import type { SettingsState } from '@/stores/settingsStore'
@@ -19,9 +20,11 @@ interface SnapshotInput {
   connected: readonly string[]
   /** The device chosen for each channel, if not the system default. */
   devices?: Readonly<Record<string, string>>
+  /** Filters by source id, in the order they were added. */
+  filters?: Readonly<Record<string, readonly SourceFilter[]>>
 }
 
-export function buildSnapshot({ sources, base, channels, connected, devices = {} }: SnapshotInput): HostSnapshot {
+export function buildSnapshot({ sources, base, channels, connected, devices = {}, filters = {} }: SnapshotInput): HostSnapshot {
   // The preview paints by orderIndex, lowest at the bottom. The recording has to
   // stack them the same way, whatever order the list happens to be held in.
   const visible = sources.filter((s) => s.visible).sort((a, b) => a.orderIndex - b.orderIndex)
@@ -36,6 +39,7 @@ export function buildSnapshot({ sources, base, channels, connected, devices = {}
         transform: { ...s.transform },
         target: parseCaptureTarget(s.settings),
         settings: isStaticType(s.sourceType) ? plainValues(s.settings) : {},
+        filters: (filters[s.id] ?? []).filter((f) => f.enabled).map(toSnapshotFilter),
       })),
     audio: channels.map((c) => ({
       id: c.id,
@@ -46,6 +50,13 @@ export function buildSnapshot({ sources, base, channels, connected, devices = {}
       deviceId: devices[c.id] ?? '',
     })),
   }
+}
+
+/** A filter as the host takes it: the same fields without the editor's name and switch. */
+export function toSnapshotFilter(f: SourceFilter): SnapshotFilter {
+  const { name: _name, enabled: _enabled, ...rest } = f
+  void _name; void _enabled
+  return rest as SnapshotFilter
 }
 
 /** The strings, numbers and booleans in a settings object; the host draws from nothing else. */

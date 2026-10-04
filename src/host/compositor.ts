@@ -12,6 +12,8 @@ import { layerPlan, outputMapping } from './geometry'
 /** The part of CanvasRenderingContext2D this uses. */
 export interface DrawContext {
   fillStyle: string | CanvasGradient | CanvasPattern
+  /** A CSS filter list, or 'none'. */
+  filter: string
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void
   fillRect(x: number, y: number, w: number, h: number): void
   save(): void
@@ -23,15 +25,24 @@ export interface DrawContext {
   rotate(angle: number): void
   scale(x: number, y: number): void
   drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void
+  drawImage(
+    image: CanvasImageSource,
+    sx: number, sy: number, sw: number, sh: number,
+    dx: number, dy: number, dw: number, dh: number,
+  ): void
 }
 
 /** A source with a picture ready to draw. */
 export interface ReadyLayer {
   transform: SnapshotTransform
   image: CanvasImageSource
-  /** The picture's own size, for fitting it inside the source's box. */
+  /** The size of the picture as it is to be shown (after any crop), for fitting it inside the source's box. */
   width: number
   height: number
+  /** The part of the picture to show, in its own pixels; the whole picture if absent. */
+  crop?: { sx: number; sy: number; sw: number; sh: number }
+  /** CSS filter list for this layer; none if absent. */
+  filter?: string
 }
 
 export function drawFrame(
@@ -62,7 +73,14 @@ export function drawFrame(
     ctx.translate(p.cx, p.cy)
     ctx.rotate(p.rotation)
     ctx.scale(p.scaleX, p.scaleY)
-    ctx.drawImage(layer.image, p.dx, p.dy, p.dw, p.dh)
+    // Set inside save/restore so one layer's filter never leaks into the next.
+    ctx.filter = layer.filter && layer.filter !== 'none' ? layer.filter : 'none'
+    if (layer.crop) {
+      const c = layer.crop
+      ctx.drawImage(layer.image, c.sx, c.sy, c.sw, c.sh, p.dx, p.dy, p.dw, p.dh)
+    } else {
+      ctx.drawImage(layer.image, p.dx, p.dy, p.dw, p.dh)
+    }
     ctx.restore()
   }
 

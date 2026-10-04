@@ -143,3 +143,30 @@ describe('audio devices in the snapshot', () => {
     expect(snap.audio.map((c) => c.deviceId)).toEqual(['usb-1', ''])
   })
 })
+
+describe('filters in the snapshot', () => {
+  const blur = (id: string, enabled = true) => ({ id, type: 'blur' as const, name: 'Gaussian Blur', enabled, radius: 5 })
+
+  it('carries a source\'s enabled filters in order, without the editor-only fields', () => {
+    const snap = buildSnapshot({
+      sources: [source('a')], base: BASE, channels: [], connected: [],
+      filters: { a: [blur('f1'), blur('f2', false), blur('f3')] },
+    })
+    expect(snap.sources[0].filters).toEqual([
+      { id: 'f1', type: 'blur', radius: 5 },
+      { id: 'f3', type: 'blur', radius: 5 },
+    ])
+  })
+
+  it('gives no filters to a source that has none', () => {
+    expect(buildSnapshot({ sources: [source('a')], base: BASE, channels: [], connected: [] }).sources[0].filters).toEqual([])
+  })
+
+  it('keeps one source\'s filters off another', () => {
+    const snap = buildSnapshot({
+      sources: [source('a', { orderIndex: 0 }), source('b', { orderIndex: 1 })], base: BASE, channels: [], connected: [],
+      filters: { b: [blur('f1')] },
+    })
+    expect(snap.sources.map((s) => s.filters.length)).toEqual([0, 1])
+  })
+})

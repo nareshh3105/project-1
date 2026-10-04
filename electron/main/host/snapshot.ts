@@ -1,6 +1,6 @@
 import {
   EMPTY_SNAPSHOT,
-  type HostSnapshot, type SnapshotChannel, type SnapshotSource, type SnapshotTransform,
+  type HostSnapshot, type SnapshotChannel, type SnapshotFilter, type SnapshotSource, type SnapshotTransform,
 } from '../../../shared/host'
 
 /**
@@ -52,6 +52,52 @@ function targetOf(raw: unknown): SnapshotSource['target'] {
   return { kind: kind as 'screen' | 'window' | 'camera', id, name: typeof name === 'string' ? name : '' }
 }
 
+const MAX_FILTERS = 16
+
+const range = (v: unknown, lo: number, hi: number, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback
+
+const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+
+/**
+ * One filter, with every value held to the range the editor offers. An unknown
+ * type, or anything without an id, is dropped: the host draws only what it
+ * understands.
+ */
+function filterOf(raw: unknown): SnapshotFilter | null {
+  if (!isRecord(raw) || typeof raw.id !== 'string' || raw.id.length === 0 || raw.id.length > 64) return null
+  const id = raw.id
+
+  switch (raw.type) {
+    case 'color-correction':
+      return {
+        id, type: 'color-correction',
+        brightness: range(raw.brightness, -1, 1, 0), contrast: range(raw.contrast, 0, 4, 1),
+        saturation: range(raw.saturation, 0, 4, 1), hue: range(raw.hue, -180, 180, 0),
+        opacity: range(raw.opacity, 0, 1, 1),
+      }
+    case 'crop':
+      return {
+        id, type: 'crop',
+        left: range(raw.left, 0, 16384, 0), right: range(raw.right, 0, 16384, 0),
+        top: range(raw.top, 0, 16384, 0), bottom: range(raw.bottom, 0, 16384, 0),
+      }
+    case 'chroma-key':
+      return {
+        id, type: 'chroma-key',
+        keyColor: typeof raw.keyColor === 'string' && HEX.test(raw.keyColor) ? raw.keyColor : '#00ff00',
+        similarity: range(raw.similarity, 1, 1000, 80), smoothness: range(raw.smoothness, 1, 1000, 50),
+        opacity: range(raw.opacity, 0, 1, 1),
+      }
+    case 'blur':
+      return { id, type: 'blur', radius: range(raw.radius, 0, 40, 0) }
+    case 'sharpen':
+      return { id, type: 'sharpen', strength: range(raw.strength, 0, 2, 0) }
+    default:
+      return null
+  }
+}
+
 const MAX_SETTINGS = 24
 const MAX_STRING = 4000
 
@@ -79,6 +125,10 @@ function sourceOf(raw: unknown, index: number, base: { width: number; height: nu
     transform: transformOf(raw.transform, base),
     target: targetOf(raw.target),
     settings: settingsOf(raw.settings),
+    filters: (Array.isArray(raw.filters) ? raw.filters : [])
+      .slice(0, MAX_FILTERS)
+      .map(filterOf)
+      .filter((f): f is SnapshotFilter => f !== null),
   }
 }
 

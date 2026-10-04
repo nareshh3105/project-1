@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Monitor } from 'lucide-react'
 import { useSourceStore, type SourceItem } from '@/stores/sourceStore'
 import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
@@ -9,6 +9,18 @@ import {
 } from '@/lib/canvas/geometry'
 import { isStaticType } from '@/lib/sources/static'
 import { StaticView } from './StaticView'
+import { useFilterStore, type SourceFilter } from '@/stores/filterStore'
+import { toSnapshotFilter } from '@/lib/hostSnapshot'
+import { planFilters, cropViewBox, type FilterPlan } from '@/lib/filters/plan'
+import { setFilterDefs, clearFilterDefs } from '@/lib/filters/defs'
+
+const NO_FILTERS: readonly SourceFilter[] = []
+
+/** The drawing plan for a source's enabled filters. */
+function usePlan(sourceId: string): FilterPlan {
+  const filters = useFilterStore((s) => s.filtersBySource[sourceId] ?? NO_FILTERS)
+  return useMemo(() => planFilters(filters.filter((f) => f.enabled).map(toSnapshotFilter)), [filters])
+}
 import { cn } from '@/lib/utils'
 
 /**
@@ -80,6 +92,17 @@ export function SceneCanvas({
     () => sources.filter((s) => s.visible).sort((a, b) => a.orderIndex - b.orderIndex),
     [sources],
   )
+
+  // Sharpen and chroma key are SVG filters; the layers refer to them by id, so
+  // they must be in the page. Each canvas keeps its own set and removes it on closing.
+  const holderId = `cb-defs-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`
+  const allFilters = useFilterStore((s) => s.filtersBySource)
+  const defs = useMemo(
+    () => layers.map((l) => planFilters((allFilters[l.id] ?? NO_FILTERS).filter((f) => f.enabled).map(toSnapshotFilter)).defs).join(''),
+    [layers, allFilters],
+  )
+  useEffect(() => { setFilterDefs(document, defs, holderId) }, [defs, holderId])
+  useEffect(() => () => clearFilterDefs(document, holderId), [holderId])
 
   const anythingLive = layers.some(
     (s) => isCaptureType(s.sourceType) && activeIds.includes(s.id),
@@ -160,6 +183,8 @@ function SourceLayer({
   const getStream = useCaptureStore((s) => s.getStream)
   const { x, y, width, height, rotation, scaleX, scaleY } = source.transform
   const editable = interactive && !source.locked
+  const plan = usePlan(source.id)
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
   /** Ends the drag in progress, if any, without saving it. */
   const abandonDrag = useRef<(() => void) | null>(null)
 
@@ -172,7 +197,26 @@ function SourceLayer({
     const video = videoRef.current
     if (!video) return
     video.srcObject = live ? (getStream(source.id) ?? null) : null
+
+    // A crop is a share of the picture, so the picture's size has to be known.
+    const measure = () => setNatural(video.videoWidth > 0 ? { w: video.videoWidth, h: video.videoHeight } : null)
+    video.addEventListener('loadedmetadata', measure)
+    video.addEventListener('resize', measure)
+    measure()
+    return () => {
+      video.removeEventListener('loadedmetadata', measure)
+      video.removeEventListener('resize', measure)
+    }
   }, [live, source.id, getStream])
+
+  // Colors and text are drawn at the size of their box, so that is their size.
+  const knownSize = isCaptureType(source.sourceType) || source.sourceType === 'image'
+    ? natural
+    : { w: Math.round(width), h: Math.round(height) }
+  const appearance: React.CSSProperties = {
+    filter: plan.css === 'none' ? undefined : plan.css,
+    objectViewBox: knownSize ? cropViewBox(plan.crop, knownSize.w, knownSize.h) : undefined,
+  } as React.CSSProperties
 
   const placement: React.CSSProperties = {
     position: 'absolute',
@@ -247,10 +291,14 @@ function SourceLayer({
           autoPlay
           muted
           playsInline
+          style={appearance}
           className="w-full h-full object-contain pointer-events-none"
         />
       ) : isStaticType(source.sourceType) ? (
-        <StaticView type={source.sourceType} settings={source.settings} width={width} height={height} />
+        <StaticView
+          type={source.sourceType} settings={source.settings} width={width} height={height}
+          style={appearance} onNaturalSize={source.sourceType === 'image' ? setNatural : undefined}
+        />
       ) : (
         <SourcePlaceholder source={source} />
       )}

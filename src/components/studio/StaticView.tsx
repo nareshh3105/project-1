@@ -12,6 +12,9 @@ import {
  */
 
 interface Props {
+  style?: React.CSSProperties
+  /** Tells the caller how large a picture really is, once it has loaded. */
+  onNaturalSize?: (size: { w: number; h: number } | null) => void
   type: StaticType
   settings: Record<string, unknown>
   width: number
@@ -37,12 +40,12 @@ export function forgetPictures(): void {
   pictures.clear()
 }
 
-export function StaticView({ type, settings, width, height }: Props) {
-  if (type === 'image') return <PictureView settings={settings} />
-  return <PaintedView type={type} settings={settings} width={width} height={height} />
+export function StaticView({ type, settings, width, height, style, onNaturalSize }: Props) {
+  if (type === 'image') return <PictureView settings={settings} style={style} onNaturalSize={onNaturalSize} />
+  return <PaintedView type={type} settings={settings} width={width} height={height} style={style} />
 }
 
-function PaintedView({ type, settings, width, height }: Props) {
+function PaintedView({ type, settings, width, height, style }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const w = Math.min(4096, Math.max(1, Math.round(width)))
   const h = Math.min(4096, Math.max(1, Math.round(height)))
@@ -59,10 +62,10 @@ function PaintedView({ type, settings, width, height }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
-  return <canvas ref={ref} width={w} height={h} className="w-full h-full pointer-events-none" />
+  return <canvas ref={ref} width={w} height={h} style={style} className="w-full h-full pointer-events-none" />
 }
 
-function PictureView({ settings }: { settings: Record<string, unknown> }) {
+function PictureView({ settings, style, onNaturalSize }: { settings: Record<string, unknown>; style?: React.CSSProperties; onNaturalSize?: Props['onNaturalSize'] }) {
   const { filePath } = parseImage(settings)
   const [state, setState] = useState<{ url: string | null; error: string | null }>({ url: null, error: null })
 
@@ -80,7 +83,13 @@ function PictureView({ settings }: { settings: Record<string, unknown> }) {
   }, [filePath])
 
   if (state.url) {
-    return <img src={state.url} alt="" draggable={false} className="w-full h-full object-contain pointer-events-none" />
+    return (
+      <img
+        src={state.url} alt="" draggable={false} style={style}
+        onLoad={(e) => onNaturalSize?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+        className="w-full h-full object-contain pointer-events-none"
+      />
+    )
   }
   return (
     <div className="w-full h-full flex items-center justify-center border border-dashed border-bg-divider/60 px-4 text-center">

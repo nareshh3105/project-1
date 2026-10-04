@@ -4,10 +4,12 @@ import {
 } from '../../shared/host'
 import { CapturePool, type PoolDeps } from './capturePool'
 import { drawFrame } from './compositor'
+import { planFilters, croppedArea, type FilterPlan } from '@/lib/filters/plan'
+import { outputMapping } from './geometry'
 import { FrameLoop, type LoopDeps } from './frameLoop'
 import { StaticLayers, type StaticDeps } from './staticLayers'
 import { EncoderSession, type SessionDeps } from './session'
-import type { SnapshotChannel } from '../../shared/host'
+import type { SnapshotChannel, SnapshotSource } from '../../shared/host'
 
 /**
  * The output host: composes the scene, mixes the audio and encodes the result
@@ -46,6 +48,8 @@ export interface HostDeps {
   session: SessionDeps
   pool: PoolDeps
   statics: StaticDeps
+  /** Puts the SVG filters the sources refer to into the page, replacing the last set. */
+  setFilterDefs(markup: string): void
   loop: LoopDeps
   now(): number
   createCanvas(width: number, height: number): { canvas: unknown; context: CanvasRenderingContext2D }
@@ -72,6 +76,9 @@ export class HostApp {
   private readonly loop: FrameLoop
   private snapshot: HostSnapshot = EMPTY_SNAPSHOT
   private audio: AudioRig | null = null
+  private defsInPage = ''
+  /** Filter plans already worked out, so a frame does not rebuild strings 30 times a second. */
+  private readonly plans = new Map<string, { key: string; plan: FilterPlan }>()
   private audioStarting: Promise<AudioRig> | null = null
   private unlisten: Array<() => void> = []
 
@@ -166,6 +173,7 @@ export class HostApp {
 
       // Bring captures and audio up to date for the scene being output.
       this.pool.sync(this.snapshot.sources)
+      this.syncFilterDefs(this.snapshot)
       this.audio?.apply(this.snapshot.audio)
 
       session.start(this.deps.now())
@@ -202,25 +210,57 @@ export class HostApp {
     if (this.running.size === 0) return
     this.pool.sync(snapshot.sources)
     this.statics.prune(snapshot.sources)
+    this.syncFilterDefs(snapshot)
     this.audio?.apply(snapshot.audio)
+  }
+
+  /** Sharpen and chroma key are SVG filters; they have to be in the page before a frame refers to them. */
+  private syncFilterDefs(snapshot: HostSnapshot): void {
+    const keep = new Set(snapshot.sources.map((s) => s.id))
+    for (const id of [...this.plans.keys()]) if (!keep.has(id)) this.plans.delete(id)
+
+    const markup = snapshot.sources.map((s) => planFilters(s.filters, 1).defs).join('')
+    if (markup !== this.defsInPage) {
+      this.defsInPage = markup
+      this.deps.setFilterDefs(markup)
+    }
   }
 
   private compose(entry: Running, nowMs: number): void {
     const { sources, base } = this.snapshot
+    const scale = outputMapping(base, { width: entry.params.width, height: entry.params.height }).scale
     const layers = []
     for (const source of [...sources].sort((a, b) => a.order - b.order)) {
       const frame = this.pool.frameFor(source.id) ?? this.statics.frameFor(source)
       if (!frame) continue
+
+      const plan = this.planFor(source, scale)
+      const area = croppedArea(frame.width, frame.height, plan.crop)
       layers.push({
         transform: source.transform,
         image: frame.image as unknown as CanvasImageSource,
-        width: frame.width,
-        height: frame.height,
+        width: area ? area.sw : frame.width,
+        height: area ? area.sh : frame.height,
+        crop: area && (plan.crop.left || plan.crop.right || plan.crop.top || plan.crop.bottom) ? area : undefined,
+        filter: plan.css,
       })
     }
 
     drawFrame(entry.context, { width: entry.params.width, height: entry.params.height }, base, layers)
     entry.session.submitFrame(entry.canvas, nowMs)
+  }
+
+  /** The drawing plan for a source's filters, remembered until they change. */
+  private planFor(source: SnapshotSource, scale: number): FilterPlan {
+    if (source.filters.length === 0) return planFilters([], scale)
+
+    const key = `${scale}|${JSON.stringify(source.filters)}`
+    const known = this.plans.get(source.id)
+    if (known?.key === key) return known.plan
+
+    const plan = planFilters(source.filters, scale)
+    this.plans.set(source.id, { key, plan })
+    return plan
   }
 
   // ── audio ──

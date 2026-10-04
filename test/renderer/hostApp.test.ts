@@ -14,7 +14,7 @@ const PARAMS: SessionParams = {
 }
 
 const src = (id: string, order = 0): SnapshotSource => ({
-  id, type: 'display_capture', order, settings: {},
+  id, type: 'display_capture', order, settings: {}, filters: [],
   transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
 })
@@ -40,6 +40,9 @@ let timers: number
 let createAudioFails: boolean
 let encoderSupported: boolean
 let drawn: number
+let filterDefs: string[]
+let filtersSet: string[]
+let drawImages: unknown[][]
 let clockMs: number
 
 const settle = () => new Promise((r) => setTimeout(r, 0))
@@ -80,6 +83,7 @@ function build(): HostDeps {
       createVideoFrame: () => ({ close: () => {} }),
       createAudioData: () => ({ close: () => {} }),
     },
+    setFilterDefs: (markup) => { filterDefs.push(markup) },
     statics: {
       createCanvas: () => ({
         canvas: {} as CanvasImageSource,
@@ -99,7 +103,10 @@ function build(): HostDeps {
     now: () => 0,
     createCanvas: () => ({
       canvas: {},
-      context: new Proxy({}, { get: () => () => { drawn++ }, set: () => true }) as unknown as CanvasRenderingContext2D,
+      context: new Proxy({}, {
+        get: (_t, key) => (...args: unknown[]) => { drawn++; if (key === 'drawImage') drawImages.push(args) },
+        set: (_t, key, value) => { if (key === 'filter') filtersSet.push(String(value)); return true },
+      }) as unknown as CanvasRenderingContext2D,
     }),
     createAudio: async (cb) => {
       if (createAudioFails) throw new Error('No audio device.')
@@ -113,7 +120,7 @@ function build(): HostDeps {
 }
 
 beforeEach(() => {
-  sent = []; handlers = {}; clockMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
+  sent = []; handlers = {}; filterDefs = []; filtersSet = []; drawImages = []; clockMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
   encoded = { frames: 0, audio: 0, closed: 0, flushed: 0, aborted: 0 }
   encoderFails = null; createAudioFails = false; encoderSupported = true
   tick = () => {}
@@ -410,5 +417,86 @@ describe('shutting down', () => {
     expect(app.active).toEqual([])
     expect(audioRigs[0].disposed).toBe(true)
     expect(handlers[HOST_CHANNELS.request]).toBeUndefined()
+  })
+})
+
+describe('filters', () => {
+  const filtered = (id: string, filters: SnapshotSource['filters']): SnapshotSource => ({ ...src(id), filters })
+  const blur = { id: 'f1', type: 'blur' as const, radius: 10 }
+  const key = { id: 'k1', type: 'chroma-key' as const, keyColor: '#00ff00', similarity: 80, smoothness: 50, opacity: 1 }
+
+  it('draws a filtered source with its filter', async () => {
+    pushState(snap({ sources: [filtered('a', [blur])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    // 1280 wide output of a 1920 canvas: blur shrinks with the picture.
+    expect(filtersSet).toContain('blur(6.6667px)')
+  })
+
+  it('fits a cropped source by what is left of it, not by its whole picture', async () => {
+    // The fake capture is 1920 x 1080; half of it is cropped away and the box is 1920 x 1080.
+    pushState(snap({ sources: [filtered('a', [{ id: 'c', type: 'crop', left: 960, right: 0, top: 0, bottom: 0 }])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+
+    const [, sx, sy, sw, sh, dx, , dw, dh] = drawImages.at(-1) as number[]
+    expect([sx, sy, sw, sh]).toEqual([960, 0, 960, 1080])
+    expect([dw, dh]).toEqual([960, 1080]) // not stretched to fill the box
+    expect(dx).toBe(-480)
+  })
+
+  it('draws an uncropped source with the plain form', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    expect(drawImages.at(-1)).toHaveLength(5)
+  })
+
+  it('draws an unfiltered source with none', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    expect(filtersSet.every((f) => f === 'none')).toBe(true)
+  })
+
+  it('puts SVG filters in the page before drawing with them', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    expect(filterDefs.at(-1)).toContain('id="cbf-k1"')
+  })
+
+  it('does not rewrite the page when the filters have not changed', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    const before = filterDefs.length
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    expect(filterDefs.length).toBe(before)
+  })
+
+  it('updates the page when a filter changes', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [filtered('a', [{ ...key, similarity: 300 }])] }))
+    expect(new Set(filterDefs).size).toBeGreaterThan(1)
+  })
+
+  it('clears the page of filters for a source that has gone', async () => {
+    pushState(snap({ sources: [filtered('a', [key])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    pushState(snap({ sources: [] }))
+    expect(filterDefs.at(-1)).toBe('')
+  })
+
+  it('picks up a changed filter on the next frame', async () => {
+    pushState(snap({ sources: [filtered('a', [blur])] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+    filtersSet.length = 0
+
+    pushState(snap({ sources: [filtered('a', [{ ...blur, radius: 30 }])] }))
+    clockMs = 100
+    tick()
+    expect(filtersSet).toContain('blur(20px)')
   })
 })

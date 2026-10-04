@@ -216,3 +216,60 @@ describe('drawFrame', () => {
     expect(r.names().at(-1)).toBe('restore')
   })
 })
+
+describe('crop and filters', () => {
+  /** Records the filter in force at each draw. */
+  function filtering() {
+    const seen: string[] = []
+    const r = recorder()
+    const draw = r.ctx.drawImage.bind(r.ctx)
+    r.ctx.drawImage = ((...a: unknown[]) => { seen.push(r.ctx.filter); (draw as (...x: unknown[]) => void)(...a) }) as never
+    return { r, seen }
+  }
+
+  it('draws only the cropped part, then fits that inside the box', () => {
+    const r = recorder()
+    const cropped: ReadyLayer = {
+      ...layer('a', { width: 400, height: 200 }, 800, 400),
+      width: 400, height: 400, // the picture as it will look after cropping
+      crop: { sx: 200, sy: 0, sw: 400, sh: 400 },
+    }
+    drawFrame(r.ctx, BASE, BASE, [cropped])
+
+    const draw = r.calls.find((c) => c[0] === 'drawImage')!
+    expect(draw.slice(2, 6)).toEqual([200, 0, 400, 400]) // the source rectangle
+    // A square picture in a 400 x 200 box is fitted to 200 x 200, not stretched.
+    expect(draw.slice(8)).toEqual([200, 200])
+  })
+
+  it('uses the plain four-number form with no crop', () => {
+    const r = recorder()
+    drawFrame(r.ctx, BASE, BASE, [layer('a')])
+    expect(r.calls.find((c) => c[0] === 'drawImage')).toHaveLength(6)
+  })
+
+  it('applies the filter of a layer while drawing it', () => {
+    const { r, seen } = filtering()
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'blur(4px)' }])
+    expect(seen).toEqual(['blur(4px)'])
+  })
+
+  it('does not let the filter of one layer leak into the next', () => {
+    const { r, seen } = filtering()
+    r.ctx.filter = 'none'
+    // The recording fake does not restore state, so emulate the real context.
+    const stack: string[] = []
+    const save = r.ctx.save.bind(r.ctx); const restore = r.ctx.restore.bind(r.ctx)
+    r.ctx.save = () => { stack.push(r.ctx.filter); save() }
+    r.ctx.restore = () => { r.ctx.filter = stack.pop() ?? 'none'; restore() }
+
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'blur(4px)' }, layer('b')])
+    expect(seen).toEqual(['blur(4px)', 'none'])
+  })
+
+  it('treats none and missing alike', () => {
+    const { r, seen } = filtering()
+    drawFrame(r.ctx, BASE, BASE, [{ ...layer('a'), filter: 'none' }, layer('b')])
+    expect(seen).toEqual(['none', 'none'])
+  })
+})

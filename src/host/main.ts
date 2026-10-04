@@ -5,6 +5,7 @@ import { createAudioRig } from './audioRig'
 import { SAMPLE_RATE, type SessionDeps } from './session'
 import { openCaptureStream } from '@/lib/capture/open'
 import { ipc } from '@/ipc'
+import { setFilterDefs } from '@/lib/filters/defs'
 import type { PaintContext } from '@/lib/sources/static'
 
 /**
@@ -54,6 +55,7 @@ const app = new HostApp({
       return video as unknown as PoolVideo
     },
   },
+  setFilterDefs: (markup) => setFilterDefs(document, markup),
   statics: {
     createCanvas: (width, height) => {
       const canvas = document.createElement('canvas')

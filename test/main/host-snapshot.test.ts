@@ -12,6 +12,7 @@ const goodSource = {
   transform: { x: 10, y: 20, width: 800, height: 600, rotation: 15, scaleX: 1.5, scaleY: 2 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
   settings: {},
+  filters: [],
 }
 
 const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true, deviceId: '' }

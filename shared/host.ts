@@ -93,6 +93,14 @@ export interface SnapshotTransform {
   scaleY: number
 }
 
+/** A filter on a source, as the host applies it. Ranges are enforced by the main process. */
+export type SnapshotFilter =
+  | { id: string; type: 'color-correction'; brightness: number; contrast: number; saturation: number; hue: number; opacity: number }
+  | { id: string; type: 'crop'; left: number; right: number; top: number; bottom: number }
+  | { id: string; type: 'chroma-key'; keyColor: string; similarity: number; smoothness: number; opacity: number }
+  | { id: string; type: 'blur'; radius: number }
+  | { id: string; type: 'sharpen'; strength: number }
+
 export interface SnapshotSource {
   id: string
   /** What it is: only the capture types draw anything. */
@@ -107,6 +115,8 @@ export interface SnapshotSource {
    * Plain values only; the main process drops anything else.
    */
   settings: Record<string, string | number | boolean>
+  /** Enabled filters, in the order they apply. */
+  filters: SnapshotFilter[]
 }
 
 export interface SnapshotChannel {

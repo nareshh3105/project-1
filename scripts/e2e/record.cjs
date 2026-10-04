@@ -28,6 +28,7 @@ const minimize = !args.includes('--no-minimize')
 const withSync = args.includes('--sync')
 const arrange = args.includes('--arrange')
 const overlay = args.includes('--overlay')
+const filtersTest = args.includes('--filters')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -132,6 +133,34 @@ function overlayCheck(file, outW, outH) {
   return { green: region(120, 120, 480, 240), words: region(1200, 120, 600, 240) }
 }
 
+/**
+ * The three filtered boxes, as the recording shows them.
+ *  keyed:   green with a chroma key should show what is behind it, not green.
+ *  grey:    red with no saturation should have no colour at all (U and V at 128).
+ *  cropped: blue with its left half cropped is half as wide, so the left of its box is not blue.
+ */
+function filtersCheck(file, outW) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const k = outW / 1920
+  const region = (x, y, w, h) => {
+    const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(':')
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+      `crop=${crop},signalstats,metadata=mode=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    const get = (key) => {
+      const vs = [...r.stdout.matchAll(new RegExp('lavfi.signalstats.' + key + '=([0-9.]+)', 'g'))].map((m) => Number(m[1]))
+      return vs.length ? Number((vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(1)) : null
+    }
+    return { y: get('YAVG'), u: get('UAVG'), v: get('VAVG') }
+  }
+  return {
+    keyed: region(150, 150, 420, 180),
+    grey: region(730, 150, 420, 180),
+    croppedLeftEdge: region(1250, 150, 60, 180),
+    croppedCentre: region(1480, 150, 80, 180),
+  }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -183,6 +212,21 @@ async function main() {
       await box('Words', 'text_gdi_plus',
         { text: 'HELLO', fontSize: 140, bold: true, color: '#ffffff', backgroundColor: '#ff0000', align: 'center' },
         1200, 120, 600, 240)
+    }
+    if (filtersTest) {
+      // Three boxes, each with a filter. Filters are kept in the interface page's storage.
+      const stored = {}
+      const box = async (name, color, x, y, w, h, filters) => {
+        const src = await invoke('add_source', { sceneId, name, sourceType: 'color_source', settings: JSON.stringify({ color }) })
+        await invoke('set_source_transform', {
+          id: src.id, transform: JSON.stringify({ x, y, width: w, height: h, rotation: 0, scaleX: 1, scaleY: 1 }),
+        })
+        stored[src.id] = filters.map((f, i) => ({ id: `${name}-${i}`, name: f.type, enabled: true, ...f }))
+      }
+      await box('keyed', '#00ff00', 120, 120, 480, 240, [{ type: 'chroma-key', keyColor: '#00ff00', similarity: 80, smoothness: 50, opacity: 1 }])
+      await box('grey', '#ff0000', 700, 120, 480, 240, [{ type: 'color-correction', brightness: 0, contrast: 1, saturation: 0, hue: 0, opacity: 1 }])
+      await box('cropped', '#0000ff', 1240, 120, 560, 240, [{ type: 'crop', left: 280, right: 0, top: 0, bottom: 0 }])
+      await ui.eval(`localStorage.setItem('cb:filters', ${JSON.stringify(JSON.stringify(stored))})`)
     }
     if (arrange) {
       // Half size, centred: the corners of the recording must stay black.
@@ -336,6 +380,7 @@ main()
       process.exit(1)
     }
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
+    if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)
