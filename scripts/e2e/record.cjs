@@ -30,6 +30,7 @@ const arrange = args.includes('--arrange')
 const overlay = args.includes('--overlay')
 const filtersTest = args.includes('--filters')
 const transitionType = flag('transition', '')
+const weakCores = Number(flag('weak', 0))
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -82,6 +83,14 @@ function memoryMb(dir) {
   const ps = `(Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | Measure-Object WorkingSetSize -Sum).Sum`
   const r = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' })
   return Math.round(Number(r.stdout.trim() || 0) / 1048576)
+}
+
+/** Confines every process of this run to the first `cores` logical processors, at low priority: a slow computer, simulated. */
+function restrictCpu(dir, cores) {
+  const tag = path.basename(dir)
+  const mask = (1 << cores) - 1
+  const ps = `Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | ForEach-Object { try { $p = Get-Process -Id $_.ProcessId; $p.ProcessorAffinity = ${mask}; $p.PriorityClass = 'BelowNormal' } catch {} }`
+  spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' })
 }
 
 /** CPU seconds used so far by each of this run's processes, by role. */
@@ -379,8 +388,14 @@ async function main() {
       const result = await hostCdp.eval(fs.readFileSync(path.resolve(probeFile), 'utf8'))
       console.log('PROBE:', typeof result === 'string' ? result : JSON.stringify(result))
     }
+    if (weakCores) {
+      await sleep(3000)
+      restrictCpu(scratch, weakCores)
+      log(`limited to ${weakCores} core(s) at low priority`)
+    }
     const memory = []
     let lastAudio = null
+    let warnedAt = 0
     let samples = 0
     let lastCpu = null
     while (Date.now() - startedAt < seconds * 1000) {
@@ -401,6 +416,10 @@ async function main() {
         memory.push(mb)
         log(`memory: ${mb} MB across the app's processes`)
       }
+      if (weakCores && !warnedAt && await ui.eval(`document.body.innerText.includes('not keeping up')`)) {
+        warnedAt = (Date.now() - startedAt) / 1000
+        log('warning appeared at', warnedAt.toFixed(1), 's')
+      }
       if (hostCdp) {
         const d = await hostCdp.eval(`JSON.stringify(window.__host.debug())`).then(JSON.parse)
         const a = d.audio
@@ -412,6 +431,12 @@ async function main() {
       }
     }
 
+    if (weakCores) {
+      const warned = await ui.eval(`document.body.innerText.includes('not keeping up')`)
+      const bar = await ui.eval(`(() => { const f = [...document.querySelectorAll('footer span')].map((e) => e.textContent); return f.join('|') })()`)
+      log('warning shown to the user:', warned || warnedAt > 0)
+      log('status bar:', String(bar).slice(0, 200))
+    }
     if (kind === 'recording') await invoke('stop_recording')
     else if (kind === 'streaming') await invoke('stop_streaming')
     else if (kind === 'vcam') await invoke('stop_virtual_camera')

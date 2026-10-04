@@ -21,6 +21,7 @@ import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { useHostState }         from '@/hooks/useHostState'
 import { useAudioDevices }      from '@/hooks/useAudioDevices'
 import { useNotifyStore }       from '@/stores/notifyStore'
+import { struggleMessage }      from '@/lib/health'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
 import { MultiviewModal }       from '@/components/modals/MultiviewModal'
@@ -35,6 +36,7 @@ import {
   onReplayStatus,
   onVirtualCameraStatus,
   onOutputError,
+  onOutputHealth,
 } from '@/ipc'
 
 export function AppShell() {
@@ -90,6 +92,7 @@ export function AppShell() {
     let unlistenReplay: (() => void) | null = null
     let unlistenVcam:   (() => void) | null = null
     let unlistenError:  (() => void) | null = null
+    let unlistenHealth: (() => void) | null = null
 
     onRecordingStatus((p) => setRecordingStatus(p.active, p.filePath))
       .then((u) => { unlistenRec = u })
@@ -111,6 +114,12 @@ export function AppShell() {
     onOutputError((p) => useNotifyStore.getState().notify('error', p.message))
       .then((u) => { unlistenError = u })
 
+    // A computer that cannot keep up drops frames; say so, and what to try, once it is clear it is happening.
+    onOutputHealth((p) => {
+      useOutputStore.getState().setStruggling(p.kind, p.struggling)
+      if (p.struggling) useNotifyStore.getState().notify('error', struggleMessage(p.kind, p.dropRatio))
+    }).then((u) => { unlistenHealth = u })
+
     return () => {
       unlistenRec?.()
       unlistenStream?.()
@@ -118,6 +127,7 @@ export function AppShell() {
       unlistenReplay?.()
       unlistenVcam?.()
       unlistenError?.()
+      unlistenHealth?.()
     }
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 

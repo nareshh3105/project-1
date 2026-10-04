@@ -5,11 +5,18 @@ import { cn } from '@/lib/utils'
 
 export function StatusBar() {
   const stats = useUIStore((s) => s.stats)
-  const { recording, streaming, ffmpegAvailable } = useOutputStore((s) => ({
+  const { recording, streaming, replayBuffer, virtualCamera, ffmpegAvailable, struggling } = useOutputStore((s) => ({
     recording:       s.recording,
     streaming:       s.streaming,
+    replayBuffer:    s.replayBuffer,
+    virtualCamera:   s.virtualCamera,
     ffmpegAvailable: s.ffmpegAvailable,
+    struggling:      s.struggling,
   }))
+
+  // The rates below are measured on the running outputs; with none running there is nothing to measure.
+  const outputRunning = recording.active || streaming.active || replayBuffer.active || virtualCamera.active
+  const behind = Object.keys(struggling).length > 0
 
   const isLive = streaming.active
   const isRec  = recording.active
@@ -48,11 +55,12 @@ export function StatusBar() {
         <>
           <StatItem label="CPU"     value={`${stats.cpuPercent.toFixed(1)}%`} />
           <StatItem label="RAM"     value={`${stats.memoryMb.toFixed(0)} MB`} />
-          <StatItem label="FPS"     value={`${stats.renderFps.toFixed(0)}`} />
-          <StatItem label="Bitrate" value={formatBitrate(stats.outputBitrateBps)} />
+          <StatItem label="FPS"     value={outputRunning ? stats.renderFps.toFixed(1) : '–'} />
+          <StatItem label="Bitrate" value={outputRunning ? formatBitrate(stats.outputBitrateBps) : '–'} />
           <StatItem
             label="Dropped"
-            value={`${stats.skippedFramesRender + stats.skippedFramesEncode}`}
+            value={outputRunning ? `${stats.skippedFramesRender + stats.skippedFramesEncode}` : '–'}
+            warn={behind}
           />
         </>
       ) : (
@@ -106,11 +114,11 @@ function StatusPill({
   )
 }
 
-function StatItem({ label, value }: { label: string; value: string }) {
+function StatItem({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className="flex items-center gap-1">
       <span className="text-text-muted opacity-50">{label}:</span>
-      <span className="text-text-secondary">{value}</span>
+      <span className={warn ? 'text-state-danger font-medium' : 'text-text-secondary'}>{value}</span>
     </div>
   )
 }

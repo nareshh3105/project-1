@@ -14,6 +14,7 @@ import {
 } from '@/stores/hotkeyStore'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
+import { PRESETS, presetOf, presetPatch, type PresetId } from '@/lib/presets'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
@@ -302,13 +303,33 @@ function AudioTab({
 // ── Tab: Output ─────────────────────────────────────────────────────────────
 
 function OutputTab({
-  draft, set,
+  draft, set, video, setVideo,
 }: {
   draft: RecordingConfig
   set:   (patch: Partial<RecordingConfig>) => void
+  video: VideoSettings
+  setVideo: (patch: Partial<VideoSettings>) => void
 }) {
+  const preset = presetOf(video)
+
   return (
     <div>
+      <SectionHeader title="Performance" />
+      <Row label="Preset">
+        <Sel
+          value={preset ?? 'custom'}
+          onChange={(v) => { if (v !== 'custom') setVideo(presetPatch(v as PresetId)) }}
+          options={[
+            ...(preset ? [] : [{ value: 'custom', label: 'Custom (set in the Video tab)' }]),
+            ...PRESETS.map((p) => ({ value: p.id as string, label: p.label })),
+          ]}
+        />
+      </Row>
+      <p className="text-caption text-text-muted mb-3">
+        If the status bar shows dropped frames, or the app says your computer is not keeping up,
+        choose a lighter preset. It sets the output size and frame rate.
+      </p>
+
       <SectionHeader title="Recording" />
       <Row label="Recording Format">
         <Sel
@@ -544,7 +565,7 @@ export function SettingsModal() {
                 <AudioTab draft={draft.audio} set={patchAudio} />
               )}
               {activeTab === 'output' && (
-                <OutputTab draft={draft.recording} set={patchRecording} />
+                <OutputTab draft={draft.recording} set={patchRecording} video={draft.video} setVideo={patchVideo} />
               )}
               {activeTab === 'hotkeys' && <HotkeysTab />}
             </div>

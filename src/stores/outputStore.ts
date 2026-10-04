@@ -57,6 +57,8 @@ export interface OutputState {
   }
   stream:          StreamSettings
   ffmpegAvailable: boolean | null  // null = unchecked
+  /** Outputs that are not keeping up with their frame rate, by kind. */
+  struggling:      Record<string, boolean>
 }
 
 interface OutputActions {
@@ -66,6 +68,7 @@ interface OutputActions {
   setVirtualCameraStatus:   (active: boolean, url: string | null) => void
   tickElapsed:         () => void
   setFfmpegAvailable:  (v: boolean) => void
+  setStruggling:       (kind: string, struggling: boolean) => void
   setStreamSettings:   (rtmpUrl: string, streamKey: string) => void
 }
 
@@ -77,25 +80,32 @@ export const useOutputStore = create<OutputState & OutputActions>()(
     virtualCamera:   { active: false, url: null },
     stream:          loadStream(),
     ffmpegAvailable: null,
+    struggling:      {},
 
     setRecordingStatus: (active, filePath) => set((s) => {
       s.recording.active    = active
       s.recording.filePath  = filePath
       s.recording.startedAt = active ? Date.now() : null
       s.recording.elapsed   = 0
+      if (!active) delete s.struggling.recording
     }),
 
     setStreamingStatus: (active) => set((s) => {
       s.streaming.active    = active
       s.streaming.startedAt = active ? Date.now() : null
       s.streaming.elapsed   = 0
+      if (!active) delete s.struggling.streaming
     }),
 
-    setReplayActive: (active) => set((s) => { s.replayBuffer.active = active }),
+    setReplayActive: (active) => set((s) => {
+      s.replayBuffer.active = active
+      if (!active) delete s.struggling.replay
+    }),
 
     setVirtualCameraStatus: (active, url) => set((s) => {
       s.virtualCamera.active = active
       s.virtualCamera.url    = url
+      if (!active) delete s.struggling.virtualCamera
     }),
 
     tickElapsed: () => set((s) => {
@@ -108,6 +118,11 @@ export const useOutputStore = create<OutputState & OutputActions>()(
     }),
 
     setFfmpegAvailable: (v) => set((s) => { s.ffmpegAvailable = v }),
+
+    setStruggling: (kind, struggling) => set((s) => {
+      if (struggling) s.struggling[kind] = true
+      else delete s.struggling[kind]
+    }),
 
     setStreamSettings: (rtmpUrl, streamKey) => set((s) => {
       s.stream.rtmpUrl   = rtmpUrl

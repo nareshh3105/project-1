@@ -1,6 +1,7 @@
 import si from 'systeminformation'
 import { command, emit } from '../ipc'
 import { STATS_UPDATE_EVENT } from '../output/ffmpeg'
+import { outputHealth } from './output'
 
 const INTERVAL_MS = 2000
 
@@ -19,15 +20,18 @@ export function registerStatsCommands() {
           si.mem(),
         ])
 
+        // What the outputs are really doing; zero when nothing is running.
+        const out = outputHealth.summary()
+
         emit(STATS_UPDATE_EVENT, {
           cpuPercent: load.currentLoad,
           memoryMb: (mem.active ?? mem.used) / 1024 / 1024,
           gpuPercent: 0,
-          renderFps: 30,
-          encodeFps: 30,
+          renderFps: out.fps,
+          encodeFps: out.fps,
           skippedFramesRender: 0,
-          skippedFramesEncode: 0,
-          outputBitrateBps: 0,
+          skippedFramesEncode: out.framesDropped,
+          outputBitrateBps: out.bitrateBps,
           networkBps: 0,
           diskWriteMbps: 0,
         })

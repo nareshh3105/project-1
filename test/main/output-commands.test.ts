@@ -688,3 +688,73 @@ describe('several outputs at once', () => {
     expect(ingest.pushChunk('recording', Buffer.from('R'))).toBe(false)
   })
 })
+
+describe('keeping up with the frame rate', () => {
+  const eventsOf = (name: string) => events.filter((e) => e.name === name).map((e) => e.payload as { kind: string; struggling: boolean; dropRatio: number })
+  /** A reading from the host, two seconds after the last. */
+  async function reading(kind: string, framesIn: number, framesDropped: number, bytesOut = 0) {
+    await vi.advanceTimersByTimeAsync(2000)
+    host.events.emit('event', { type: 'stats', kind, framesIn, framesDropped, encodeQueue: 0, bytesOut })
+  }
+
+  it('says nothing while the output is keeping up', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'out.mkv') })
+    for (let i = 1; i <= 6; i++) await reading('recording', i * 60, 0)
+    expect(eventsOf('output:health')).toEqual([])
+  })
+
+  it('says so, once, when most frames are being dropped', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'out.mkv') })
+    await reading('recording', 0, 0)
+    await reading('recording', 100, 30)
+    await reading('recording', 200, 60)
+    await reading('recording', 300, 90)
+
+    const said = eventsOf('output:health')
+    expect(said).toHaveLength(1)
+    expect(said[0]).toMatchObject({ kind: 'recording', struggling: true })
+    expect(said[0].dropRatio).toBeCloseTo(0.3)
+  })
+
+  it('says when it has recovered', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'out.mkv') })
+    await reading('recording', 0, 0)
+    await reading('recording', 100, 30)
+    await reading('recording', 200, 60)
+    for (let i = 1; i <= 4; i++) await reading('recording', 200 + i * 100, 60)
+
+    expect(eventsOf('output:health').map((e) => e.struggling)).toEqual([true, false])
+  })
+
+  it('ignores readings for an output that is not running', async () => {
+    await reading('recording', 0, 0)
+    await reading('recording', 100, 50)
+    await reading('recording', 200, 100)
+    expect(eventsOf('output:health')).toEqual([])
+  })
+
+  it('starts afresh for the next recording', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'a.mkv') })
+    await reading('recording', 0, 0)
+    await reading('recording', 100, 30)
+    await stop('stop_recording')
+
+    // The new one's first reading, compared with the old one's last, would look like a second bad
+    // interval; it must be the first reading of a new output, with nothing to compare with.
+    await start('start_recording', { outputPath: path.join(workDir, 'b.mkv') })
+    await reading('recording', 200, 90)
+    expect(eventsOf('output:health')).toEqual([])
+  })
+
+  it('reports each output on its own', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'out.mkv') })
+    await start('start_streaming', { rtmpUrl: 'rtmp://live.example/app' })
+    await reading('streaming', 0, 0)
+    await reading('streaming', 100, 40)
+    await reading('streaming', 200, 80)
+    await reading('recording', 0, 0)
+    await reading('recording', 100, 0)
+
+    expect(eventsOf('output:health').map((e) => e.kind)).toEqual(['streaming'])
+  })
+})

@@ -17,6 +17,8 @@ export const IPC_EVENTS = {
   STREAM_STATUS:    'output:stream-status',
   REPLAY_STATUS:    'output:replay-status',
   VCAM_STATUS:      'output:virtual-camera-status',
+  /** An output started, or stopped, keeping up with its frame rate. */
+  OUTPUT_HEALTH:    'output:health',
   STATS_UPDATE:     'stats:update',
   HOTKEY_PRESSED:   'hotkey:pressed',
   UPDATER_PROGRESS: 'updater:download-progress',

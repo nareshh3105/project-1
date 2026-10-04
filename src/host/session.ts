@@ -92,6 +92,8 @@ export interface SessionStats {
   keyframes: number
   encodeQueue: number
   audioBlocks: number
+  /** Bytes of finished output produced so far. */
+  bytesOut: number
   silenceFrames: number
   trimmedFrames: number
   hardware: boolean
@@ -108,7 +110,7 @@ export function h264Codec(width: number, height: number, fps: number): string {
 export class EncoderSession {
   private readonly counters = {
     framesIn: 0, framesDropped: 0, videoChunks: 0, audioChunks: 0, keyframes: 0,
-    audioBlocks: 0, silenceFrames: 0, trimmedFrames: 0,
+    audioBlocks: 0, silenceFrames: 0, trimmedFrames: 0, bytesOut: 0,
   }
   private readonly errors: string[] = []
   private readonly keyEvery: number
@@ -184,6 +186,7 @@ export class EncoderSession {
       audio: params.audio,
       onData: (data) => {
         // Copy: the muxer reuses its buffers.
+        this.counters.bytesOut += data.byteLength
         this.emit(data.slice().buffer)
       },
     })

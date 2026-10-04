@@ -73,7 +73,7 @@ interface Running {
   statsTimer: ReturnType<typeof setInterval>
 }
 
-const STATS_EVERY_MS = 5000
+const STATS_EVERY_MS = 2000
 
 export class HostApp {
   private readonly running = new Map<OutputKind, Running>()
@@ -353,7 +353,7 @@ export class HostApp {
 
   private sendStats(entry: Running): void {
     const s = entry.session.stats()
-    this.emit({ type: 'stats', kind: entry.kind, framesIn: s.framesIn, framesDropped: s.framesDropped, encodeQueue: s.encodeQueue })
+    this.emit({ type: 'stats', kind: entry.kind, framesIn: s.framesIn, framesDropped: s.framesDropped, encodeQueue: s.encodeQueue, bytesOut: s.bytesOut })
   }
 
   private emit(event: HostEvent): void {

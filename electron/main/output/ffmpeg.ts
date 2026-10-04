@@ -17,6 +17,7 @@ export const REPLAY_STATUS_EVENT = IPC_EVENTS.REPLAY_STATUS
 export const VIRTUAL_CAMERA_STATUS_EVENT = IPC_EVENTS.VCAM_STATUS
 export const STATS_UPDATE_EVENT = IPC_EVENTS.STATS_UPDATE
 export const OUTPUT_ERROR_EVENT = IPC_EVENTS.OUTPUT_ERROR
+export const OUTPUT_HEALTH_EVENT = IPC_EVENTS.OUTPUT_HEALTH
 
 export const FFMPEG_MISSING =
   'ffmpeg not found in PATH. Download ffmpeg from https://ffmpeg.org and add it to PATH.'

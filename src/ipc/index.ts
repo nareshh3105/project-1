@@ -343,6 +343,12 @@ export function onVirtualCameraStatus(cb: (p: VirtualCameraStatusPayload) => voi
   return listen<VirtualCameraStatusPayload>(IPC_EVENTS.VCAM_STATUS, (e) => cb(e.payload))
 }
 
+export interface OutputHealthPayload { kind: string; struggling: boolean; dropRatio: number }
+
+export function onOutputHealth(cb: (p: OutputHealthPayload) => void): Promise<UnlistenFn> {
+  return listen<OutputHealthPayload>(IPC_EVENTS.OUTPUT_HEALTH, (e) => cb(e.payload))
+}
+
 export interface OutputErrorPayload { kind: string; message: string }
 
 export function onOutputError(cb: (p: OutputErrorPayload) => void): Promise<UnlistenFn> {

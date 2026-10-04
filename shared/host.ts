@@ -79,7 +79,7 @@ export interface HostResponse {
 /** Something the host reports unprompted. */
 export type HostEvent =
   | { type: 'sessionError'; kind: OutputKind; message: string }
-  | { type: 'stats'; kind: OutputKind; framesIn: number; framesDropped: number; encodeQueue: number }
+  | { type: 'stats'; kind: OutputKind; framesIn: number; framesDropped: number; encodeQueue: number; bytesOut: number }
 
 // ── What the host needs to know to compose and mix ─────────────────────────
 

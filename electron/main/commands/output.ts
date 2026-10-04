@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { command, emit } from '../ipc'
 import {
   RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
-  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT,
+  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT, OUTPUT_HEALTH_EVENT,
   assertStartedOk, ensureParentDir, ffmpegAvailable, ffmpegBinary, finishPiped,
   getSession, isActive, requireFfmpeg, setSession, spawnFfmpeg, takeSession,
   timestamp, uniquePath, videosDir, type Session,
@@ -15,6 +15,7 @@ import {
 } from '../output/pipeArgs'
 import { normalizeParams } from '../output/params'
 import { registerSink, unregisterSink } from '../output/ingest'
+import { OutputHealth } from '../output/health'
 import { getHost, hostEvents } from '../host/instance'
 import { log } from '../diagnostics/logger'
 import type { HostEvent, OutputKind, SessionParams } from '../../../shared/host'
@@ -104,6 +105,7 @@ function abandon(session: Session) {
 async function closeOutput(kind: OutputKind): Promise<Session | undefined> {
   const session = takeSession(kind)
   if (!session) return undefined
+  outputHealth.reset(kind)
 
   closing.add(kind)
   try {
@@ -132,6 +134,7 @@ function watchForExit(kind: OutputKind, session: Session) {
     if (getSession(kind) !== session) return // a normal stop took it first
 
     takeSession(kind)
+    outputHealth.reset(kind)
     unregisterSink(kind)
     void getHost().request('closeSession', { kind }).catch(() => {})
 
@@ -145,8 +148,23 @@ function watchForExit(kind: OutputKind, session: Session) {
   })
 }
 
-// A problem inside the host (an encoder failing mid-recording) ends that output.
+/** How well each running output keeps up; read by the status bar. */
+export const outputHealth = new OutputHealth()
+
+// Readings from the host, and a problem inside it (an encoder failing mid-recording) that ends that output.
 hostEvents.on('event', (event: HostEvent) => {
+  if (event.type === 'stats') {
+    // A reading from an output that has already ended must not bring it back.
+    if (!getSession(event.kind)) return
+    const changed = outputHealth.record(event.kind, {
+      at: Date.now(), framesIn: event.framesIn, framesDropped: event.framesDropped, bytesOut: event.bytesOut,
+    })
+    if (changed !== null) {
+      const m = outputHealth.metrics().find((x) => x.kind === event.kind)
+      emit(OUTPUT_HEALTH_EVENT, { kind: event.kind, struggling: changed, dropRatio: m?.recentDropRatio ?? 0 })
+    }
+    return
+  }
   if (event.type !== 'sessionError') return
   const { kind, message } = event
   log.error(`host reported a ${kind} error`, { message })
