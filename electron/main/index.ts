@@ -13,6 +13,7 @@ import { initLogger, log } from './diagnostics/logger'
 import { installCrashHandlers, watchWindow } from './diagnostics/crash'
 import { describeStartupFailure } from './startup'
 import { installHostIpc, shutdownHost } from './host/instance'
+import { registerMediaScheme, installMediaProtocol } from './media/protocol'
 
 const isDev = !app.isPackaged
 
@@ -83,6 +84,9 @@ installCrashHandlers()
 // Keep the page rendering when its window is covered, minimized or in the
 // background. Must be set before the app is ready. Verified to matter: with
 // these off, a minimized window draws about 1 frame per second.
+// Media files are played from our own address scheme, which has to be declared before the app is ready.
+registerMediaScheme()
+
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
 app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
@@ -126,6 +130,7 @@ app.whenReady().then(() => {
 
   registerCommands()
   installDisplayMediaHandler(session.defaultSession)
+  installMediaProtocol()
   installDispatcher()
   installHostIpc()
   createWindow()

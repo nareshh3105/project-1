@@ -42,6 +42,8 @@ let encoderSupported: boolean
 let drawn: number
 let filterDefs: string[]
 let filtersSet: string[]
+let mediaVideos: Array<{ src: string }>
+let streamsAttached: Array<{ id: string; gain: number; detached: boolean }>
 let drawImages: unknown[][]
 let ctxCalls: unknown[][]
 let clockMs: number
@@ -86,6 +88,20 @@ function build(): HostDeps {
       createAudioData: () => ({ close: () => {} }),
     },
     setFilterDefs: (markup) => { filterDefs.push(markup) },
+    media: {
+      resolveUrl: async (p) => `cbmedia://media/${p}`,
+      createVideo: () => {
+        const v = {
+          src: '', loop: false, muted: false, crossOrigin: null as string | null,
+          readyState: 4, videoWidth: 1280, videoHeight: 720, error: null,
+          play: async () => {}, pause: () => {}, removeAttribute: () => {}, load: () => {},
+          captureStream: () => ({ getTracks: () => [{ stop: () => {} }] }) as unknown as MediaStream,
+          addEventListener: () => {},
+        }
+        mediaVideos.push(v)
+        return v
+      },
+    },
     statics: {
       createCanvas: () => ({
         canvas: {} as CanvasImageSource,
@@ -115,7 +131,16 @@ function build(): HostDeps {
       if (createAudioFails) throw new Error('No audio device.')
       onBlock = cb
       const rec = { applied: [] as unknown[], disposed: false, emit: cb, rig: null as unknown as AudioRig }
-      rec.rig = { apply: (c) => { rec.applied.push(c) }, dispose: () => { rec.disposed = true }, toWallMs: (s) => s * 1000 }
+      rec.rig = {
+        apply: (c) => { rec.applied.push(c) },
+        dispose: () => { rec.disposed = true },
+        toWallMs: (s) => s * 1000,
+        attachStream: (id) => {
+          const entry = { id, gain: 1, detached: false }
+          streamsAttached.push(entry)
+          return { setGain: (g) => { entry.gain = g }, detach: () => { entry.detached = true } }
+        },
+      }
       audioRigs.push(rec)
       return rec.rig
     },
@@ -123,7 +148,7 @@ function build(): HostDeps {
 }
 
 beforeEach(() => {
-  sent = []; handlers = {}; filterDefs = []; filtersSet = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
+  sent = []; handlers = {}; filterDefs = []; filtersSet = []; mediaVideos = []; streamsAttached = []; drawImages = []; ctxCalls = []; clockMs = 0; wallMs = 0; opens = 0; audioRigs = []; timers = 0; drawn = 0
   encoded = { frames: 0, audio: 0, closed: 0, flushed: 0, aborted: 0 }
   encoderFails = null; createAudioFails = false; encoderSupported = true
   tick = () => {}
@@ -591,5 +616,71 @@ describe('scene transitions', () => {
     pushState({ ...snap({ sources: [src('new')] }), transition: moving('fade') })
     await settle()
     expect(opens).toBe(3)
+  })
+})
+
+describe('media files', () => {
+  const clip = (id: string, settings: SnapshotSource['settings'] = { filePath: 'a.mp4' }): SnapshotSource => ({
+    ...src(id), type: 'media_source', target: null, settings,
+  })
+
+  it('draws a playing file like any other source, without a capture', async () => {
+    pushState(snap({ sources: [clip('m')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await settle()
+    drawImages.length = 0
+    tick()
+
+    expect(opens).toBe(0)
+    expect(mediaVideos).toHaveLength(1)
+    expect(drawImages).toHaveLength(1)
+  })
+
+  it('puts the sound of the file into the mix, at the level set', async () => {
+    pushState(snap({ sources: [clip('m', { filePath: 'a.mp4', volume: 0.3 })] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await settle()
+
+    expect(streamsAttached).toEqual([{ id: 'm', gain: 0.3, detached: false }])
+  })
+
+  it('follows a change of volume while playing, without attaching it again', async () => {
+    pushState(snap({ sources: [clip('m', { filePath: 'a.mp4', volume: 1 })] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await settle()
+    pushState(snap({ sources: [clip('m', { filePath: 'a.mp4', volume: 0.2 })] }))
+
+    expect(streamsAttached).toHaveLength(1)
+    expect(streamsAttached[0].gain).toBe(0.2)
+  })
+
+  it('takes the sound out when the source is removed', async () => {
+    pushState(snap({ sources: [clip('m')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await settle()
+    pushState(snap({ sources: [] }))
+    expect(streamsAttached[0].detached).toBe(true)
+  })
+
+  it('takes the sound out when the output ends', async () => {
+    pushState(snap({ sources: [clip('m')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    await settle()
+    await request(2, 'closeSession', { kind: 'recording' })
+    expect(streamsAttached[0].detached).toBe(true)
+  })
+
+  it('has no sound for an output that carries none', async () => {
+    pushState(snap({ sources: [clip('m')] }))
+    await request(1, 'openSession', { kind: 'virtualCamera', params: { ...PARAMS, audio: false } })
+    await settle()
+    expect(streamsAttached).toEqual([])
+    expect(mediaVideos).toHaveLength(1) // but the picture still plays
+  })
+
+  it('does not play anything while no output is running', async () => {
+    pushState(snap({ sources: [clip('m')] }))
+    await settle()
+    expect(mediaVideos).toHaveLength(0)
   })
 })

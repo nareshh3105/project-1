@@ -1,6 +1,7 @@
 import { Muxer, StreamTarget } from 'mp4-muxer'
 import { HostApp, type Bridge } from './hostApp'
 import type { PoolVideo } from './capturePool'
+import type { MediaVideo } from './mediaLayers'
 import { createAudioRig } from './audioRig'
 import { SAMPLE_RATE, type SessionDeps } from './session'
 import { openCaptureStream } from '@/lib/capture/open'
@@ -56,6 +57,15 @@ const app = new HostApp({
     },
   },
   setFilterDefs: (markup) => setFilterDefs(document, markup),
+  media: {
+    resolveUrl: (filePath) => ipc.media.url(filePath),
+    createVideo: () => {
+      const video = document.createElement('video')
+      video.playsInline = true
+      video.preload = 'auto'
+      return video as unknown as MediaVideo
+    },
+  },
   statics: {
     createCanvas: (width, height) => {
       const canvas = document.createElement('canvas')

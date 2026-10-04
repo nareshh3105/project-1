@@ -31,6 +31,7 @@ const overlay = args.includes('--overlay')
 const filtersTest = args.includes('--filters')
 const transitionType = flag('transition', '')
 const weakCores = Number(flag('weak', 0))
+const mediaFile = flag('media', '')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -189,6 +190,30 @@ function transitionCheck(file, outW, outH, at) {
   return { fromSecondsBefore: 1, leftU: half(0), rightU: half(Math.floor(outW / 2)) }
 }
 
+/**
+ * A played video file: its picture must be moving (the brightness of a patch of
+ * the picture changes from frame to frame) and its sound must be in the file
+ * (the loudest sample is near the tone's level, not silence).
+ */
+function mediaCheck(file) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const run = (args) => spawnSync(ffmpegExe, ['-hide_banner', ...args], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+
+  const frames = run(['-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+    'crop=iw/3:ih/3:iw/3:ih/3,scale=32:18,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'])
+  const ys = [...frames.stdout.matchAll(/YAVG=([0-9.]+)/g)].map((m) => Number(m[1]))
+  const mean = ys.reduce((a, b) => a + b, 0) / (ys.length || 1)
+  const spread = Math.sqrt(ys.reduce((a, b) => a + (b - mean) ** 2, 0) / (ys.length || 1))
+
+  const audio = run(['-ss', '3', '-i', file, '-t', '8', '-map', '0:a:0', '-af', 'volumedetect', '-f', 'null', '-'])
+  const max = /max_volume: (-?[0-9.]+) dB/.exec(audio.stderr)
+  const meanVol = /mean_volume: (-?[0-9.]+) dB/.exec(audio.stderr)
+  return {
+    pictureFrames: ys.length, pictureBrightnessSpread: Number(spread.toFixed(2)),
+    soundMaxDb: max ? Number(max[1]) : null, soundMeanDb: meanVol ? Number(meanVol[1]) : null,
+  }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -267,6 +292,13 @@ async function main() {
       secondScene = await invoke('create_scene', { collectionId: init.collectionId, name: 'Blue scene' })
       await invoke('add_source', { sceneId: secondScene.id, name: 'Blue', sourceType: 'color_source', settings: JSON.stringify({ color: '#0000ff' }) })
       await ui.eval(`localStorage.setItem('cb:transition', JSON.stringify({ type: '${transitionType}', durationMs: 2000 }))`)
+    }
+    if (mediaFile) {
+      // A video file played as a source, covering the canvas.
+      const src = await invoke('add_source', { sceneId, name: 'Clip', sourceType: 'media_source', settings: JSON.stringify({ filePath: mediaFile, muted: args.includes('--media-muted'), volume: Number(flag('media-volume', 1)) }) })
+      await invoke('set_source_transform', {
+        id: src.id, transform: JSON.stringify({ x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1 }),
+      })
     }
     if (arrange) {
       // Half size, centred: the corners of the recording must stay black.
@@ -466,6 +498,7 @@ main()
       process.exit(1)
     }
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
+    if (mediaFile) console.log(JSON.stringify(mediaCheck(r.file)))
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))

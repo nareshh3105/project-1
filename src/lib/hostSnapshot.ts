@@ -5,6 +5,7 @@ import type { AudioChannel } from '@/stores/audioStore'
 import type { SettingsState } from '@/stores/settingsStore'
 import { parseCaptureTarget } from '@/lib/capture/target'
 import { isStaticType } from '@/lib/sources/static'
+import { isMediaType } from '@/lib/sources/media'
 
 /**
  * What the output host needs from the interface, and what an output is asked
@@ -48,7 +49,7 @@ export function snapshotSources(
       order: i,
       transform: { ...s.transform },
       target: parseCaptureTarget(s.settings),
-      settings: isStaticType(s.sourceType) ? plainValues(s.settings) : {},
+      settings: isStaticType(s.sourceType) || isMediaType(s.sourceType) ? plainValues(s.settings) : {},
       filters: (filters[s.id] ?? []).filter((f) => f.enabled).map(toSnapshotFilter),
     }))
 }

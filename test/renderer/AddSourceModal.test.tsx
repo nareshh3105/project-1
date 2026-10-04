@@ -4,6 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { AddSourceModal } from '../../src/components/modals/AddSourceModal'
 import { targetKindFor } from '../../src/lib/capture/target'
 import { isStaticType } from '../../src/lib/sources/static'
+import { isMediaType } from '../../src/lib/sources/media'
 import type { SourceType } from '../../src/types'
 
 /**
@@ -20,8 +21,9 @@ const WORKING: Array<[string, SourceType]> = [
   ['Image', 'image'],
   ['Color Source', 'color_source'],
   ['Text (GDI+)', 'text_gdi_plus'],
+  ['Media Source', 'media_source'],
 ]
-const NOT_YET = ['Media Source', 'Browser Source', 'Scene', 'Desktop Audio', 'Microphone']
+const NOT_YET = ['Browser Source', 'Scene', 'Desktop Audio', 'Microphone']
 
 const open = (onAdd = vi.fn(), onClose = vi.fn()) => {
   render(<AddSourceModal open onAdd={onAdd} onClose={onClose} />)
@@ -57,6 +59,6 @@ describe('AddSourceModal', () => {
   it('offers exactly the types the recorder can draw', () => {
     open()
     const offered = WORKING.map(([, type]) => type)
-    expect(offered.every((t) => targetKindFor(t) !== null || isStaticType(t))).toBe(true)
+    expect(offered.every((t) => targetKindFor(t) !== null || isStaticType(t) || isMediaType(t))).toBe(true)
   })
 })

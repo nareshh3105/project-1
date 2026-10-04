@@ -190,6 +190,11 @@ export const ipc = {
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
   },
 
+  media: {
+    /** The address a chosen video or sound file can be played from. */
+    url: (filePath: string) => cmd<string>('media_url', { filePath }),
+  },
+
   host: {
     /** Publishes the scene and mixer state the output host composes and mixes from. */
     pushState: (snapshot: import('../../shared/host').HostSnapshot) =>

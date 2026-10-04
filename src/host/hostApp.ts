@@ -9,6 +9,8 @@ import { outputMapping } from './geometry'
 import { easeInOut, transitionFrame, transitionProgress } from './transition'
 import { FrameLoop, type LoopDeps } from './frameLoop'
 import { StaticLayers, type StaticDeps } from './staticLayers'
+import { MediaLayers, type MediaDeps } from './mediaLayers'
+import type { InputControl } from './mixer'
 import { EncoderSession, type SessionDeps } from './session'
 import type { SnapshotChannel, SnapshotSource } from '../../shared/host'
 
@@ -32,6 +34,8 @@ export interface AudioRig {
   dispose(): void
   /** Maps a position on the capture clock to wall-clock ms. */
   toWallMs(ctxSec: number): number
+  /** Feeds a stream (the sound of a media file) into the mix under this name. */
+  attachStream?(id: string, stream: MediaStream): InputControl
   /** What the audio side is doing, for finding out why sound is missing. */
   debug?(): Record<string, unknown>
 }
@@ -49,6 +53,7 @@ export interface HostDeps {
   session: SessionDeps
   pool: PoolDeps
   statics: StaticDeps
+  media: MediaDeps
   /** Puts the SVG filters the sources refer to into the page, replacing the last set. */
   setFilterDefs(markup: string): void
   loop: LoopDeps
@@ -80,6 +85,9 @@ export class HostApp {
   private readonly opening = new Set<OutputKind>()
   private readonly pool: CapturePool
   private readonly statics: StaticLayers
+  private readonly media: MediaLayers
+  /** The sound of media files currently in the mix. */
+  private readonly mediaAudio = new Map<string, { stream: MediaStream; control: InputControl }>()
   private readonly loop: FrameLoop
   private snapshot: HostSnapshot = EMPTY_SNAPSHOT
   private audio: AudioRig | null = null
@@ -92,6 +100,7 @@ export class HostApp {
   constructor(private readonly deps: HostDeps) {
     this.pool = new CapturePool(deps.pool)
     this.statics = new StaticLayers(deps.statics)
+    this.media = new MediaLayers(deps.media, () => this.reconcileMediaAudio())
     this.loop = new FrameLoop(deps.loop)
     this.loop.onError = (id, err) => this.report(id as OutputKind, `drawing failed: ${messageOf(err)}`)
   }
@@ -187,10 +196,13 @@ export class HostApp {
 
       // Bring captures and audio up to date for the scene being output.
       this.pool.sync(involved(this.snapshot))
+      this.media.sync(involved(this.snapshot))
       this.syncFilterDefs(this.snapshot)
       this.audio?.apply(this.snapshot.audio)
+      this.reconcileMediaAudio()
 
       session.start(this.deps.now())
+      this.reconcileMediaAudio()
       this.loop.add(kind, params.fps, (now) => this.compose(entry, now))
       this.loop.start()
     } catch (err) {
@@ -223,9 +235,11 @@ export class HostApp {
     this.snapshot = snapshot
     if (this.running.size === 0) return
     this.pool.sync(involved(snapshot))
+    this.media.sync(involved(snapshot))
     this.statics.prune(involved(snapshot))
     this.syncFilterDefs(snapshot)
     this.audio?.apply(snapshot.audio)
+    this.reconcileMediaAudio()
   }
 
   /** Sharpen and chroma key are SVG filters; they have to be in the page before a frame refers to them. */
@@ -272,7 +286,7 @@ export class HostApp {
   private layersFor(sources: readonly SnapshotSource[], scale: number): ReadyLayer[] {
     const layers: ReadyLayer[] = []
     for (const source of [...sources].sort((a, b) => a.order - b.order)) {
-      const frame = this.pool.frameFor(source.id) ?? this.statics.frameFor(source)
+      const frame = this.pool.frameFor(source.id) ?? this.media.frameFor(source.id) ?? this.statics.frameFor(source)
       if (!frame) continue
 
       const plan = this.planFor(source, scale)
@@ -304,6 +318,33 @@ export class HostApp {
 
   // ── audio ──
 
+  /** Puts the sound of playing media files into the mix, and takes out what has stopped. */
+  private reconcileMediaAudio(): void {
+    const audio = this.audio
+    if (!audio?.attachStream) return
+
+    const wanted = new Map(this.media.audio().map((a) => [a.id, a]))
+    for (const [id, attached] of [...this.mediaAudio]) {
+      if (wanted.get(id)?.stream !== attached.stream) {
+        attached.control.detach()
+        this.mediaAudio.delete(id)
+      }
+    }
+    for (const [id, a] of wanted) {
+      let attached = this.mediaAudio.get(id)
+      if (!attached) {
+        attached = { stream: a.stream, control: audio.attachStream(id, a.stream) }
+        this.mediaAudio.set(id, attached)
+      }
+      attached.control.setGain(a.gain)
+    }
+  }
+
+  private detachMediaAudio(): void {
+    for (const { control } of this.mediaAudio.values()) control.detach()
+    this.mediaAudio.clear()
+  }
+
   private async ensureAudio(): Promise<AudioRig> {
     if (this.audio) return this.audio
     this.audioStarting ??= this.deps.createAudio((block) => this.fanOut(block))
@@ -330,6 +371,8 @@ export class HostApp {
     if (this.running.size > 0 || this.opening.size > 1) return
     this.loop.stop()
     this.pool.stopAll()
+    this.detachMediaAudio()
+    this.media.stopAll()
     this.statics.clear()
     this.audio?.dispose()
     this.audio = null

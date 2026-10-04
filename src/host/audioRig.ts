@@ -42,6 +42,7 @@ export async function createAudioRig(onBlock: (block: AudioBlock) => void): Prom
   return {
     apply: (channels) => inputs.apply(channels),
     toWallMs: (captureSec) => mixer.toWallMs(captureSec),
+    attachStream: (id, stream) => readInto(mixer.addInput(`media:${id}`), stream),
     debug: () => ({ state: 'direct', ...mixer.debug() }),
     dispose: () => {
       clearInterval(timer)

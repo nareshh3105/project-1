@@ -9,6 +9,8 @@ import {
 } from '@/lib/canvas/geometry'
 import { isStaticType } from '@/lib/sources/static'
 import { StaticView } from './StaticView'
+import { MediaView } from './MediaView'
+import { isMediaType } from '@/lib/sources/media'
 import { useFilterStore, type SourceFilter } from '@/stores/filterStore'
 import { toSnapshotFilter } from '@/lib/hostSnapshot'
 import { planFilters, cropViewBox, type FilterPlan } from '@/lib/filters/plan'
@@ -210,7 +212,7 @@ function SourceLayer({
   }, [live, source.id, getStream])
 
   // Colors and text are drawn at the size of their box, so that is their size.
-  const knownSize = isCaptureType(source.sourceType) || source.sourceType === 'image'
+  const knownSize = isCaptureType(source.sourceType) || source.sourceType === 'image' || isMediaType(source.sourceType)
     ? natural
     : { w: Math.round(width), h: Math.round(height) }
   const appearance: React.CSSProperties = {
@@ -294,6 +296,8 @@ function SourceLayer({
           style={appearance}
           className="w-full h-full object-contain pointer-events-none"
         />
+      ) : isMediaType(source.sourceType) ? (
+        <MediaView settings={source.settings} style={appearance} onNaturalSize={setNatural} />
       ) : isStaticType(source.sourceType) ? (
         <StaticView
           type={source.sourceType} settings={source.settings} width={width} height={height}

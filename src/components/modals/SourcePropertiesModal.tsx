@@ -8,9 +8,10 @@ import { ipc } from '@/ipc'
 import { cn } from '@/lib/utils'
 import {
   FONT_FAMILIES, IMAGE_EXTENSIONS, isHexColor, isStaticType, parseColor, parseImage, parseText,
-  type StaticType, type TextAlign,
+  type TextAlign,
 } from '@/lib/sources/static'
 import { fitWithin } from '@/lib/sources/placement'
+import { isMediaType, parseMedia, fileNameOf, MEDIA_FILE_FILTER, playbackProblem } from '@/lib/sources/media'
 
 /** Opened with this as the modal payload. */
 export interface SourcePropertiesPayload {
@@ -73,10 +74,10 @@ export function SourcePropertiesModal() {
     closeModal()
   }
 
-  if (!open || !payload || !source || !isStaticType(source.sourceType)) {
+  if (!open || !payload || !source || !(isStaticType(source.sourceType) || isMediaType(source.sourceType))) {
     return <Dialog.Root open={false}><span /></Dialog.Root>
   }
-  const type: StaticType = source.sourceType
+  const type = source.sourceType
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && close()}>
@@ -104,6 +105,9 @@ export function SourcePropertiesModal() {
           <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
             {type === 'color_source' && <ColorFields draft={draft} change={change} />}
             {type === 'text_gdi_plus' && <TextFields draft={draft} change={change} />}
+            {isMediaType(type) && (
+              <MediaFields draft={draft} change={change} sceneId={payload.sceneId} sourceId={source.id} />
+            )}
             {type === 'image' && (
               <ImageFields draft={draft} change={change} sceneId={payload.sceneId} sourceId={source.id} />
             )}
@@ -297,5 +301,92 @@ function measureImage(dataUrl: string): Promise<{ width: number; height: number 
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
     img.onerror = () => reject(new Error('The picture could not be read.'))
     img.src = dataUrl
+  })
+}
+
+function MediaFields({ draft, change, sceneId, sourceId }: { draft: Draft; change: Change; sceneId: string; sourceId: string }) {
+  const m = parseMedia(draft)
+  const setTransform = useSourceStore((s) => s.setTransform)
+  const commitTransform = useSourceStore((s) => s.commitTransform)
+  const base = { width: 1920, height: 1080 }
+
+  async function choose() {
+    let picked: string | null
+    try {
+      picked = await ipc.file.openDialog(MEDIA_FILE_FILTER)
+    } catch (err) {
+      reportFailure('open the file chooser', err)
+      return
+    }
+    if (!picked) return
+
+    // Find out whether the file can be played, and how big its picture is, before keeping it.
+    try {
+      const size = await probeMedia(await ipc.media.url(picked))
+      if (size) {
+        // Size the source to the picture, so it appears the right shape.
+        setTransform(sceneId, sourceId, fitWithin(size, base))
+        void commitTransform(sceneId, sourceId)
+      }
+    } catch (err) {
+      reportFailure('use that file', err)
+      return
+    }
+    change({ filePath: picked }, true)
+  }
+
+  return (
+    <>
+      <Field label="File">
+        <button type="button" aria-label="Choose a file" onClick={() => void choose()} className="px-3 h-7 rounded-button bg-bg-surface border border-bg-divider text-body text-text-primary hover:border-text-muted">
+          Choose…
+        </button>
+      </Field>
+      <p className="text-caption text-text-muted break-all" aria-label="Chosen file">
+        {m.filePath ? fileNameOf(m.filePath) : 'No file chosen yet.'}
+      </p>
+      <p className="text-caption text-text-muted">MP4, WebM, MOV, MP3, WAV, OGG or FLAC.</p>
+
+      <div className="flex items-center gap-6 text-body text-text-secondary">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={m.loop} onChange={(e) => change({ loop: e.target.checked }, true)} className="accent-accent-primary" />
+          Loop
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={m.muted} onChange={(e) => change({ muted: e.target.checked }, true)} className="accent-accent-primary" />
+          Mute sound
+        </label>
+      </div>
+
+      <Field label="Volume">
+        <span className="flex items-center gap-2">
+          <input
+            type="range"
+            aria-label="Volume"
+            min={0}
+            max={100}
+            value={Math.round(m.volume * 100)}
+            onChange={(e) => change({ volume: Number(e.target.value) / 100 })}
+            className="w-40 accent-accent-primary"
+          />
+          <span className="w-10 text-right tabular-nums">{Math.round(m.volume * 100)}%</span>
+        </span>
+      </Field>
+      <p className="text-caption text-text-muted">
+        The sound is mixed into recordings and streams. It is not played through the speakers while you edit.
+      </p>
+    </>
+  )
+}
+
+/** Loads a file just far enough to know whether it plays and how big its picture is (null for sound only). */
+function probeMedia(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.muted = true
+    video.onloadedmetadata = () => resolve(video.videoWidth > 0 ? { width: video.videoWidth, height: video.videoHeight } : null)
+    video.onerror = () => reject(new Error(playbackProblem(video.error?.code)))
+    video.src = url
   })
 }

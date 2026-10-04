@@ -65,7 +65,20 @@ export const desktopCapturer = {
   getSources: vi.fn(() => Promise.resolve([])),
 }
 
+export const protocol = {
+  registerSchemesAsPrivileged: vi.fn(),
+  handle: vi.fn(),
+}
+
+export const net = {
+  fetch: vi.fn(() => Promise.resolve(new Response(''))),
+}
+
+export const webContents = {
+  fromFrame: vi.fn(() => undefined),
+}
+
 export default {
   app, shell, dialog, globalShortcut, ipcMain, BrowserWindow, Menu, screen,
-  desktopCapturer,
+  desktopCapturer, protocol, net, webContents,
 }

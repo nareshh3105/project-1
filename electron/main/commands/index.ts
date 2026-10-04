@@ -5,6 +5,7 @@ import { registerCollectionCommands } from './collections'
 import { registerHostCommands } from './host'
 import { registerHotkeyCommands } from './hotkeys'
 import { registerImageCommands } from './images'
+import { registerMediaCommands } from './media'
 import { registerOutputCommands } from './output'
 import { registerPluginCommands } from './plugins'
 import { registerSceneCommands } from './scenes'
@@ -23,6 +24,7 @@ export function registerCommands() {
   registerHostCommands()
   registerHotkeyCommands()
   registerImageCommands()
+  registerMediaCommands()
   registerOutputCommands()
   registerPluginCommands()
   registerSceneCommands()
