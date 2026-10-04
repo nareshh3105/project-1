@@ -11,6 +11,7 @@ const goodSource = {
   id: 's1', type: 'display_capture', order: 0,
   transform: { x: 10, y: 20, width: 800, height: 600, rotation: 15, scaleX: 1.5, scaleY: 2 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
+  settings: {},
 }
 
 const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true }
@@ -143,5 +144,30 @@ describe('audio channels', () => {
   it('caps how many channels it accepts', () => {
     const many = Array.from({ length: 100 }, (_, i) => ({ ...goodChannel, id: `c${i}` }))
     expect(audioOf(many)).toHaveLength(16)
+  })
+})
+
+describe('source settings', () => {
+  const withSettings = (settings: unknown) =>
+    sanitizeSnapshot({ sources: [{ id: 'a', type: 'text_gdi_plus', transform: {}, settings }] }).sources[0]
+
+  it('keeps strings, numbers and booleans', () => {
+    expect(withSettings({ text: 'Hi', fontSize: 40, bold: true }).settings).toEqual({ text: 'Hi', fontSize: 40, bold: true })
+  })
+
+  it('drops anything else, which the host would have no use for', () => {
+    expect(withSettings({ ok: 'yes', obj: { a: 1 }, arr: [1], nul: null, fn: undefined, nan: NaN, inf: Infinity }).settings).toEqual({ ok: 'yes' })
+  })
+
+  it('has none when settings are missing or not an object', () => {
+    expect(withSettings(undefined).settings).toEqual({})
+    expect(withSettings('x').settings).toEqual({})
+    expect(withSettings([1, 2]).settings).toEqual({})
+  })
+
+  it('cuts very long strings and very many keys', () => {
+    expect(String(withSettings({ text: 'a'.repeat(100_000) }).settings.text)).toHaveLength(4000)
+    const many = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, i]))
+    expect(Object.keys(withSettings(many).settings)).toHaveLength(24)
   })
 })

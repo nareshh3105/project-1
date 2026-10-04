@@ -16,6 +16,7 @@ import { PluginsModal }          from '@/components/modals/PluginsModal'
 import { UpdaterModal }          from '@/components/modals/UpdaterModal'
 import { FfmpegMissingModal }   from '@/components/modals/FfmpegMissingModal'
 import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
+import { SourcePropertiesModal } from '@/components/modals/SourcePropertiesModal'
 import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { useHostState }         from '@/hooks/useHostState'
 import { useNotifyStore }       from '@/stores/notifyStore'
@@ -150,6 +151,7 @@ export function AppShell() {
       <MultiviewModal />
       <FfmpegMissingModal />
       <CapturePickerModal />
+      <SourcePropertiesModal />
       <NoticeHost />
     </div>
   )

@@ -22,11 +22,11 @@ const SOURCE_TYPES: SourceTypeDef[] = [
   { type: 'dshow_video',      label: 'Video Capture',      icon: <Camera size={20} />,     description: 'Webcam or capture card' },
   { type: 'wasapi_output',    label: 'Desktop Audio',      icon: <Speaker size={20} />,    description: 'System audio loopback', unavailable: 'Use the Desktop button in the Audio Mixer' },
   { type: 'wasapi_input',     label: 'Microphone',         icon: <Mic size={20} />,        description: 'Microphone or audio input', unavailable: 'Use the Mic button in the Audio Mixer' },
-  { type: 'image',            label: 'Image',              icon: <Image size={20} />,      description: 'PNG, JPG or animated GIF', unavailable: 'Not available yet' },
+  { type: 'image',            label: 'Image',              icon: <Image size={20} />,      description: 'PNG, JPG, GIF, WebP or BMP' },
   { type: 'media_source',     label: 'Media Source',       icon: <Film size={20} />,       description: 'Video or audio file / URL', unavailable: 'Not available yet' },
   { type: 'browser_source',   label: 'Browser Source',     icon: <Globe size={20} />,      description: 'Web overlay via CEF', unavailable: 'Not available yet' },
-  { type: 'color_source',     label: 'Color Source',       icon: <Palette size={20} />,    description: 'Solid color fill', unavailable: 'Not available yet' },
-  { type: 'text_gdi_plus',    label: 'Text (GDI+)',        icon: <Type size={20} />,       description: 'Text label', unavailable: 'Not available yet' },
+  { type: 'color_source',     label: 'Color Source',       icon: <Palette size={20} />,    description: 'Solid color fill' },
+  { type: 'text_gdi_plus',    label: 'Text (GDI+)',        icon: <Type size={20} />,       description: 'Text label' },
   { type: 'scene',            label: 'Scene',              icon: <Layers size={20} />,     description: 'Nest another scene', unavailable: 'Not available yet' },
 ]
 

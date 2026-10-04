@@ -4,6 +4,7 @@ import { registerCaptureCommands } from './capture'
 import { registerCollectionCommands } from './collections'
 import { registerHostCommands } from './host'
 import { registerHotkeyCommands } from './hotkeys'
+import { registerImageCommands } from './images'
 import { registerOutputCommands } from './output'
 import { registerPluginCommands } from './plugins'
 import { registerSceneCommands } from './scenes'
@@ -21,6 +22,7 @@ export function registerCommands() {
   registerCollectionCommands()
   registerHostCommands()
   registerHotkeyCommands()
+  registerImageCommands()
   registerOutputCommands()
   registerPluginCommands()
   registerSceneCommands()

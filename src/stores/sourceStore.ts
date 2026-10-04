@@ -93,6 +93,11 @@ interface SourceActions {
   seedSources:    (sceneId: ID, dtos: SourceDto[]) => void
   /** Adds a source and returns it, or null if it could not be saved. */
   addSource:      (sceneId: ID, name: string, type: SourceType) => Promise<SourceItem | null>
+  /**
+   * Changes some of a source's settings (its text, color or picture) and saves
+   * them. The change shows at once and is undone, with a notice, if saving fails.
+   */
+  updateSettings: (sceneId: ID, sourceId: ID, patch: Record<string, unknown>) => Promise<boolean>
   /** Records which screen, window or camera a capture source points at. */
   setCaptureTarget: (sceneId: ID, sourceId: ID, target: CaptureTarget) => Promise<boolean>
   removeSource:   (sceneId: ID, sourceId: ID) => Promise<void>
@@ -186,6 +191,31 @@ export const useSourceStore = create<SourceState & SourceActions>()(
           if (src) src.settings = previous
         })
         reportFailure('save what this source captures', err)
+        return false
+      }
+    },
+
+    updateSettings: async (sceneId, sourceId, patch) => {
+      const current = get().byScene[sceneId]?.find((x) => x.id === sourceId)
+      if (!current) return false
+
+      const previous = current.settings
+      const next = { ...previous, ...patch }
+
+      set((s) => {
+        const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+        if (src) { src.settings = next; src.updatedAt = Date.now() }
+      })
+
+      try {
+        await ipc.source.updateSettings(sourceId, JSON.stringify(next))
+        return true
+      } catch (err) {
+        set((s) => {
+          const src = s.byScene[sceneId]?.find((x) => x.id === sourceId)
+          if (src) src.settings = previous
+        })
+        reportFailure('save the source settings', err)
         return false
       }
     },

@@ -5,6 +5,7 @@ import {
 import { CapturePool, type PoolDeps } from './capturePool'
 import { drawFrame } from './compositor'
 import { FrameLoop, type LoopDeps } from './frameLoop'
+import { StaticLayers, type StaticDeps } from './staticLayers'
 import { EncoderSession, type SessionDeps } from './session'
 import type { SnapshotChannel } from '../../shared/host'
 
@@ -44,6 +45,7 @@ export interface HostDeps {
   bridge: Bridge
   session: SessionDeps
   pool: PoolDeps
+  statics: StaticDeps
   loop: LoopDeps
   now(): number
   createCanvas(width: number, height: number): { canvas: unknown; context: CanvasRenderingContext2D }
@@ -66,6 +68,7 @@ export class HostApp {
   private readonly running = new Map<OutputKind, Running>()
   private readonly opening = new Set<OutputKind>()
   private readonly pool: CapturePool
+  private readonly statics: StaticLayers
   private readonly loop: FrameLoop
   private snapshot: HostSnapshot = EMPTY_SNAPSHOT
   private audio: AudioRig | null = null
@@ -74,6 +77,7 @@ export class HostApp {
 
   constructor(private readonly deps: HostDeps) {
     this.pool = new CapturePool(deps.pool)
+    this.statics = new StaticLayers(deps.statics)
     this.loop = new FrameLoop(deps.loop)
     this.loop.onError = (id, err) => this.report(id as OutputKind, `drawing failed: ${messageOf(err)}`)
   }
@@ -197,6 +201,7 @@ export class HostApp {
     this.snapshot = snapshot
     if (this.running.size === 0) return
     this.pool.sync(snapshot.sources)
+    this.statics.prune(snapshot.sources)
     this.audio?.apply(snapshot.audio)
   }
 
@@ -204,7 +209,7 @@ export class HostApp {
     const { sources, base } = this.snapshot
     const layers = []
     for (const source of [...sources].sort((a, b) => a.order - b.order)) {
-      const frame = this.pool.frameFor(source.id)
+      const frame = this.pool.frameFor(source.id) ?? this.statics.frameFor(source)
       if (!frame) continue
       layers.push({
         transform: source.transform,
@@ -246,6 +251,7 @@ export class HostApp {
     if (this.running.size > 0 || this.opening.size > 1) return
     this.loop.stop()
     this.pool.stopAll()
+    this.statics.clear()
     this.audio?.dispose()
     this.audio = null
   }

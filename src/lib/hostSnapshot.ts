@@ -3,6 +3,7 @@ import type { SourceItem } from '@/stores/sourceStore'
 import type { AudioChannel } from '@/stores/audioStore'
 import type { SettingsState } from '@/stores/settingsStore'
 import { parseCaptureTarget } from '@/lib/capture/target'
+import { isStaticType } from '@/lib/sources/static'
 
 /**
  * What the output host needs from the interface, and what an output is asked
@@ -32,6 +33,7 @@ export function buildSnapshot({ sources, base, channels, connected }: SnapshotIn
         order: i,
         transform: { ...s.transform },
         target: parseCaptureTarget(s.settings),
+        settings: isStaticType(s.sourceType) ? plainValues(s.settings) : {},
       })),
     audio: channels.map((c) => ({
       id: c.id,
@@ -41,6 +43,17 @@ export function buildSnapshot({ sources, base, channels, connected }: SnapshotIn
       connected: connected.includes(c.id),
     })),
   }
+}
+
+/** The strings, numbers and booleans in a settings object; the host draws from nothing else. */
+function plainValues(settings: Record<string, unknown>): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(settings ?? {})) {
+    if (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) {
+      out[key] = value
+    }
+  }
+  return out
 }
 
 /** A bitrate that suits a resolution and frame rate, for when the user leaves it on automatic. */

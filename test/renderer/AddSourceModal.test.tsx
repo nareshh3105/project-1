@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { AddSourceModal } from '../../src/components/modals/AddSourceModal'
 import { targetKindFor } from '../../src/lib/capture/target'
+import { isStaticType } from '../../src/lib/sources/static'
 import type { SourceType } from '../../src/types'
 
 /**
@@ -16,8 +17,11 @@ const WORKING: Array<[string, SourceType]> = [
   ['Window Capture', 'window_capture'],
   ['Game Capture', 'game_capture'],
   ['Video Capture', 'dshow_video'],
+  ['Image', 'image'],
+  ['Color Source', 'color_source'],
+  ['Text (GDI+)', 'text_gdi_plus'],
 ]
-const NOT_YET = ['Image', 'Media Source', 'Browser Source', 'Color Source', 'Text (GDI+)', 'Scene', 'Desktop Audio', 'Microphone']
+const NOT_YET = ['Media Source', 'Browser Source', 'Scene', 'Desktop Audio', 'Microphone']
 
 const open = (onAdd = vi.fn(), onClose = vi.fn()) => {
   render(<AddSourceModal open onAdd={onAdd} onClose={onClose} />)
@@ -53,6 +57,6 @@ describe('AddSourceModal', () => {
   it('offers exactly the types the recorder can draw', () => {
     open()
     const offered = WORKING.map(([, type]) => type)
-    expect(offered.every((t) => targetKindFor(t) !== null)).toBe(true)
+    expect(offered.every((t) => targetKindFor(t) !== null || isStaticType(t))).toBe(true)
   })
 })

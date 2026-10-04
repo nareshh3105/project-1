@@ -52,6 +52,21 @@ function targetOf(raw: unknown): SnapshotSource['target'] {
   return { kind: kind as 'screen' | 'window' | 'camera', id, name: typeof name === 'string' ? name : '' }
 }
 
+const MAX_SETTINGS = 24
+const MAX_STRING = 4000
+
+/** Plain values only: whatever else a settings object holds is not the host's business. */
+function settingsOf(raw: unknown): SnapshotSource['settings'] {
+  if (!isRecord(raw)) return {}
+  const out: SnapshotSource['settings'] = {}
+  for (const [key, value] of Object.entries(raw).slice(0, MAX_SETTINGS)) {
+    if (typeof value === 'string') out[key] = value.slice(0, MAX_STRING)
+    else if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
+    else if (typeof value === 'boolean') out[key] = value
+  }
+  return out
+}
+
 function sourceOf(raw: unknown, index: number, base: { width: number; height: number }): SnapshotSource | null {
   if (!isRecord(raw)) return null
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null
@@ -63,6 +78,7 @@ function sourceOf(raw: unknown, index: number, base: { width: number; height: nu
     order: num(raw.order, index),
     transform: transformOf(raw.transform, base),
     target: targetOf(raw.target),
+    settings: settingsOf(raw.settings),
   }
 }
 

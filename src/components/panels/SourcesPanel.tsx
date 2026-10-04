@@ -17,6 +17,7 @@ import type { SourceType } from '@/types'
 import { cn } from '@/lib/utils'
 import { useCaptureStore, isCaptureType } from '@/stores/captureStore'
 import { parseCaptureTarget } from '@/lib/capture/target'
+import { isStaticType, DEFAULT_PLACEMENT } from '@/lib/sources/static'
 
 function sourceIcon(type: SourceType) {
   const props = { size: 12, className: 'flex-shrink-0' }
@@ -39,7 +40,7 @@ function sourceIcon(type: SourceType) {
 
 export function SourcesPanel() {
   const activeSceneId = useSceneStore((s) => s.activeSceneId)
-  const { byScene, addSource, removeSource, renameSource, setVisible, setLocked, moveUp, moveDown } =
+  const { byScene, addSource, removeSource, renameSource, setVisible, setLocked, moveUp, moveDown, setTransform, commitTransform } =
     useSourceStore((s) => ({
       byScene:      s.byScene,
       addSource:    s.addSource,
@@ -49,6 +50,8 @@ export function SourcesPanel() {
       setLocked:    s.setLocked,
       moveUp:       s.moveUp,
       moveDown:     s.moveDown,
+      setTransform: s.setTransform,
+      commitTransform: s.commitTransform,
     }))
 
   const openModal        = useUIStore((s) => s.openModal)
@@ -79,14 +82,25 @@ export function SourcesPanel() {
   async function handleAdd(type: SourceType, name: string) {
     if (!activeSceneId) return
     const created = await addSource(activeSceneId, name, type)
+    if (!created) return
     // A capture source has nothing to show until it is told what to capture.
-    if (created && isCaptureType(type)) chooseTarget(created)
+    if (isCaptureType(type)) { chooseTarget(created); return }
+    // A color, some text or a picture starts at a sensible size and asks how it should look.
+    if (isStaticType(type)) {
+      setTransform(activeSceneId, created.id, DEFAULT_PLACEMENT[type])
+      void commitTransform(activeSceneId, created.id)
+      openProperties(created)
+    }
   }
 
   function restartCapture(src: SourceItem) {
     const target = parseCaptureTarget(src.settings)
     if (!target) { chooseTarget(src); return }
     void startCapture(src.id, src.sourceType, target)
+  }
+
+  function openProperties(src: SourceItem) {
+    openModal('source-properties', { sceneId: src.sceneId, sourceId: src.id })
   }
 
   function openFilters(src: SourceItem) {
@@ -143,6 +157,7 @@ export function SourcesPanel() {
               captureError={captureErrors[src.id]}
               onRestartCapture={() => restartCapture(src)}
               onChooseTarget={() => chooseTarget(src)}
+              onProperties={() => openProperties(src)}
             />
           ))
         )}
@@ -221,11 +236,12 @@ interface SourceRowProps {
   onFilters: () => void
   onRestartCapture: () => void
   onChooseTarget: () => void
+  onProperties: () => void
 }
 
 function SourceRow({
   source, selected, hasFilters, isCapturing, captureError, onSelect, onToggleVisible, onToggleLocked,
-  onRename, onDelete, onMoveUp, onMoveDown, onFilters, onRestartCapture, onChooseTarget,
+  onRename, onDelete, onMoveUp, onMoveDown, onFilters, onRestartCapture, onChooseTarget, onProperties,
 }: SourceRowProps) {
   return (
     <ContextMenu.Root>
@@ -324,6 +340,11 @@ function SourceRow({
           <ContextMenu.Item className="context-menu-item" onSelect={onFilters}>
             <SlidersHorizontal size={12} /> Filters…
           </ContextMenu.Item>
+          {isStaticType(source.sourceType) && (
+            <ContextMenu.Item className="context-menu-item" onSelect={onProperties}>
+              <Edit2 size={12} /> Properties…
+            </ContextMenu.Item>
+          )}
           {isCaptureType(source.sourceType) && (
             <ContextMenu.Item className="context-menu-item" onSelect={onChooseTarget}>
               <Crosshair size={12} /> Select Capture Target…

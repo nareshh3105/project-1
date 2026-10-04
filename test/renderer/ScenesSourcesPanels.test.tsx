@@ -233,14 +233,26 @@ describe('adding a capture source', () => {
     expect(useCaptureStore.getState().activeIds).toEqual([])
   })
 
-  it('does not open the picker for a source that does not capture', async () => {
+  it('asks how a picture should look, not what to capture', async () => {
     bridge.reply('add_source', dto('created-2', 'Image'))
     render(<SourcesPanel />)
 
     await pickType('^Image')
     await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
 
-    expect(useUIStore.getState().modal).toBeNull()
+    expect(useUIStore.getState().modal?.type).toBe('source-properties')
+  })
+
+  it('sizes a new text source to a caption rather than the whole canvas', async () => {
+    useSourceStore.getState().seedSources('s1', [])
+    bridge.reply('add_source', { ...dto('created-3', 'Text'), sourceType: 'text_gdi_plus' })
+    render(<SourcesPanel />)
+
+    await pickType('^Text')
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+
+    const saved = bridge.calls.filter((c) => c.command === 'set_source_transform')
+    expect(JSON.parse(saved.at(-1)!.args.transform as string)).toMatchObject({ width: 800, height: 160 })
   })
 })
 

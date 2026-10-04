@@ -102,6 +102,11 @@ export interface SnapshotSource {
   transform: SnapshotTransform
   /** What it captures, or null if it has not been set up. */
   target: { kind: 'screen' | 'window' | 'camera'; id: string; name: string } | null
+  /**
+   * Settings for sources drawn from their settings alone (color, text, image).
+   * Plain values only; the main process drops anything else.
+   */
+  settings: Record<string, string | number | boolean>
 }
 
 export interface SnapshotChannel {

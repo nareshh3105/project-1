@@ -7,6 +7,8 @@ import { useUIStore } from '@/stores/uiStore'
 import {
   HANDLES, arrowStep, isArrowKey, moveBy, resizeBy, toCanvas, type Handle, type Placement,
 } from '@/lib/canvas/geometry'
+import { isStaticType } from '@/lib/sources/static'
+import { StaticView } from './StaticView'
 import { cn } from '@/lib/utils'
 
 /**
@@ -247,6 +249,8 @@ function SourceLayer({
           playsInline
           className="w-full h-full object-contain pointer-events-none"
         />
+      ) : isStaticType(source.sourceType) ? (
+        <StaticView type={source.sourceType} settings={source.settings} width={width} height={height} />
       ) : (
         <SourcePlaceholder source={source} />
       )}

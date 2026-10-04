@@ -14,7 +14,7 @@ const PARAMS: SessionParams = {
 }
 
 const src = (id: string, order = 0): SnapshotSource => ({
-  id, type: 'display_capture', order,
+  id, type: 'display_capture', order, settings: {},
   transform: { x: 0, y: 0, width: 1920, height: 1080, rotation: 0, scaleX: 1, scaleY: 1 },
   target: { kind: 'screen', id: 'screen:0:0', name: 'Entire screen' },
 })
@@ -79,6 +79,13 @@ function build(): HostDeps {
       }),
       createVideoFrame: () => ({ close: () => {} }),
       createAudioData: () => ({ close: () => {} }),
+    },
+    statics: {
+      createCanvas: () => ({
+        canvas: {} as CanvasImageSource,
+        context: new Proxy({}, { get: () => () => ({ width: 0 }), set: () => true }) as never,
+      }),
+      loadImage: async () => ({ image: {} as CanvasImageSource, width: 10, height: 10 }),
     },
     pool: {
       open: async () => { opens++; return { getTracks: () => [], getVideoTracks: () => [] } as unknown as MediaStream },
@@ -162,6 +169,17 @@ describe('opening an output', () => {
     pushState(snap({ sources: [src('a'), src('b')] }))
     await request(1, 'openSession', { kind: 'recording', params: PARAMS })
     expect(opens).toBe(2)
+  })
+
+  it('draws color, text and image sources without opening any capture', async () => {
+    const staticSource = (id: string, type: string): SnapshotSource => ({ ...src(id), type, target: null, settings: { color: '#ff0000' } })
+    pushState(snap({ sources: [staticSource('c', 'color_source'), staticSource('t', 'text_gdi_plus')] }))
+    await request(1, 'openSession', { kind: 'recording', params: PARAMS })
+    tick()
+
+    expect(opens).toBe(0)
+    expect(encoded.frames).toBe(1)
+    expect(drawn).toBeGreaterThan(0)
   })
 
   it('follows scene changes while running', async () => {

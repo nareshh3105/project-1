@@ -226,3 +226,39 @@ describe('setCaptureTarget', () => {
     expect(bridge.argsFor('update_source_settings')).toBeUndefined()
   })
 })
+
+describe('updateSettings', () => {
+  beforeEach(() => {
+    useSourceStore.getState().seedSources(SCENE, [dto({ settings: JSON.stringify({ text: 'old', keep: 1 }) })])
+  })
+
+  it('shows the change at once and saves the merged settings', async () => {
+    const ok = await useSourceStore.getState().updateSettings(SCENE, 'src-1', { text: 'new' })
+
+    expect(ok).toBe(true)
+    expect(first().settings).toEqual({ text: 'new', keep: 1 })
+    expect(JSON.parse(bridge.argsFor('update_source_settings')!.settings as string)).toEqual({ text: 'new', keep: 1 })
+  })
+
+  it('puts the old settings back, and says so, when saving fails', async () => {
+    bridge.fail('update_source_settings', 'disk full')
+    const ok = await useSourceStore.getState().updateSettings(SCENE, 'src-1', { text: 'new' })
+
+    expect(ok).toBe(false)
+    expect(first().settings).toEqual({ text: 'old', keep: 1 })
+  })
+
+  it('does nothing for a source that is not there', async () => {
+    expect(await useSourceStore.getState().updateSettings(SCENE, 'missing', { a: 1 })).toBe(false)
+    expect(bridge.calls.filter((c) => c.command === 'update_source_settings')).toHaveLength(0)
+  })
+
+  it('leaves other sources alone', async () => {
+    useSourceStore.getState().seedSources(SCENE, [
+      dto({ settings: JSON.stringify({ text: 'a' }) }),
+      dto({ id: 'src-2', settings: JSON.stringify({ text: 'b' }) }),
+    ])
+    await useSourceStore.getState().updateSettings(SCENE, 'src-1', { text: 'changed' })
+    expect(sources()[1].settings).toEqual({ text: 'b' })
+  })
+})

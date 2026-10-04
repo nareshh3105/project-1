@@ -27,6 +27,7 @@ const [width, height] = flag('res', '1280x720').split('x').map(Number)
 const minimize = !args.includes('--no-minimize')
 const withSync = args.includes('--sync')
 const arrange = args.includes('--arrange')
+const overlay = args.includes('--overlay')
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -112,6 +113,25 @@ function arrangeCheck(file) {
   return { cornerPeak: peak('iw*0.15:ih*0.15:0:0'), centrePeak: peak('iw*0.3:ih*0.3:iw*0.35:ih*0.35') }
 }
 
+/** Average and peak color in the two overlay boxes, in the recording. */
+function overlayCheck(file, outW, outH) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const k = outW / 1920
+  const region = (x, y, w, h) => {
+    const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(':')
+    const r = spawnSync(ffmpegExe, ['-hide_banner', '-ss', '3', '-i', file, '-t', '8', '-map', '0:v:0', '-vf',
+      `crop=${crop},signalstats,metadata=mode=print:file=-`, '-f', 'null', '-'],
+    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+    const get = (key) => {
+      const vs = [...r.stdout.matchAll(new RegExp('lavfi.signalstats.' + key + '=([0-9.]+)', 'g'))].map((m) => Number(m[1]))
+      return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null
+    }
+    return { y: get('YAVG'), u: get('UAVG'), v: get('VAVG'), yMax: get('YMAX') }
+  }
+  // Green is low U and low V; red is low U and high V. White text raises the peak brightness.
+  return { green: region(120, 120, 480, 240), words: region(1200, 120, 600, 240) }
+}
+
 async function waitFor(fn, what, ms = 30000) {
   const end = Date.now() + ms
   for (;;) {
@@ -122,8 +142,11 @@ async function waitFor(fn, what, ms = 30000) {
 }
 
 async function main() {
-  const electron = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
-  const child = spawn(electron, [root, `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(scratch, 'profile')}`], {
+  // Either the built sources run by Electron, or an installed/unpacked app (--exe=...).
+  const exe = flag('exe', '')
+  const electron = exe || path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+  const launchArgs = exe ? [] : [root]
+  const child = spawn(electron, [...launchArgs, `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(scratch, 'profile')}`], {
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: false,
   })
   let appLog = ''
@@ -148,6 +171,19 @@ async function main() {
       sceneId, name: 'Screen', sourceType: 'display_capture',
       settings: JSON.stringify({ capture: target }),
     })
+    if (overlay) {
+      // A green box and a red text box over the screen; the recording must show both.
+      const box = async (name, sourceType, settings, x, y, width, height) => {
+        const src = await invoke('add_source', { sceneId, name, sourceType, settings: JSON.stringify(settings) })
+        await invoke('set_source_transform', {
+          id: src.id, transform: JSON.stringify({ x, y, width, height, rotation: 0, scaleX: 1, scaleY: 1 }),
+        })
+      }
+      await box('Green', 'color_source', { color: '#00ff00' }, 120, 120, 480, 240)
+      await box('Words', 'text_gdi_plus',
+        { text: 'HELLO', fontSize: 140, bold: true, color: '#ffffff', backgroundColor: '#ff0000', align: 'center' },
+        1200, 120, 600, 240)
+    }
     if (arrange) {
       // Half size, centred: the corners of the recording must stay black.
       await invoke('set_source_transform', {
@@ -299,6 +335,7 @@ main()
       console.log('--- app log ---\n' + r.appLog.slice(-3000))
       process.exit(1)
     }
+    if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)
