@@ -361,9 +361,10 @@ function SourceButton({
 // ── Panel ──────────────────────────────────────────────────────────────────
 
 /** Only these two have a real source available on Windows. */
-const CONNECTABLE: Record<string, () => Promise<MediaStream>> = {
-  mic: requestMicrophone,
-  desktop: requestDesktopAudio,
+const CONNECTABLE: Record<string, (deviceId: string) => Promise<MediaStream>> = {
+  mic: (deviceId) => requestMicrophone(deviceId || undefined),
+  // Everything the computer plays is captured; there is no single device to choose.
+  desktop: () => requestDesktopAudio(),
 }
 
 export function AudioMixerPanel() {
@@ -416,7 +417,7 @@ export function AudioMixerPanel() {
     setConnecting(id)
     setChannelError(id, null)
     try {
-      const stream = await request()
+      const stream = await request(useAudioStore.getState().devices[id] ?? '')
       // The panel may have gone while the input was opening; its engine with it.
       const engine = engineRef.current
       if (!engine) {
@@ -446,6 +447,15 @@ export function AudioMixerPanel() {
     rememberInput(id, true)
     await connect(id)
   }, [connected, connect, setConnected])
+
+  // Choosing another microphone in Settings switches the connected one over to it.
+  const micDevice = useAudioStore((s) => s.devices.mic ?? '')
+  const lastMic = useRef(micDevice)
+  useEffect(() => {
+    if (lastMic.current === micDevice) return
+    lastMic.current = micDevice
+    if (useAudioStore.getState().connected.includes('mic')) void connect('mic')
+  }, [micDevice, connect])
 
   // Reconnect what was connected last time. This runs whenever the panel opens,
   // not once per launch: closing the panel disposes its engine, and the inputs

@@ -9,7 +9,7 @@ import type { SnapshotChannel } from '../../shared/host'
  */
 
 const ch = (id: string, over: Partial<SnapshotChannel> = {}): SnapshotChannel => ({
-  id, volume: 1, muted: false, noiseSuppression: false, connected: true, ...over,
+  id, volume: 1, muted: false, noiseSuppression: false, connected: true, deviceId: '', ...over,
 })
 
 function fakeStream() {
@@ -34,6 +34,7 @@ const deferred = <T,>() => {
 }
 
 let opened: string[]
+let devicesAsked: string[]
 let gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }>
 let sources: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }>
 let streams: Record<string, ReturnType<typeof fakeStream>>
@@ -43,10 +44,10 @@ let mixer: Mixer
 const DEST = { dest: true }
 
 beforeEach(() => {
-  opened = []; gains = []; sources = []; streams = {}; changes = 0
+  opened = []; devicesAsked = []; gains = []; sources = []; streams = {}; changes = 0
   openInput = async (id) => { const s = fakeStream(); streams[id] = s; return s.stream }
   const deps: MixerDeps = {
-    openInput: (id) => { opened.push(id); return openInput(id) },
+    openInput: (id, deviceId) => { opened.push(id); devicesAsked.push(deviceId); return openInput(id) },
     createGain: () => { const g = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }; gains.push(g); return g },
     createSource: () => { const s = { connect: vi.fn(), disconnect: vi.fn() }; sources.push(s); return s },
   }
@@ -302,5 +303,89 @@ describe('failures', () => {
 
     expect(mixer.openChannels).toEqual(['mic'])
     expect(mixer.errors()).toEqual({})
+  })
+})
+
+describe('choosing a device', () => {
+  it('opens the device that was chosen', async () => {
+    mixer.apply([ch('mic', { deviceId: 'usb-mic' })])
+    await settle()
+    expect(devicesAsked).toEqual(['usb-mic'])
+  })
+
+  it('opens the system default when none is chosen', async () => {
+    mixer.apply([ch('mic')])
+    await settle()
+    expect(devicesAsked).toEqual([''])
+  })
+
+  it('treats a missing device as the default rather than as a change', async () => {
+    mixer.apply([ch('mic', { deviceId: undefined as never })])
+    await settle()
+    mixer.apply([ch('mic', { deviceId: undefined as never })])
+    await settle()
+    expect(opened).toEqual(['mic'])
+  })
+
+  it('switches to another device, letting go of the first', async () => {
+    mixer.apply([ch('mic', { deviceId: 'a' })])
+    await settle()
+    const first = streams.mic
+
+    mixer.apply([ch('mic', { deviceId: 'b' })])
+    await settle()
+
+    expect(first.track.stop).toHaveBeenCalled()
+    expect(devicesAsked).toEqual(['a', 'b'])
+    expect(mixer.openChannels).toEqual(['mic'])
+  })
+
+  it('does not reopen for a fader move on the same device', async () => {
+    mixer.apply([ch('mic', { deviceId: 'a' })])
+    await settle()
+    mixer.apply([ch('mic', { deviceId: 'a', volume: 0.3 })])
+    await settle()
+    expect(opened).toEqual(['mic'])
+  })
+
+  it('stops a device that arrives after another was chosen', async () => {
+    const gate = deferred<MediaStream>()
+    openInput = () => gate.promise
+    mixer.apply([ch('mic', { deviceId: 'a' })])
+
+    openInput = async () => fakeStream().stream
+    mixer.apply([ch('mic', { deviceId: 'b' })])
+
+    const late = fakeStream()
+    gate.resolve(late.stream)
+    await settle()
+
+    expect(late.track.stop).toHaveBeenCalled()
+    expect(devicesAsked).toEqual(['a', 'b'])
+    expect(mixer.openChannels).toEqual(['mic'])
+  })
+
+  it('tries again with a new device after the old one failed', async () => {
+    openInput = async () => { throw new Error('gone') }
+    mixer.apply([ch('mic', { deviceId: 'a' })])
+    await settle()
+    expect(mixer.errors().mic).toBe('gone')
+
+    openInput = async () => fakeStream().stream
+    mixer.apply([ch('mic', { deviceId: 'b' })])
+    await settle()
+
+    expect(mixer.errors()).toEqual({})
+    expect(mixer.openChannels).toEqual(['mic'])
+  })
+
+  it('does not hammer a failing device on every update', async () => {
+    openInput = async () => { throw new Error('gone') }
+    mixer.apply([ch('mic', { deviceId: 'a' })])
+    await settle()
+    mixer.apply([ch('mic', { deviceId: 'a', volume: 0.5 })])
+    mixer.apply([ch('mic', { deviceId: 'a', volume: 0.4 })])
+    await settle()
+    expect(opened).toEqual(['mic'])
   })
 })

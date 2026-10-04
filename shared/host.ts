@@ -116,6 +116,8 @@ export interface SnapshotChannel {
   noiseSuppression: boolean
   /** Whether the interface has a real input attached to this channel. */
   connected: boolean
+  /** The device chosen for this channel; empty for the system default. */
+  deviceId: string
 }
 
 export interface HostSnapshot {

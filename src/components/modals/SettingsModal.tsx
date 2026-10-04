@@ -13,6 +13,7 @@ import {
   formatBinding, keyEventToBinding,
 } from '@/stores/hotkeyStore'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
+import type { AudioSettings } from '@/types/audio'
 
 // ── Primitives ──────────────────────────────────────────────────────────────
 
@@ -236,13 +237,51 @@ function VideoTab({
 
 // ── Tab: Audio ──────────────────────────────────────────────────────────────
 
-function AudioTab() {
+function AudioTab({
+  draft, set,
+}: {
+  draft: AudioSettings
+  set: (patch: Partial<AudioSettings>) => void
+}) {
+  const [mics, setMics] = useState<{ id: string; label: string }[]>([])
+
+  useEffect(() => {
+    let current = true
+    navigator.mediaDevices?.enumerateDevices().then((all) => {
+      if (!current) return
+      setMics(
+        all
+          .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` })),
+      )
+    }).catch(() => { /* no list; the system default is still offered */ })
+    return () => { current = false }
+  }, [])
+
+  const chosen = draft.auxDevice1 === 'default' || draft.auxDevice1 === 'disabled' ? 'default' : draft.auxDevice1
+  // A device that was chosen before and is not plugged in now stays visible, so the choice is not lost silently.
+  const known = mics.some((m) => m.id === chosen)
+
   return (
     <div>
       <SectionHeader title="Audio Devices" />
+      <Row label="Microphone">
+        <Sel
+          value={chosen}
+          onChange={(v) => set({ auxDevice1: v })}
+          options={[
+            { value: 'default', label: 'System default' },
+            ...mics.map((m) => ({ value: m.id, label: m.label })),
+            ...(chosen !== 'default' && !known ? [{ value: chosen, label: 'Chosen device (not connected)' }] : []),
+          ]}
+        />
+      </Row>
+      <p className="text-caption text-text-muted mb-3">
+        Names appear once the microphone has been connected in the Audio Mixer.
+      </p>
       <p className="text-caption text-text-secondary mb-3">
-        Sound is set up in the Audio Mixer: press Desktop to capture everything your computer plays,
-        and Mic to capture your default microphone. The inputs you connect are remembered and
+        Press Desktop in the Audio Mixer to capture everything your computer plays (Windows does
+        not offer a single output device to capture). The inputs you connect are remembered and
         reconnected when the app starts.
       </p>
 
@@ -254,8 +293,7 @@ function AudioTab() {
         <span className="text-body text-text-primary">Stereo</span>
       </Row>
       <p className="text-caption text-text-muted mt-3">
-        Choosing a specific device, or another sample rate, is not available yet. The audio bitrate
-        is set under Output.
+        Another sample rate is not available yet. The audio bitrate is set under Output.
       </p>
     </div>
   )
@@ -430,6 +468,9 @@ export function SettingsModal() {
   function patchVideo(patch: Partial<VideoSettings>) {
     setDraft((d) => ({ ...d, video: { ...d.video, ...patch } }))
   }
+  function patchAudio(patch: Partial<AudioSettings>) {
+    setDraft((d) => ({ ...d, audio: { ...d.audio, ...patch } }))
+  }
   function patchRecording(patch: Partial<RecordingConfig>) {
     setDraft((d) => ({ ...d, recording: { ...d.recording, ...patch } }))
   }
@@ -500,7 +541,7 @@ export function SettingsModal() {
                 <VideoTab draft={draft.video} set={patchVideo} />
               )}
               {activeTab === 'audio' && (
-                <AudioTab />
+                <AudioTab draft={draft.audio} set={patchAudio} />
               )}
               {activeTab === 'output' && (
                 <OutputTab draft={draft.recording} set={patchRecording} />

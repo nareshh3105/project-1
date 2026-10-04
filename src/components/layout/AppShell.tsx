@@ -19,6 +19,7 @@ import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
 import { SourcePropertiesModal } from '@/components/modals/SourcePropertiesModal'
 import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { useHostState }         from '@/hooks/useHostState'
+import { useAudioDevices }      from '@/hooks/useAudioDevices'
 import { useNotifyStore }       from '@/stores/notifyStore'
 import { AboutModal }           from '@/components/modals/AboutModal'
 import { FullscreenPreview }    from '@/components/studio/FullscreenPreview'
@@ -121,6 +122,7 @@ export function AppShell() {
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 
   useHostState()
+  useAudioDevices()
 
   // Elapsed timer — ticks every second when recording/streaming is active
   useEffect(() => {

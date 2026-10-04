@@ -74,8 +74,8 @@ describe('buildSnapshot', () => {
       channels: [channel('mic', { volume: 0.5, muted: true }), channel('desktop')],
     })
     expect(snap.audio).toEqual([
-      { id: 'mic', volume: 0.5, muted: true, noiseSuppression: false, connected: true },
-      { id: 'desktop', volume: 1, muted: false, noiseSuppression: false, connected: false },
+      { id: 'mic', volume: 0.5, muted: true, noiseSuppression: false, connected: true, deviceId: '' },
+      { id: 'desktop', volume: 1, muted: false, noiseSuppression: false, connected: false, deviceId: '' },
     ])
   })
 
@@ -134,5 +134,12 @@ describe('suggestedVideoBitrate', () => {
   it('never goes below a usable floor or above the limit', () => {
     expect(suggestedVideoBitrate(64, 64, 1)).toBe(1_000_000)
     expect(suggestedVideoBitrate(7680, 4320, 120)).toBe(100_000_000)
+  })
+})
+
+describe('audio devices in the snapshot', () => {
+  it('carries the device chosen for a channel', () => {
+    const snap = buildSnapshot({ sources: [], base: BASE, channels: [channel('mic'), channel('desktop')], connected: [], devices: { mic: 'usb-1' } })
+    expect(snap.audio.map((c) => c.deviceId)).toEqual(['usb-1', ''])
   })
 })

@@ -17,9 +17,11 @@ interface SnapshotInput {
   base: { width: number; height: number }
   channels: readonly AudioChannel[]
   connected: readonly string[]
+  /** The device chosen for each channel, if not the system default. */
+  devices?: Readonly<Record<string, string>>
 }
 
-export function buildSnapshot({ sources, base, channels, connected }: SnapshotInput): HostSnapshot {
+export function buildSnapshot({ sources, base, channels, connected, devices = {} }: SnapshotInput): HostSnapshot {
   // The preview paints by orderIndex, lowest at the bottom. The recording has to
   // stack them the same way, whatever order the list happens to be held in.
   const visible = sources.filter((s) => s.visible).sort((a, b) => a.orderIndex - b.orderIndex)
@@ -41,6 +43,7 @@ export function buildSnapshot({ sources, base, channels, connected }: SnapshotIn
       muted: c.muted,
       noiseSuppression: c.noiseSuppression,
       connected: connected.includes(c.id),
+      deviceId: devices[c.id] ?? '',
     })),
   }
 }

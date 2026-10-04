@@ -56,7 +56,13 @@ export async function createAudioRig(onBlock: (block: AudioBlock) => void): Prom
 
   const mixer = new Mixer(
     {
-      openInput: (id) => (id === 'desktop' ? requestDesktopAudio() : requestMicrophone()),
+      openInput: async (id, deviceId) => {
+        if (id === 'desktop') return requestDesktopAudio()
+        if (!deviceId) return requestMicrophone()
+        // A recording that silently loses the microphone is worse than one that
+        // uses the default, so a device that has gone falls back to the default.
+        try { return await requestMicrophone(deviceId) } catch { return requestMicrophone() }
+      },
       createGain: () => context.createGain(),
       createSource: (stream) => context.createMediaStreamSource(stream),
     },

@@ -93,6 +93,7 @@ function channelOf(raw: unknown): SnapshotChannel | null {
     muted: raw.muted === true,
     noiseSuppression: raw.noiseSuppression === true,
     connected: raw.connected === true,
+    deviceId: typeof raw.deviceId === 'string' ? raw.deviceId.slice(0, 512) : '',
   }
 }
 

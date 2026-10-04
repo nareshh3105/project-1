@@ -28,10 +28,10 @@ export function useHostState() {
       timer = null
       const { activeSceneId } = useSceneStore.getState()
       const sources = activeSceneId ? useSourceStore.getState().byScene[activeSceneId] ?? [] : []
-      const { channels, connected } = useAudioStore.getState()
+      const { channels, connected, devices } = useAudioStore.getState()
       const base = useSettingsStore.getState().video.baseResolution
 
-      const snapshot = buildSnapshot({ sources, base, channels, connected })
+      const snapshot = buildSnapshot({ sources, base, channels, connected, devices })
       const key = JSON.stringify(snapshot)
       if (key === last) return
       last = key

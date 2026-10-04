@@ -14,7 +14,7 @@ const goodSource = {
   settings: {},
 }
 
-const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true }
+const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true, deviceId: '' }
 
 describe('the whole snapshot', () => {
   it.each([null, undefined, 42, 'x', [], true])('falls back to empty for %s', (bad) => {
@@ -170,4 +170,13 @@ describe('source settings', () => {
     const many = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, i]))
     expect(Object.keys(withSettings(many).settings)).toHaveLength(24)
   })
+})
+
+describe('audio device', () => {
+  const channel = (deviceId: unknown) => sanitizeSnapshot({ audio: [{ id: 'mic', deviceId }] }).audio[0]
+
+  it('keeps the chosen device', () => expect(channel('usb-mic-1').deviceId).toBe('usb-mic-1'))
+  it('means the default when none is given', () => expect(channel(undefined).deviceId).toBe(''))
+  it.each([[5], [null], [{}], [['a']]])('means the default for %s', (bad) => expect(channel(bad).deviceId).toBe(''))
+  it('cuts an absurdly long id', () => expect(channel('x'.repeat(5000)).deviceId).toHaveLength(512))
 })
