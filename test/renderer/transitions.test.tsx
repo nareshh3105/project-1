@@ -198,7 +198,7 @@ describe('the program view', () => {
   it('uncovers the new scene for a wipe, with the old one still showing underneath', async () => {
     const { container } = await onAirWith('wipe')
     const program = container.querySelector('.border-state-danger\\/25')!.parentElement!
-    const underneath = [...program.querySelectorAll<HTMLElement>(':scope > div.absolute.inset-0')].find((e) => !e.style.animationName && e.querySelector('[data-source-id]'))!
+    const underneath = ([...program.children] as HTMLElement[]).find((e) => !e.style.animationName && e.querySelector('[data-source-id]'))!
     expect(underneath.querySelector('[data-source-id="sa"]')).not.toBeNull()
     const animated = [...program.querySelectorAll<HTMLElement>('div[style*="animation"]')]
     expect(animated.map((e) => e.style.animationName)).toEqual(['xwipe-in'])
