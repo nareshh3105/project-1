@@ -1,6 +1,6 @@
 {
   "name": "codebuilders",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "type": "module",
   "description": "Desktop screen recording and live streaming studio",
