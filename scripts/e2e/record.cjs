@@ -447,7 +447,13 @@ async function main() {
     const startedAt = Date.now()
     let file = outFile
     if (kind === 'recording') {
-      file = await invoke('start_recording', { outputPath: outFile, format: 'mkv', params })
+      const folder = flag('folder', '')
+      if (folder) {
+        log('recording folder set to', await invoke('set_recording_folder', { folder }))
+        file = await invoke('start_recording', { format: 'mkv', params }) // no path: the folder decides
+      } else {
+        file = await invoke('start_recording', { outputPath: outFile, format: 'mkv', params })
+      }
     } else if (kind === 'streaming') {
       // A local RTMP server to stream to: FFmpeg listening, writing what arrives to a file.
       file = path.join(scratch, 'received.flv')

@@ -7,7 +7,7 @@ import {
   RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
   REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT, OUTPUT_HEALTH_EVENT,
   assertStartedOk, ensureParentDir, ffmpegAvailable, ffmpegBinary, finishPiped,
-  getSession, isActive, requireFfmpeg, setSession, spawnFfmpeg, takeSession,
+  getSession, isActive, requireFfmpeg, setRecordingFolder, setSession, spawnFfmpeg, takeSession,
   timestamp, uniquePath, videosDir, type Session,
 } from '../output/ffmpeg'
 import {
@@ -202,6 +202,9 @@ function recordingFormat(requested: unknown, file?: string): RecordingFormat {
 
 export function registerOutputCommands() {
   command('check_ffmpeg', () => ffmpegAvailable(true))
+
+  // The folder chosen in Settings. Sent whenever it changes and at startup.
+  command('set_recording_folder', ({ folder }) => setRecordingFolder(folder))
 
   command('get_recording_path', () =>
     uniquePath(path.join(videosDir(), `CodeBuilders_${timestamp()}.mkv`)),

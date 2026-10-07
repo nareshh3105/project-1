@@ -19,6 +19,7 @@ import { CapturePickerModal }   from '@/components/modals/CapturePickerModal'
 import { SourcePropertiesModal } from '@/components/modals/SourcePropertiesModal'
 import { useResumeCaptures }    from '@/hooks/useResumeCaptures'
 import { useHostState }         from '@/hooks/useHostState'
+import { useRecordingFolder }   from '@/hooks/useRecordingFolder'
 import { useAudioDevices }      from '@/hooks/useAudioDevices'
 import { useNotifyStore }       from '@/stores/notifyStore'
 import { struggleMessage }      from '@/lib/health'
@@ -132,6 +133,7 @@ export function AppShell() {
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 
   useHostState()
+  useRecordingFolder()
   useAudioDevices()
 
   // Elapsed timer — ticks every second when recording/streaming is active

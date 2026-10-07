@@ -6,7 +6,7 @@ import { command } from '../ipc'
 import { spawnSync } from 'node:child_process'
 import { logsDir } from '../diagnostics/logger'
 import { formatDiagnostics, readLogTail } from '../diagnostics/report'
-import { ffmpegBinary } from '../output/ffmpeg'
+import { ffmpegBinary, videosDir } from '../output/ffmpeg'
 import { getDb } from '../db'
 
 function openFolder(dir: string) {
@@ -26,7 +26,7 @@ export function registerAppCommands() {
   }))
 
   command('open_recordings_folder', () =>
-    openFolder(path.join(app.getPath('videos'))),
+    openFolder(videosDir()),
   )
 
   command('open_screenshots_folder', () =>

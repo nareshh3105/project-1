@@ -176,6 +176,8 @@ export const ipc = {
   output: {
     checkFfmpeg:      () => cmd<boolean>('check_ffmpeg'),
     getRecordingPath: () => cmd<string>('get_recording_path'),
+    /** Where recordings go; an empty folder means the default. Resolves to the folder in use. */
+    setFolder:        (folder: string) => cmd<string>('set_recording_folder', { folder }),
     startRecording:   (outputPath: string | undefined, format: 'mkv' | 'mp4', params: OutputParams) =>
       cmd<string>('start_recording', { outputPath: outputPath ?? null, format, params }),
     stopRecording:    () => cmd<void>('stop_recording'),
@@ -227,6 +229,7 @@ export const ipc = {
       cmd<string | null>('show_save_dialog', { defaultPath, filters }),
     openDialog: (filters?: { name: string; extensions: string[] }[]) =>
       cmd<string | null>('show_open_dialog', { filters }),
+    folderDialog: (defaultPath?: string) => cmd<string | null>('show_folder_dialog', { defaultPath }),
     readText:   (path: string) => cmd<string>('read_text_file', { path }),
     /** A picture the user chose, as a data URL. */
     readImage:  (path: string) => cmd<string>('read_image_file', { path }),

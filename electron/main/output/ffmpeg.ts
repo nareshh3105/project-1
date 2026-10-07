@@ -90,7 +90,42 @@ export function timestamp(): string {
   )
 }
 
-export const videosDir = () => path.join(os.homedir(), 'Videos')
+const defaultVideosDir = () => path.join(os.homedir(), 'Videos')
+
+/** The folder the user chose in Settings, or null for the default. */
+let chosenFolder: string | null = null
+
+/** Where recordings and saved replays go. */
+export const videosDir = () => chosenFolder ?? defaultVideosDir()
+
+/**
+ * Sets the folder recordings go to; an empty one means the default.
+ *
+ * The folder is created if it is missing and tried with a file, so a drive that
+ * is read-only, full or gone is reported when it is chosen and not at the end
+ * of a recording.
+ */
+export function setRecordingFolder(folder: unknown): string {
+  const wanted = typeof folder === 'string' ? folder.trim() : ''
+  if (!wanted) {
+    chosenFolder = null
+    return defaultVideosDir()
+  }
+  if (!path.isAbsolute(wanted)) throw new Error(`"${wanted}" is not a full folder path (like D:\\Recordings).`)
+
+  const resolved = path.resolve(wanted)
+  try {
+    fs.mkdirSync(resolved, { recursive: true })
+    const probe = path.join(resolved, `.codebuilders-write-test-${process.pid}`)
+    fs.writeFileSync(probe, '')
+    fs.rmSync(probe, { force: true })
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err)
+    throw new Error(`Cannot save recordings in "${resolved}": ${why}`)
+  }
+  chosenFolder = resolved
+  return resolved
+}
 
 /**
  * Returns `file`, or the first numbered variant that does not already exist.

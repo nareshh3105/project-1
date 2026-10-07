@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, useId } fr
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ipc } from '@/ipc'
+import { toErrorMessage } from '@/lib/errors'
 import { useUIStore } from '@/stores/uiStore'
 import {
   useSettingsStore,
@@ -87,6 +89,53 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
         )}
       />
     </button>
+  )
+}
+
+/** A folder shown as its path, with buttons to browse for another or go back to the default. */
+export function FolderChoice({ value, onChange }: { value: string; onChange: (folder: string) => void }) {
+  const labelledBy = useContext(LabelContext)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function browse() {
+    setProblem(null)
+    try {
+      const chosen = await ipc.file.folderDialog(value || undefined)
+      if (chosen) onChange(chosen)
+    } catch (err) {
+      setProblem(toErrorMessage(err))
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1 min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          aria-labelledby={labelledBy}
+          title={value || undefined}
+          className="max-w-[220px] truncate text-body text-text-primary"
+        >
+          {value || 'Default'}
+        </span>
+        <button
+          type="button"
+          onClick={browse}
+          className="h-7 px-3 rounded-input bg-bg-panel border border-bg-divider text-caption text-text-primary hover:border-accent-start hover:text-accent-start transition-colors"
+        >
+          Browse…
+        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={() => { setProblem(null); onChange('') }}
+            className="h-7 px-3 rounded-input border border-dashed border-bg-divider text-caption text-text-muted hover:border-accent-start hover:text-accent-start transition-colors"
+          >
+            Use default
+          </button>
+        )}
+      </div>
+      {problem && <span role="alert" className="text-caption text-red-400">{problem}</span>}
+    </div>
   )
 }
 
@@ -333,6 +382,9 @@ function OutputTab({
       </p>
 
       <SectionHeader title="Recording" />
+      <Row label="Save Recordings To" hint={draft.outputFolder ? undefined : 'The Videos folder'}>
+        <FolderChoice value={draft.outputFolder} onChange={(folder) => set({ outputFolder: folder })} />
+      </Row>
       <Row label="Recording Format">
         <Sel
           value={draft.format}

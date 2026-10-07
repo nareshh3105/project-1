@@ -53,6 +53,19 @@ export function registerWindowCommands() {
       : result.filePaths[0]
   })
 
+  command('show_folder_dialog', async ({ defaultPath }) => {
+    const win = focused()
+    const opts = {
+      properties: ['openDirectory' as const, 'createDirectory' as const],
+      defaultPath: typeof defaultPath === 'string' && defaultPath ? defaultPath : undefined,
+    }
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts)
+
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
   command('read_text_file', ({ path }) => fs.readFile(path as string, 'utf8'))
 
   command('write_text_file', ({ path, contents }) =>
