@@ -118,7 +118,7 @@ describe('normalizeParams', () => {
   })
 
   it('keeps valid values', () => {
-    const given = { width: 1280, height: 720, fps: 60, videoBitrate: 9_000_000, audioBitrate: 128_000, encoder: 'software', keyframeSeconds: 2, audio: false }
+    const given = { width: 1280, height: 720, fps: 60, videoBitrate: 9_000_000, audioBitrate: 128_000, encoder: 'software', keyframeSeconds: 2, audio: false, tracks: 3 }
     expect(normalizeParams(given)).toEqual(given)
   })
 
@@ -183,5 +183,50 @@ describe('suggestedVideoBitrate', () => {
 
   it('never suggests less than 1 Mbps', () => {
     expect(suggestedVideoBitrate(160, 90, 5)).toBe(1_000_000)
+  })
+})
+
+describe('tracks', () => {
+  it('is one unless asked', () => {
+    expect(normalizeParams({}).tracks).toBe(1)
+  })
+
+  it.each([[2, 2], [3, 3], [1, 1], [9, 3], [2.4, 2], [0, 1], [-1, 1], [NaN, 1], ['2', 1], [null, 1]])('reads %s as %s', (given, expected) => {
+    expect(normalizeParams({ tracks: given }).tracks).toBe(expected)
+  })
+})
+
+describe('recording with extra tracks', () => {
+  const pipes = ['\\.\pipe\a', '\\.\pipe\b']
+  const inputs = (args: string[]) => args.flatMap((a, i) => (a === '-i' ? [args[i + 1]] : []))
+
+  it('is unchanged without them', () => {
+    expect(recordingArgs('a.mkv', 'mkv', 160_000, [])).toEqual(recordingArgs('a.mkv', 'mkv', 160_000))
+    expect(recordingArgs('a.mkv', 'mkv')).not.toContain('-map')
+  })
+
+  it('reads each pipe as a further input after the standard input', () => {
+    expect(inputs(recordingArgs('a.mkv', 'mkv', 160_000, pipes))).toEqual(['pipe:0', ...pipes])
+  })
+
+  it('puts the picture and every audio stream in the file', () => {
+    const args = recordingArgs('a.mkv', 'mkv', 160_000, pipes)
+    const maps = args.flatMap((a, i) => (a === '-map' ? [args[i + 1]] : []))
+    expect(maps).toEqual(['0:v', '0:a', '1:a', '2:a'])
+  })
+
+  it('names the tracks', () => {
+    const args = recordingArgs('a.mkv', 'mkv', 160_000, pipes)
+    expect(has(args, '-metadata:s:a:0', 'title=Mix')).toBe(true)
+    expect(has(args, '-metadata:s:a:1', 'title=Microphone')).toBe(true)
+    expect(has(args, '-metadata:s:a:2', 'title=Everything else')).toBe(true)
+  })
+
+  it('copies the picture and converts every sound track', () => {
+    const args = recordingArgs('a.mp4', 'mp4', 192_000, pipes)
+    expect(has(args, '-c:v', 'copy')).toBe(true)
+    expect(has(args, '-c:a', 'aac', '-b:a', '192k')).toBe(true)
+    expect(args).toContain('+frag_keyframe+empty_moov+default_base_moof')
+    expect(args.at(-1)).toBe('a.mp4')
   })
 })

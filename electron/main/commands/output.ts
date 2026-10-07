@@ -15,6 +15,7 @@ import {
 } from '../output/pipeArgs'
 import { normalizeParams } from '../output/params'
 import { registerSink, unregisterSink } from '../output/ingest'
+import { createTrackPipe, type TrackPipe } from '../output/trackPipes'
 import { OutputHealth } from '../output/health'
 import { getHost, hostEvents } from '../host/instance'
 import { log } from '../diagnostics/logger'
@@ -56,6 +57,8 @@ interface OpenOptions {
   params: SessionParams
   /** Kept on the session for later commands (the file written, the segment folder, ...). */
   extra?: Record<string, unknown>
+  /** Pipes carrying extra audio tracks, which FFmpeg's arguments already name. */
+  pipes?: TrackPipe[]
 }
 
 /**
@@ -66,12 +69,13 @@ interface OpenOptions {
  * either half fails, both are torn down: a half-started output would show as
  * running in the interface while producing nothing.
  */
-async function openOutput({ kind, ffmpegArgs, params, extra = {} }: OpenOptions): Promise<Session> {
+async function openOutput({ kind, ffmpegArgs, params, extra = {}, pipes = [] }: OpenOptions): Promise<Session> {
   if (closing.has(kind)) throw new Error(`The previous ${LABEL[kind]} is still finishing. Try again in a moment.`)
   requireFfmpeg()
 
   const session = spawnFfmpeg(ffmpegArgs, { piped: true })
   registerSink(kind, session.child.stdin)
+  pipes.forEach((pipe, i) => registerSink(`${kind}#${i + 2}`, pipe))
 
   try {
     await getHost().request('openSession', { kind, params })
@@ -80,6 +84,7 @@ async function openOutput({ kind, ffmpegArgs, params, extra = {} }: OpenOptions)
     await assertStartedOk(session, STARTUP_CHECK_MS[kind])
   } catch (err) {
     unregisterSink(kind)
+    releasePipes(kind, pipes)
     abandon(session)
     // Best effort: the host may never have opened it.
     void getHost().request('closeSession', { kind }).catch(() => {})
@@ -87,10 +92,18 @@ async function openOutput({ kind, ffmpegArgs, params, extra = {} }: OpenOptions)
     throw new Error(reason)
   }
 
-  const live: Session = { ...session, ...extra }
+  const live: Session = { ...session, ...extra, pipes }
   setSession(kind, live)
   watchForExit(kind, live)
   return live
+}
+
+/** Closes the pipes of the extra audio tracks and stops routing to them. */
+function releasePipes(kind: OutputKind, pipes: TrackPipe[], destroy = true) {
+  pipes.forEach((pipe, i) => {
+    unregisterSink(`${kind}#${i + 2}`)
+    if (destroy) pipe.destroy()
+  })
 }
 
 function abandon(session: Session) {
@@ -116,6 +129,10 @@ async function closeOutput(kind: OutputKind): Promise<Session | undefined> {
       log.warn(`host did not close the ${kind} session`, { error: String(err) })
     }
     unregisterSink(kind)
+    // The host has finished writing every track; closing the pipes lets FFmpeg reach the end of each.
+    const pipes = (session.pipes as TrackPipe[] | undefined) ?? []
+    releasePipes(kind, pipes, false)
+    await Promise.all(pipes.map((p) => p.end()))
     const clean = await finishPiped(session)
     if (!clean) log.warn(`ffmpeg had to be stopped for the ${kind} output`)
   } finally {
@@ -136,6 +153,7 @@ function watchForExit(kind: OutputKind, session: Session) {
     takeSession(kind)
     outputHealth.reset(kind)
     unregisterSink(kind)
+    releasePipes(kind, (session.pipes as TrackPipe[] | undefined) ?? [])
     void getHost().request('closeSession', { kind }).catch(() => {})
 
     const why = detail(session)
@@ -201,12 +219,20 @@ export function registerOutputCommands() {
     ensureParentDir(file)
 
     const p = normalizeParams(params)
-    await openOutput({
-      kind: 'recording',
-      ffmpegArgs: recordingArgs(file, fmt, p.audioBitrate),
-      params: p,
-      extra: { filePath: file },
-    })
+    // Each extra audio track has a pipe of its own for FFmpeg to read.
+    const pipes = p.audio ? await Promise.all(Array.from({ length: p.tracks - 1 }, () => createTrackPipe())) : []
+    try {
+      await openOutput({
+        kind: 'recording',
+        ffmpegArgs: recordingArgs(file, fmt, p.audioBitrate, pipes.map((x) => x.path)),
+        params: p,
+        extra: { filePath: file },
+        pipes,
+      })
+    } catch (err) {
+      pipes.forEach((x) => x.destroy())
+      throw err
+    }
 
     announce('recording', true, { filePath: file })
     return file

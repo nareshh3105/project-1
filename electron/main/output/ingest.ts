@@ -18,17 +18,21 @@ export interface Sink {
 
 const KINDS: readonly string[] = ['recording', 'streaming', 'replay', 'virtualCamera']
 
-const sinks = new Map<OutputKind, Sink>()
+/**
+ * A sink is named for its output ("recording"), or for one of that output's
+ * extra audio tracks ("recording#2", "recording#3").
+ */
+const sinks = new Map<string, Sink>()
 
-export function registerSink(kind: OutputKind, sink: Sink): void {
-  sinks.set(kind, sink)
+export function registerSink(name: OutputKind | `${OutputKind}#${number}`, sink: Sink): void {
+  sinks.set(name, sink)
 }
 
-export function unregisterSink(kind: OutputKind): void {
-  sinks.delete(kind)
+export function unregisterSink(name: OutputKind | `${OutputKind}#${number}`): void {
+  sinks.delete(name)
 }
 
-export const hasSink = (kind: OutputKind) => sinks.has(kind)
+export const hasSink = (name: string) => sinks.has(name)
 
 /** Accepts the byte containers Electron's IPC can deliver. */
 export function toBuffer(data: unknown): Buffer | null {
@@ -40,9 +44,11 @@ export function toBuffer(data: unknown): Buffer | null {
 
 /** Writes a chunk to the output's sink. Returns whether it was delivered. */
 export function pushChunk(kind: string, data: unknown): boolean {
-  if (!KINDS.includes(kind)) return false
+  // "recording#2" is the second track of a recording.
+  const base = kind.split('#')[0]
+  if (!KINDS.includes(base) || !/^[a-zA-Z]+(#[2-9])?$/.test(kind)) return false
 
-  const sink = sinks.get(kind as OutputKind)
+  const sink = sinks.get(kind)
   if (!sink || sink.writable === false) return false
 
   const buffer = toBuffer(data)

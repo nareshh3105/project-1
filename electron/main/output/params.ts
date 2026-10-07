@@ -18,6 +18,7 @@ export const DEFAULT_PARAMS: SessionParams = {
   encoder: 'auto',
   keyframeSeconds: 2,
   audio: true,
+  tracks: 1,
 }
 
 const LIMITS = {
@@ -27,6 +28,9 @@ const LIMITS = {
   audio:    { min: 32_000,  max: 512_000 },
   keyframe: { min: 1,       max: 10 },
 }
+
+/** The mix, the microphone alone, and everything but the microphone. */
+export const MAX_TRACKS = 3
 
 const ENCODERS: readonly EncoderPreference[] = ['auto', 'hardware', 'software']
 
@@ -55,6 +59,7 @@ export function normalizeParams(raw: unknown, base: SessionParams = DEFAULT_PARA
     encoder: ENCODERS.includes(r.encoder as EncoderPreference) ? (r.encoder as EncoderPreference) : base.encoder,
     keyframeSeconds: clamp(r.keyframeSeconds, base.keyframeSeconds, LIMITS.keyframe),
     audio: typeof r.audio === 'boolean' ? r.audio : base.audio,
+    tracks: positive(r.tracks) ? Math.min(MAX_TRACKS, Math.max(1, Math.round(r.tracks))) : base.tracks,
   }
 }
 

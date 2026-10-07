@@ -217,3 +217,39 @@ describe('finishPiped', () => {
     await expect(done).resolves.toBe(false)
   })
 })
+
+describe('extra audio tracks', () => {
+  it('routes a track to its own sink, apart from the output', () => {
+    const rec = sink()
+    const second = sink()
+    ingest.registerSink('recording', rec)
+    ingest.registerSink('recording#2', second)
+
+    expect(ingest.pushChunk('recording#2', Buffer.from('mic'))).toBe(true)
+
+    expect(second.write).toHaveBeenCalledWith(Buffer.from('mic'))
+    expect(rec.write).not.toHaveBeenCalled()
+  })
+
+  it('does not send a track to an output that has no sink for it', () => {
+    ingest.registerSink('recording', sink())
+    expect(ingest.pushChunk('recording#3', Buffer.from('x'))).toBe(false)
+  })
+
+  it.each(['recording#', 'recording#1', 'recording#10', 'recording#2#2', '#2', 'nothing#2', 'recording# 2', 'recording#a'])(
+    'refuses the odd name %s', (name) => {
+      const s = sink()
+      ingest.registerSink('recording', s)
+      ingest.registerSink('recording#2', s)
+      expect(ingest.pushChunk(name, Buffer.from('x'))).toBe(false)
+      expect(s.write).not.toHaveBeenCalled()
+    },
+  )
+
+  it('stops delivering a track after its sink is removed', () => {
+    const s = sink()
+    ingest.registerSink('recording#2', s)
+    ingest.unregisterSink('recording#2')
+    expect(ingest.pushChunk('recording#2', Buffer.from('x'))).toBe(false)
+  })
+})

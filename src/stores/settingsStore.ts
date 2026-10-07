@@ -13,6 +13,8 @@ export interface RecordingConfig {
   /** Video bitrate in kbit/s; 0 picks one to suit the resolution and frame rate. */
   videoBitrateKbps: number
   audioBitrateKbps: number
+  /** Audio tracks in a recording: 1 is the mix; 2 adds the microphone alone; 3 adds everything but the microphone. */
+  audioTracks:  1 | 2 | 3
   encoder:      'auto' | 'hardware' | 'software'
 }
 
@@ -44,6 +46,7 @@ export const DEFAULT_RECORDING: RecordingConfig = {
   outputFolder: '',
   videoBitrateKbps: 0,
   audioBitrateKbps: 160,
+  audioTracks:  1,
   encoder:      'auto',
 }
 

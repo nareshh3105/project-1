@@ -24,7 +24,7 @@ const PUMP_EVERY_MS = 10
 export async function createAudioRig(onBlock: (block: AudioBlock) => void): Promise<AudioRig> {
   const mixer = new DirectMixer({
     now: () => performance.now(),
-    onBlock: (b) => onBlock({ startSec: b.startSec, frames: b.frames, data: b.data }),
+    onBlock: (b) => onBlock({ startSec: b.startSec, frames: b.frames, data: b.data, mic: b.mic, other: b.other }),
   })
   const timer = setInterval(() => mixer.pump(), PUMP_EVERY_MS)
 
@@ -36,7 +36,8 @@ export async function createAudioRig(onBlock: (block: AudioBlock) => void): Prom
       // uses the default, so a device that has gone falls back to the default.
       try { return await requestMicrophone(deviceId) } catch { return requestMicrophone() }
     },
-    attach: (id, stream) => readInto(mixer.addInput(id), stream),
+    // The desktop's sound is one group; every microphone is the other.
+    attach: (id, stream) => readInto(mixer.addInput(id, undefined, id === 'desktop' ? 'other' : 'mic'), stream),
   })
 
   return {

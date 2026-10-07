@@ -758,3 +758,75 @@ describe('keeping up with the frame rate', () => {
     expect(eventsOf('output:health').map((e) => e.kind)).toEqual(['streaming'])
   })
 })
+
+describe('a recording with several audio tracks', () => {
+  const file = () => path.join(workDir, 'tracks.mkv')
+
+  /** Starts it. The pipes are real, so their creation is waited for rather than timed. */
+  async function startTracks(tracks: unknown) {
+    const promise = invoke('start_recording', { outputPath: file(), params: { tracks } })
+    await vi.waitFor(() => expect(cp.spawned.length).toBe(1))
+    await vi.advanceTimersByTimeAsync(4000)
+    return promise
+  }
+
+  const inputs = () => cp.lastArgs().flatMap((a, i) => (a === '-i' ? [cp.lastArgs()[i + 1]] : []))
+
+  it('gives ffmpeg a pipe for each extra track', async () => {
+    await startTracks(3)
+
+    expect(inputs()).toHaveLength(3)
+    expect(inputs()[0]).toBe('pipe:0')
+    expect(inputs().slice(1).every((p) => p.startsWith(String.raw`\\.\pipe\codebuilders-`))).toBe(true)
+    expect(inputs()[1]).not.toBe(inputs()[2])
+  })
+
+  it('tells the host how many tracks to make', async () => {
+    await startTracks(2)
+    expect(hostCalls('openSession')[0].args.params.tracks).toBe(2)
+    expect(inputs()).toHaveLength(2)
+  })
+
+  it('uses no pipes for one track', async () => {
+    await startTracks(1)
+    expect(inputs()).toEqual(['pipe:0'])
+  })
+
+  it('reads a nonsense count as one track', async () => {
+    await startTracks('lots')
+    expect(inputs()).toEqual(['pipe:0'])
+    expect(hostCalls('openSession')[0].args.params.tracks).toBe(1)
+  })
+
+  it('routes each track from the host to its own pipe', async () => {
+    await startTracks(3)
+    expect(ingest.hasSink('recording')).toBe(true)
+    expect(ingest.hasSink('recording#2')).toBe(true)
+    expect(ingest.hasSink('recording#3')).toBe(true)
+    expect(ingest.hasSink('recording#4')).toBe(false)
+  })
+
+  it('removes the routes when the recording stops', async () => {
+    await startTracks(3)
+    // Nothing stands in for ffmpeg here, so each pipe gives up waiting for it.
+    const stopping = invoke('stop_recording')
+    await vi.advanceTimersByTimeAsync(4000)
+    await stopping
+
+    expect(ingest.hasSink('recording')).toBe(false)
+    expect(ingest.hasSink('recording#2')).toBe(false)
+    expect(ingest.hasSink('recording#3')).toBe(false)
+  })
+
+  it('leaves no pipes behind when the host cannot start', async () => {
+    host.behaviour = (method) => { if (method === 'openSession') throw new Error('no encoder') }
+    const promise = invoke('start_recording', { outputPath: file(), params: { tracks: 3 } })
+    const settled = promise.catch((e) => e)
+    await vi.waitFor(() => expect(cp.spawned.length).toBe(1))
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(String(await settled)).toMatch(/no encoder/)
+    expect(ingest.hasSink('recording#2')).toBe(false)
+    expect(ingest.hasSink('recording#3')).toBe(false)
+  })
+})

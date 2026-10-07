@@ -78,6 +78,11 @@ export interface SessionParams {
   keyframeSeconds: number
   /** False for outputs that carry no sound (the virtual camera). */
   audio: boolean
+  /**
+   * How many audio tracks to write. 1 is the mix of everything. 2 adds the
+   * microphone alone as track 2, 3 adds everything but the microphone as track 3.
+   */
+  tracks: number
 }
 
 export type HostMethod = 'openSession' | 'closeSession' | 'ping'

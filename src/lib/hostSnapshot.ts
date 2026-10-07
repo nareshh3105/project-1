@@ -122,5 +122,7 @@ export function outputParams(
     encoder: recording.encoder,
     keyframeSeconds: 2,
     audio: kind !== 'virtualCamera',
+    // Only a recording is a file that can hold several tracks.
+    tracks: kind === 'recording' ? recording.audioTracks ?? 1 : 1,
   }
 }

@@ -32,14 +32,15 @@ const session: SessionDeps = {
       timestamp: timestampUs,
       data: data as Float32Array<ArrayBuffer>,
     }),
-  createMuxer: ({ width, height, fps, audio, onData }) => {
+  createMuxer: ({ width, height, fps, audio, video, onData }) => {
     const muxer = new Muxer({
       target: new StreamTarget({ chunked: false, onData: (data, position) => onData(data, position) }),
-      video: { codec: 'avc', width, height, frameRate: fps },
+      ...(video ? { video: { codec: 'avc' as const, width, height, frameRate: fps } } : {}),
       ...(audio ? { audio: { codec: 'opus' as const, numberOfChannels: 2, sampleRate: SAMPLE_RATE } } : {}),
       fastStart: 'fragmented',
-      // Both tracks are already on one clock; keep their relative offset.
-      firstTimestampBehavior: 'cross-track-offset',
+      // Both tracks are already on one clock; keep their relative offset. A file
+      // of sound alone has been padded to begin at zero.
+      firstTimestampBehavior: video ? 'cross-track-offset' : 'offset',
     })
     return muxer as never
   },

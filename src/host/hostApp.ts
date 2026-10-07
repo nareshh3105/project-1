@@ -47,6 +47,9 @@ export interface AudioBlock {
   frames: number
   /** Planar float32: left, then right. */
   data: Float32Array
+  /** The microphones alone, and everything else alone, for recordings with separate tracks. */
+  mic: Float32Array
+  other: Float32Array
 }
 
 export interface HostDeps {
@@ -186,7 +189,8 @@ export class HostApp {
 
       const session = await EncoderSession.create(
         params,
-        (data) => this.deps.bridge.send(HOST_CHANNELS.ingest, kind, data),
+        // Track 1 travels as the output itself; the others on a channel of their own.
+        (data, track) => this.deps.bridge.send(HOST_CHANNELS.ingest, track ? `${kind}#${track + 1}` : kind, data),
         this.deps.session,
       )
       const { canvas, context } = this.deps.createCanvas(params.width, params.height)
@@ -367,7 +371,7 @@ export class HostApp {
     if (!this.audio) return
     const wallMs = this.audio.toWallMs(block.startSec)
     for (const { session, params } of this.running.values()) {
-      if (params.audio) session.submitAudio(wallMs, block.frames, block.data)
+      if (params.audio) session.submitAudio(wallMs, block.frames, block.data, params.tracks > 1 ? [block.mic, block.other] : undefined)
     }
   }
 

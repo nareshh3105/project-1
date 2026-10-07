@@ -747,3 +747,51 @@ describe('web pages', () => {
     expect(browserAttached).toHaveLength(1)
   })
 })
+
+describe('recording with several audio tracks', () => {
+  const block = (): AudioBlock => ({
+    startSec: 0, frames: 1024, data: new Float32Array(2048), mic: new Float32Array(2048), other: new Float32Array(2048),
+  })
+  const channels = () => sent.filter((s) => s.channel === HOST_CHANNELS.ingest).map((s) => s.args[0])
+
+  it('encodes each block once for every track', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: { ...PARAMS, tracks: 3 } })
+    onBlock(block())
+
+    expect(encoded.audio).toBe(3)
+  })
+
+  it('encodes one track when only one is asked for', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: { ...PARAMS, tracks: 1 } })
+    onBlock(block())
+
+    expect(encoded.audio).toBe(1)
+  })
+
+  it('sends each track on a channel of its own, the first as the recording itself', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: { ...PARAMS, tracks: 3 } })
+    await request(2, 'closeSession', { kind: 'recording' })
+
+    expect([...new Set(channels())].sort()).toEqual(['recording', 'recording#2', 'recording#3'])
+  })
+
+  it('sends only the recording itself when there is one track', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'recording', params: { ...PARAMS, tracks: 1 } })
+    await request(2, 'closeSession', { kind: 'recording' })
+
+    expect([...new Set(channels())]).toEqual(['recording'])
+  })
+
+  it('keeps a stream to one track however many the recording has', async () => {
+    pushState(snap())
+    await request(1, 'openSession', { kind: 'streaming', params: { ...PARAMS, tracks: 1 } })
+    await request(2, 'openSession', { kind: 'recording', params: { ...PARAMS, tracks: 3 } })
+    onBlock(block())
+
+    expect(encoded.audio).toBe(4)
+  })
+})

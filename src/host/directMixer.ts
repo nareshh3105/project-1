@@ -28,7 +28,14 @@ export interface MixBlock {
   frames: number
   /** Planar float32: left, then right. */
   data: Float32Array
+  /** The same, of the microphone inputs alone. */
+  mic: Float32Array
+  /** The same, of every other input. */
+  other: Float32Array
 }
+
+/** Which of the two separate tracks an input belongs to. */
+export type InputGroup = 'mic' | 'other'
 
 export interface DirectMixerDeps {
   /** The page's clock, in milliseconds (performance.now). */
@@ -75,6 +82,7 @@ export class OffsetTracker {
 interface Input {
   buffer: InputBuffer
   gain: number
+  group: InputGroup
 }
 
 export interface InputHandle {
@@ -99,8 +107,8 @@ export class DirectMixer {
     private readonly maxWaitMs = DEFAULT_MAX_WAIT_MS,
   ) {}
 
-  addInput(id: string, inputRate: number = OUTPUT_RATE): InputHandle {
-    const input: Input = { buffer: new InputBuffer(inputRate), gain: 1 }
+  addInput(id: string, inputRate: number = OUTPUT_RATE, group: InputGroup = 'other'): InputHandle {
+    const input: Input = { buffer: new InputBuffer(inputRate), gain: 1, group }
     this.inputs.set(id, input)
 
     return {
@@ -198,32 +206,44 @@ export class DirectMixer {
         startSec: this.next / OUTPUT_RATE,
         frames: BLOCK_FRAMES,
         data: new Float32Array(BLOCK_FRAMES * 2),
+        mic: new Float32Array(BLOCK_FRAMES * 2),
+        other: new Float32Array(BLOCK_FRAMES * 2),
       })
       this.next += BLOCK_FRAMES
     }
   }
 
   private mix(start: number): MixBlock {
-    const left = new Float32Array(BLOCK_FRAMES)
-    const right = new Float32Array(BLOCK_FRAMES)
+    const sums = {
+      mic: { left: new Float32Array(BLOCK_FRAMES), right: new Float32Array(BLOCK_FRAMES) },
+      other: { left: new Float32Array(BLOCK_FRAMES), right: new Float32Array(BLOCK_FRAMES) },
+    }
 
     for (const input of this.inputs.values()) {
       if (input.gain === 0) continue
       const part = input.buffer.read(start, BLOCK_FRAMES)
+      const into = sums[input.group]
       for (let i = 0; i < BLOCK_FRAMES; i++) {
-        left[i] += part.left[i] * input.gain
-        right[i] += part.right[i] * input.gain
+        into.left[i] += part.left[i] * input.gain
+        into.right[i] += part.right[i] * input.gain
       }
     }
 
     // Two loud inputs can add up past full scale; clip rather than wrap.
+    const clip = (v: number) => Math.max(-1, Math.min(1, v))
     const out = new Float32Array(BLOCK_FRAMES * 2)
+    const mic = new Float32Array(BLOCK_FRAMES * 2)
+    const other = new Float32Array(BLOCK_FRAMES * 2)
     for (let i = 0; i < BLOCK_FRAMES; i++) {
-      out[i] = Math.max(-1, Math.min(1, left[i]))
-      out[BLOCK_FRAMES + i] = Math.max(-1, Math.min(1, right[i]))
+      out[i] = clip(sums.mic.left[i] + sums.other.left[i])
+      out[BLOCK_FRAMES + i] = clip(sums.mic.right[i] + sums.other.right[i])
+      mic[i] = clip(sums.mic.left[i])
+      mic[BLOCK_FRAMES + i] = clip(sums.mic.right[i])
+      other[i] = clip(sums.other.left[i])
+      other[BLOCK_FRAMES + i] = clip(sums.other.right[i])
     }
 
     this.emitted++
-    return { startSec: start / OUTPUT_RATE, frames: BLOCK_FRAMES, data: out }
+    return { startSec: start / OUTPUT_RATE, frames: BLOCK_FRAMES, data: out, mic, other }
   }
 }

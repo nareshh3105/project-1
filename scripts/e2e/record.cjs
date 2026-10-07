@@ -33,6 +33,7 @@ const transitionType = flag('transition', '')
 const weakCores = Number(flag('weak', 0))
 const mediaFile = flag('media', '')
 const webPage = args.includes('--browser')
+const trackCount = Number(flag('tracks', 1))
 const PORT = 9333
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-e2e-'))
@@ -213,6 +214,31 @@ function mediaCheck(file) {
     pictureFrames: ys.length, pictureBrightnessSpread: Number(spread.toFixed(2)),
     soundMaxDb: max ? Number(max[1]) : null, soundMeanDb: meanVol ? Number(meanVol[1]) : null,
   }
+}
+
+/**
+ * A recording with several audio tracks: how many streams the file has, how long
+ * each is, how loud each is, and when the first beats of the test signal sound on
+ * each (they must be the same on every track that carries the signal).
+ */
+function tracksCheck(file) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const run = (a) => spawnSync(ffmpegExe, ['-hide_banner', ...a], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+  const listing = run(['-i', file]).stderr
+  const streams = listing.split(/\r?\n/).filter((l) => /Stream #|title +:/.test(l)).map((l) => l.trim())
+  const audioCount = streams.filter((l) => /Audio:/.test(l)).length
+  const out = { streams, audioCount, tracks: [] }
+  for (let i = 0; i < Math.max(audioCount, trackCount); i++) {
+    const vol = run(['-i', file, '-map', `0:a:${i}`, '-af', 'volumedetect', '-f', 'null', '-'])
+    const mean = /mean_volume: (-?[0-9.]+) dB/.exec(vol.stderr)
+    const max = /max_volume: (-?[0-9.]+) dB/.exec(vol.stderr)
+    const sil = run(['-i', file, '-map', `0:a:${i}`, '-af', 'silencedetect=n=-40dB:d=0.15', '-f', 'null', '-'])
+    const onsets = [...sil.stderr.matchAll(/silence_end: ([0-9.]+)/g)].map((m) => Number(m[1])).slice(0, 8)
+    let last = null
+    for (const m of vol.stderr.matchAll(/time=(\d+):(\d+):([0-9.]+)/g)) last = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
+    out.tracks.push({ track: i + 1, meanDb: mean ? Number(mean[1]) : null, maxDb: max ? Number(max[1]) : null, seconds: last, onsets })
+  }
+  return out
 }
 
 /**
@@ -401,7 +427,7 @@ async function main() {
 
     const params = {
       width, height, fps, videoBitrate: 0, audioBitrate: 160000,
-      encoder: 'auto', keyframeSeconds: 2, audio: true,
+      encoder: 'auto', keyframeSeconds: 2, audio: true, tracks: trackCount,
     }
     params.videoBitrate = Math.round((width * height * fps * 0.097) / 100000) * 100000
 
@@ -487,6 +513,7 @@ async function main() {
         memory.push(mb)
         log(`memory: ${mb} MB across the app's processes`)
       }
+      if (args.includes('--footer')) log('footer:', String(await ui.eval(`[...document.querySelectorAll('footer')].map((f) => f.textContent).join('')`)).slice(0, 220))
       if (weakCores && !warnedAt && await ui.eval(`document.body.innerText.includes('not keeping up')`)) {
         warnedAt = (Date.now() - startedAt) / 1000
         log('warning appeared at', warnedAt.toFixed(1), 's')
@@ -543,6 +570,7 @@ main()
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
     if (mediaFile) console.log(JSON.stringify(mediaCheck(r.file)))
     if (webPage) console.log(JSON.stringify(pageCheck(r.file, width)))
+    if (trackCount > 1) console.log(JSON.stringify(tracksCheck(r.file), null, 1))
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))

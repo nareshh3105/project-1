@@ -17,6 +17,9 @@ import { AudioTimeline } from './audioClock'
 export const SAMPLE_RATE = 48000
 const CHANNELS = 2
 
+/** The mix, the microphone alone, and everything but the microphone. */
+export const MAX_TRACKS = 3
+
 /** The fewest frames that may wait in the encoder before the output counts as behind. */
 export const MAX_ENCODE_QUEUE = 30
 
@@ -71,6 +74,8 @@ export interface MuxerOptions {
   height: number
   fps: number
   audio: boolean
+  /** False for a file of sound alone, which carries one of the extra audio tracks. */
+  video: boolean
   onData: (data: Uint8Array, position: number) => void
 }
 
@@ -119,6 +124,12 @@ export class EncoderSession {
   private videoEncoder!: VideoEncoderLike
   private audioEncoder: AudioEncoderLike | null = null
   private muxer!: MuxerLike
+  /**
+   * The audio tracks after the first. Each is a file of sound alone, so that the
+   * muxer, which holds one audio track, can still produce several; FFmpeg joins
+   * them. Every one starts at time zero so that they line up with the picture.
+   */
+  private readonly extras: Array<{ encoder: AudioEncoderLike; muxer: MuxerLike; started: boolean }> = []
   private hardware = false
 
   private startedAtMs = 0
@@ -131,7 +142,8 @@ export class EncoderSession {
 
   private constructor(
     private readonly params: SessionParams,
-    private readonly emit: (data: ArrayBuffer) => void,
+    /** `track` is 0 for the output itself and 1, 2 for the extra audio tracks. */
+    private readonly emit: (data: ArrayBuffer, track: number) => void,
     private readonly deps: SessionDeps,
   ) {
     this.keyEvery = Math.max(1, Math.round(params.fps * params.keyframeSeconds))
@@ -139,7 +151,7 @@ export class EncoderSession {
 
   static async create(
     params: SessionParams,
-    emit: (data: ArrayBuffer) => void,
+    emit: (data: ArrayBuffer, track: number) => void,
     deps: SessionDeps,
   ): Promise<EncoderSession> {
     const session = new EncoderSession(params, emit, deps)
@@ -184,10 +196,11 @@ export class EncoderSession {
       height: params.height,
       fps: params.fps,
       audio: params.audio,
+      video: true,
       onData: (data) => {
         // Copy: the muxer reuses its buffers.
         this.counters.bytesOut += data.byteLength
-        this.emit(data.slice().buffer)
+        this.emit(data.slice().buffer, 0)
       },
     })
 
@@ -212,7 +225,23 @@ export class EncoderSession {
       this.audioEncoder.configure({
         codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: CHANNELS, bitrate: params.audioBitrate,
       })
+
+      for (let track = 1; track < Math.min(MAX_TRACKS, params.tracks ?? 1); track++) this.addExtraTrack(track)
     }
+  }
+
+  private addExtraTrack(track: number): void {
+    const { params, deps } = this
+    const muxer = deps.createMuxer({
+      width: params.width, height: params.height, fps: params.fps, audio: true, video: false,
+      onData: (data) => this.emit(data.slice().buffer, track),
+    })
+    const encoder = deps.createAudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => this.fail(`audio track ${track + 1}: ${describe(e)}`),
+    })
+    encoder.configure({ codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: CHANNELS, bitrate: params.audioBitrate })
+    this.extras.push({ encoder, muxer, started: false })
   }
 
   /** Starts the clock. Frames and audio before this are ignored. */
@@ -248,7 +277,7 @@ export class EncoderSession {
    * Takes a block of mixed audio: planar float32, left then right, that by the
    * wall clock began at `wallStartMs`.
    */
-  submitAudio(wallStartMs: number, frames: number, planar: Float32Array): void {
+  submitAudio(wallStartMs: number, frames: number, planar: Float32Array, extraTracks: readonly Float32Array[] = []): void {
     if (!this.running || this.finished || !this.audioEncoder) return
 
     const relativeMs = wallStartMs - this.startedAtMs
@@ -267,6 +296,7 @@ export class EncoderSession {
       while (remaining > 0) {
         const n = Math.min(piece, remaining)
         this.encodeAudio(at, n, new Float32Array(n * CHANNELS))
+        for (let i = 0; i < this.extras.length; i++) this.encodeExtra(i, at, n, new Float32Array(n * CHANNELS))
         at += Math.round((n / SAMPLE_RATE) * 1_000_000)
         remaining -= n
       }
@@ -276,14 +306,38 @@ export class EncoderSession {
     if (keep <= 0) return
     this.counters.trimmedFrames += placement.skipFrames
 
-    this.encodeAudio(placement.timestampUs, keep, placement.skipFrames === 0 ? planar : trim(planar, frames, placement.skipFrames))
+    const cut = (block: Float32Array) => (placement.skipFrames === 0 ? block : trim(block, frames, placement.skipFrames))
+    this.encodeAudio(placement.timestampUs, keep, cut(planar))
+    for (let i = 0; i < this.extras.length; i++) {
+      this.encodeExtra(i, placement.timestampUs, keep, cut(extraTracks[i] ?? new Float32Array(frames * CHANNELS)))
+    }
+  }
+
+  /** Sound for one of the extra tracks, which has to begin at zero so that it lines up with the picture. */
+  private encodeExtra(index: number, timestampUs: number, frames: number, data: Float32Array): void {
+    const extra = this.extras[index]
+    if (!extra.started) {
+      extra.started = true
+      // Silence from the start up to where the first sound lies, a second at a time.
+      let at = 0
+      while (at < timestampUs) {
+        const n = Math.min(SAMPLE_RATE, Math.round(((timestampUs - at) * SAMPLE_RATE) / 1_000_000))
+        if (n <= 0) break
+        this.encodeAudioOn(extra.encoder, at, n, new Float32Array(n * CHANNELS))
+        at += Math.round((n / SAMPLE_RATE) * 1_000_000)
+      }
+    }
+    this.encodeAudioOn(extra.encoder, timestampUs, frames, data)
   }
 
   private encodeAudio(timestampUs: number, frames: number, data: Float32Array): void {
-    if (!this.audioEncoder) return
+    if (this.audioEncoder) this.encodeAudioOn(this.audioEncoder, timestampUs, frames, data)
+  }
+
+  private encodeAudioOn(encoder: AudioEncoderLike, timestampUs: number, frames: number, data: Float32Array): void {
     const audio = this.deps.createAudioData({ timestampUs, frames, data })
     try {
-      this.audioEncoder.encode(audio)
+      encoder.encode(audio)
     } finally {
       // The encoder takes its own reference. Leaving this open leaks about
       // 0.4 MB/s and, after roughly seven and a half minutes, the audio stops
@@ -313,10 +367,13 @@ export class EncoderSession {
     try {
       await this.videoEncoder.flush()
       if (this.audioEncoder) await this.audioEncoder.flush()
+      for (const extra of this.extras) await extra.encoder.flush()
       this.muxer.finalize()
+      for (const extra of this.extras) extra.muxer.finalize()
     } finally {
       closeQuietly(this.videoEncoder)
       closeQuietly(this.audioEncoder)
+      for (const extra of this.extras) closeQuietly(extra.encoder)
     }
   }
 
@@ -326,6 +383,7 @@ export class EncoderSession {
     this.finished = true
     closeQuietly(this.videoEncoder)
     closeQuietly(this.audioEncoder)
+    for (const extra of this.extras) closeQuietly(extra.encoder)
   }
 
   private fail(message: string): void {
