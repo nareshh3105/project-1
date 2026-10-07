@@ -26,11 +26,14 @@ import { PRESETS, presetOf, presetPatch, type PresetId } from '@/lib/presets'
  */
 const LabelContext = createContext<string | undefined>(undefined)
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, hint, children }: { label: string; /** A note under the label, inside the row so the divider does not cut through it. */ hint?: string; children: React.ReactNode }) {
   const labelId = useId()
   return (
     <div className="flex items-center justify-between gap-6 py-2.5 border-b border-bg-divider/40 last:border-0">
-      <span id={labelId} className="text-body text-text-secondary flex-shrink-0 w-52">{label}</span>
+      <div className="flex-shrink-0 w-52">
+        <span id={labelId} className="block text-body text-text-secondary">{label}</span>
+        {hint && <span className="block mt-0.5 text-caption text-text-muted">{hint}</span>}
+      </div>
       <div className="flex-1 flex justify-end">
         <LabelContext.Provider value={labelId}>{children}</LabelContext.Provider>
       </div>
@@ -71,14 +74,16 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
       aria-labelledby={labelledBy}
       onClick={() => onChange(!value)}
       className={cn(
-        'w-9 h-5 rounded-full relative transition-colors flex-shrink-0',
-        value ? 'bg-accent-start' : 'bg-bg-panel border border-bg-divider'
+        // The border is always there (clear when on) so the thumb sits in the same place either way.
+        'w-9 h-5 rounded-full relative transition-colors flex-shrink-0 border',
+        value ? 'bg-accent-start border-transparent' : 'bg-bg-panel border-bg-divider'
       )}
     >
+      {/* Positioned from the inside of the border: 2px of room on each side, 14px of travel. */}
       <span
         className={cn(
-          'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm',
-          value ? 'translate-x-4' : 'translate-x-0.5'
+          'absolute left-0.5 top-px w-4 h-4 rounded-full bg-white transition-transform shadow-sm',
+          value ? 'translate-x-[14px]' : 'translate-x-0'
         )}
       />
     </button>
@@ -104,16 +109,13 @@ function GeneralTab({
   return (
     <div>
       <SectionHeader title="Application" />
-      <Row label="Language">
+      <Row label="Language" hint="The interface is in English only for now.">
         <Sel
           value={draft.language}
           onChange={(v) => set({ language: v })}
           options={[{ value: 'en-US', label: 'English (US)' }]}
         />
       </Row>
-      <p className="text-caption text-text-muted -mt-1 mb-2">
-        The interface is in English only for now.
-      </p>
       <Row label="Update channel">
         <Sel
           value={draft.updateChannel}
@@ -373,8 +375,19 @@ function OutputTab({
           options={[96, 128, 160, 192, 256, 320].map((k) => ({ value: String(k), label: `${k} kbps` }))}
         />
       </Row>
+      <Row label="Audio Tracks">
+        <Sel
+          value={String(draft.audioTracks ?? 1)}
+          onChange={(v) => set({ audioTracks: Number(v) as 1 | 2 | 3 })}
+          options={[
+            { value: '1', label: 'One track (everything mixed)' },
+            { value: '2', label: 'Two: mix, and microphone alone' },
+            { value: '3', label: 'Three: mix, microphone, and everything else' },
+          ]}
+        />
+      </Row>
       <p className="text-caption text-text-muted mt-3">
-        Resolution and frame rate come from the Video tab. What you hear in the audio mixer,
+        Extra tracks apply to recordings only. Resolution and frame rate come from the Video tab. What you hear in the audio mixer,
         at the levels you set, is what is recorded and streamed.
       </p>
     </div>

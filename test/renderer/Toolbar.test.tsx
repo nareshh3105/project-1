@@ -6,7 +6,7 @@ import { installBridge, removeBridge, type BridgeStub } from '../mocks/bridge'
 
 /**
  * Toolbar toasts are the only feedback for actions that report nothing else —
- * a screenshot that failed to save says so here or nowhere.
+ * a recordings folder that cannot be opened says so here or nowhere.
  */
 
 let Toolbar: typeof import('../../src/components/layout/Toolbar')['Toolbar']
@@ -27,25 +27,39 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const screenshotButton = () => screen.getByRole('button', { name: /screenshot/i })
+const folderButton = () => screen.getByRole('button', { name: /open recording folder/i })
 
-describe('transient feedback', () => {
-  it('reports where a screenshot was saved', async () => {
-    bridge.reply('take_screenshot', 'C:\\shots\\frame_01.png')
+describe('the buttons', () => {
+  // Screenshot and Settings are in the Controls panel. They were on both, so each had two buttons.
+  it('does not repeat what the Controls panel has', () => {
     render(<Toolbar />)
-
-    await userEvent.click(screenshotButton())
-
-    expect(await screen.findByText(/frame_01\.png/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /screenshot/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^settings$/i })).toBeNull()
   })
 
+  it('keeps the ones that are only here', () => {
+    render(<Toolbar />)
+    for (const name of [/studio mode/i, /fullscreen preview/i, /stats/i, /multiview/i, /open recording folder/i]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+})
+
+describe('transient feedback', () => {
   it('surfaces a failure instead of staying silent', async () => {
-    bridge.fail('take_screenshot', 'disk full')
+    bridge.fail('open_recordings_folder', 'The folder is missing')
     render(<Toolbar />)
 
-    await userEvent.click(screenshotButton())
+    await userEvent.click(folderButton())
 
-    expect(await screen.findByText(/disk full/)).toBeInTheDocument()
+    expect(await screen.findByText(/folder is missing/)).toBeInTheDocument()
+  })
+
+  it('shows nothing when it works', async () => {
+    render(<Toolbar />)
+    await userEvent.click(folderButton())
+    expect(bridge.argsFor('open_recordings_folder')).toBeDefined()
+    expect(document.querySelector('span[title]')).toBeNull()
   })
 
   /**
@@ -57,26 +71,26 @@ describe('transient feedback', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
-    bridge.reply('take_screenshot', 'C:\\shots\\first.png')
+    bridge.fail('open_recordings_folder', 'first failure')
     render(<Toolbar />)
 
-    await user.click(screenshotButton())
-    await waitFor(() => expect(screen.getByText(/first\.png/)).toBeInTheDocument())
+    await user.click(folderButton())
+    await waitFor(() => expect(screen.getByText(/first failure/)).toBeInTheDocument())
 
     // Most of the first toast's life elapses.
     await act(async () => { vi.advanceTimersByTime(TOAST_MS - 500) })
 
-    bridge.reply('take_screenshot', 'C:\\shots\\second.png')
-    await user.click(screenshotButton())
-    await waitFor(() => expect(screen.getByText(/second\.png/)).toBeInTheDocument())
+    bridge.fail('open_recordings_folder', 'second failure')
+    await user.click(folderButton())
+    await waitFor(() => expect(screen.getByText(/second failure/)).toBeInTheDocument())
 
     // The first toast's original deadline passes; the second must survive it.
     await act(async () => { vi.advanceTimersByTime(1000) })
-    expect(screen.getByText(/second\.png/)).toBeInTheDocument()
+    expect(screen.getByText(/second failure/)).toBeInTheDocument()
 
     // And still disappear on its own schedule.
     await act(async () => { vi.advanceTimersByTime(TOAST_MS) })
-    await waitFor(() => expect(screen.queryByText(/second\.png/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/second failure/)).toBeNull())
   })
 
   it('cancels its timer when unmounted', async () => {
@@ -84,10 +98,10 @@ describe('transient feedback', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout')
 
-    bridge.reply('take_screenshot', 'C:\\shots\\frame.png')
+    bridge.fail('open_recordings_folder', 'a failure')
     const view = render(<Toolbar />)
-    await user.click(screenshotButton())
-    await waitFor(() => expect(screen.getByText(/frame\.png/)).toBeInTheDocument())
+    await user.click(folderButton())
+    await waitFor(() => expect(screen.getByText(/a failure/)).toBeInTheDocument())
 
     view.unmount()
     expect(clearSpy).toHaveBeenCalled()

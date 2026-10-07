@@ -2,7 +2,7 @@ import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
-import { useSceneStore } from '@/stores/sceneStore'
+import { useSceneStore, claimSceneName } from '@/stores/sceneStore'
 import { useCollectionStore } from '@/stores/collectionStore'
 import { useProfileStore } from '@/stores/profileStore'
 import { usePluginStore } from '@/stores/pluginStore'
@@ -191,7 +191,7 @@ export function MenuBar() {
       >
         {/* ── File ── */}
         <Menu label="File">
-          <Item label="New Scene"              onSelect={() => createScene(`Scene ${scenes.length + 1}`)} />
+          <Item label="New Scene"              onSelect={() => createScene(claimSceneName(useSceneStore.getState().collectionId ?? '', scenes.map((s) => s.name)))} />
           <Item label="New Scene Collection…"  onSelect={() => openModal('scene-collection')} />
           <Sep />
           <Item label="Import Scene Collection…" onSelect={() => importCollection()} />

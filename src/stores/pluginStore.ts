@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { toErrorMessage } from '@/lib/errors'
 import { immer } from 'zustand/middleware/immer'
 import { ipc } from '@/ipc'
 import type { PluginDto } from '@/ipc'
@@ -40,7 +41,7 @@ export const usePluginStore = create<PluginStoreState & PluginStoreActions>()(
         const dtos = await ipc.plugin.list()
         set((s) => { s.plugins = dtos.map(toItem); s.loading = false })
       } catch (err) {
-        set((s) => { s.error = String(err); s.loading = false })
+        set((s) => { s.error = toErrorMessage(err); s.loading = false })
       }
     },
 
@@ -50,7 +51,7 @@ export const usePluginStore = create<PluginStoreState & PluginStoreActions>()(
         const dtos = await ipc.plugin.discover()
         set((s) => { s.plugins = dtos.map(toItem); s.loading = false })
       } catch (err) {
-        set((s) => { s.error = String(err); s.loading = false })
+        set((s) => { s.error = toErrorMessage(err); s.loading = false })
       }
     },
 
@@ -81,7 +82,7 @@ export const usePluginStore = create<PluginStoreState & PluginStoreActions>()(
         await ipc.plugin.disable(id).catch(() => {})
         set((s) => {
           const p = s.plugins.find((p) => p.id === id)
-          if (p) { p.state = 'error'; p.errorMessage = String(err) }
+          if (p) { p.state = 'error'; p.errorMessage = toErrorMessage(err) }
         })
       }
     },

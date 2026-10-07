@@ -292,3 +292,64 @@ describe('collection commands', () => {
     expect(updated.name).toBe('Renamed')
   })
 })
+
+describe('scene names are unique within a collection', () => {
+  let collectionId: string
+  let first: SceneDto
+
+  beforeEach(async () => {
+    const init = await initDefault()
+    collectionId = init.collectionId
+    first = init.scenes[0]
+  })
+
+  const names = async () => ((await mod.invoke('list_scenes', { collectionId })) as SceneDto[]).map((s) => s.name)
+  const second = async () => (await mod.invoke('create_scene', { collectionId, name: 'Second' })) as SceneDto
+
+  it('refuses to rename a scene to another scene\'s name', async () => {
+    const two = await second()
+    await expect(mod.invoke('rename_scene', { id: two.id, name: 'Scene 1' })).rejects.toMatch(/already exists/)
+    expect(await names()).toEqual(['Scene 1', 'Second'])
+  })
+
+  it('treats case and surrounding spaces as the same name', async () => {
+    const two = await second()
+    await expect(mod.invoke('rename_scene', { id: two.id, name: '  SCENE 1 ' })).rejects.toMatch(/already exists/)
+  })
+
+  it('lets a scene keep its own name, or change only its case', async () => {
+    await mod.invoke('rename_scene', { id: first.id, name: 'Scene 1' })
+    await mod.invoke('rename_scene', { id: first.id, name: 'scene 1' })
+    expect(await names()).toEqual(['scene 1'])
+  })
+
+  it('refuses an empty name', async () => {
+    await expect(mod.invoke('rename_scene', { id: first.id, name: '   ' })).rejects.toMatch(/needs a name/)
+  })
+
+  it('allows a name that another collection uses', async () => {
+    await mod.invoke('create_scene', { collectionId, name: 'Shared' })
+    const other = (await mod.invoke('create_collection', { name: 'Other' })) as { collection: CollectionDto; scenes: SceneDto[] }
+    await mod.invoke('rename_scene', { id: other.scenes[0].id, name: 'Shared' })
+    const list = (await mod.invoke('list_scenes', { collectionId: other.collection.id })) as SceneDto[]
+    expect(list.map((s) => s.name)).toEqual(['Shared'])
+  })
+
+  it('numbers a created scene whose name is taken', async () => {
+    const again = (await mod.invoke('create_scene', { collectionId, name: 'Scene 1' })) as SceneDto
+    const third = (await mod.invoke('create_scene', { collectionId, name: 'scene 1' })) as SceneDto
+    expect(again.name).toBe('Scene 1 2')
+    expect(third.name).toBe('scene 1 3')
+  })
+
+  it('names a second copy differently from the first', async () => {
+    const one = (await mod.invoke('duplicate_scene', { id: first.id, collectionId })) as { scene: SceneDto }
+    const two = (await mod.invoke('duplicate_scene', { id: first.id, collectionId })) as { scene: SceneDto }
+    expect(one.scene.name).toBe('Scene 1 (copy)')
+    expect(two.scene.name).toBe('Scene 1 (copy) 2')
+  })
+
+  it('refuses to rename a scene that does not exist', async () => {
+    await expect(mod.invoke('rename_scene', { id: 'missing', name: 'X' })).rejects.toMatch(/not found/i)
+  })
+})

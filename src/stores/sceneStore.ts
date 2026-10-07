@@ -33,16 +33,48 @@ function makeLocalScene(name: string, collectionId: string, orderIndex: number):
   return { id: generateId(), collectionId, name, orderIndex, createdAt: now, updatedAt: now }
 }
 
+const SCENE_NUMBER = /^Scene (\d+)$/
+
 /**
- * The lowest "Scene N" not already taken. Counting existing scenes instead
- * collides as soon as one is deleted: with Scene 1 and Scene 3 left, the
- * count is two and the next scene came out as a second "Scene 3".
+ * The next "Scene N": one more than the highest number used so far, like OBS.
+ *
+ * `issued` is the highest number this session has handed out. Without it, deleting
+ * the newest scene gave its name away again (delete "Scene 3", add one, get
+ * "Scene 3"); with it the name is not reused until the app is restarted.
  */
-export function nextSceneName(existing: readonly string[]): string {
-  const taken = new Set(existing)
-  let n = 1
-  while (taken.has(`Scene ${n}`)) n++
-  return `Scene ${n}`
+export function nextSceneName(existing: readonly string[], issued = 0): string {
+  let highest = issued
+  for (const name of existing) {
+    const m = SCENE_NUMBER.exec(name.trim())
+    if (m) highest = Math.max(highest, Number(m[1]))
+  }
+  return `Scene ${highest + 1}`
+}
+
+/** The highest "Scene N" handed out this session, for each collection. */
+const issuedNumbers = new Map<string, number>()
+
+/** The name for a new scene, remembered so that it is not handed out again. */
+export function claimSceneName(collectionId: string, existing: readonly string[]): string {
+  const name = nextSceneName(existing, issuedNumbers.get(collectionId) ?? 0)
+  issuedNumbers.set(collectionId, Number(SCENE_NUMBER.exec(name)![1]))
+  return name
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** Whether another scene already has this name. Case and surrounding spaces do not make a name different. */
+export function isSceneNameTaken(scenes: readonly Pick<SceneItem, 'id' | 'name'>[], name: string, exceptId?: string): boolean {
+  return scenes.some((s) => s.id !== exceptId && sameName(s.name, name))
+}
+
+/** `wanted`, or the first of "wanted 2", "wanted 3", ... that is free. */
+export function uniqueSceneName(existing: readonly string[], wanted: string): string {
+  if (!existing.some((n) => sameName(n, wanted))) return wanted
+  for (let n = 2; ; n++) {
+    const candidate = `${wanted} ${n}`
+    if (!existing.some((x) => sameName(x, candidate))) return candidate
+  }
 }
 
 /**
@@ -147,6 +179,7 @@ export const useSceneStore = create<SceneState & SceneActions>()(
       const { collectionId, scenes } = get()
       if (!collectionId) return
 
+      name = uniqueSceneName(scenes.map((x) => x.name), name)
       const optimistic = makeLocalScene(name, collectionId, scenes.length)
       set((s) => { s.scenes.push(optimistic) })
 
@@ -163,6 +196,12 @@ export const useSceneStore = create<SceneState & SceneActions>()(
     },
 
     renameScene: async (id, name) => {
+      name = name.trim()
+      if (!name) return
+      if (isSceneNameTaken(get().scenes, name, id)) {
+        useNotifyStore.getState().notify('error', `A scene named "${name}" already exists in this collection.`)
+        return
+      }
       const previous = get().scenes.find((x) => x.id === id)?.name
       set((s) => {
         const scene = s.scenes.find((x) => x.id === id)
@@ -225,7 +264,7 @@ export const useSceneStore = create<SceneState & SceneActions>()(
       const orig = scenes.find((s) => s.id === id)
       if (!orig) return
 
-      const copy = makeLocalScene(`${orig.name} (copy)`, collectionId, scenes.length)
+      const copy = makeLocalScene(uniqueSceneName(scenes.map((x) => x.name), `${orig.name} (copy)`), collectionId, scenes.length)
       set((s) => { s.scenes.push(copy) })
 
       try {

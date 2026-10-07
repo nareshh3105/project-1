@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toErrorMessage } from '@/lib/errors'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
@@ -45,7 +46,7 @@ export function UpdaterModal() {
         setNoUpdate(true)
       }
     } catch (e) {
-      setError(String(e))
+      setError(toErrorMessage(e))
     } finally {
       setChecking(false)
     }
@@ -64,7 +65,7 @@ export function UpdaterModal() {
       await ipc.updater.install()
       setInstalled(true)
     } catch (e) {
-      setError(String(e))
+      setError(toErrorMessage(e))
     } finally {
       unlisten()
       setInstalling(false)

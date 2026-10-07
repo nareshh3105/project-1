@@ -183,10 +183,13 @@ describe('naming a new scene', () => {
     expect(nextSceneName(['Scene 1', 'Scene 2'])).toBe('Scene 3')
   })
 
-  // The old rule was `Scene ${count + 1}`: with Scene 1 and Scene 3 left the
-  // count is two, so the next scene came out as a second "Scene 3".
-  it('does not repeat a name after a deletion', () => {
-    expect(nextSceneName(['Scene 1', 'Scene 3'])).toBe('Scene 2')
+  // OBS keeps counting: after Scene 2 is deleted the next new scene is Scene 4, not a second Scene 2.
+  it('goes on from the highest number, leaving gaps alone', () => {
+    expect(nextSceneName(['Scene 1', 'Scene 3'])).toBe('Scene 4')
+  })
+
+  it('does not give back the number of a scene that was deleted this session', () => {
+    expect(nextSceneName(['Scene 1', 'Scene 2'], 3)).toBe('Scene 4')
   })
 
   it('ignores names that merely look similar', () => {

@@ -1,5 +1,5 @@
 import { IPC_EVENTS } from '@/lib/constants'
-import { IpcError } from '@/lib/errors'
+import { IpcError, remoteMessage } from '@/lib/errors'
 import type { RuntimeStats } from '@/stores/uiStore'
 import type { SourceType } from '@/types'
 import type { PageUpdate } from '../../shared/host'
@@ -43,10 +43,7 @@ async function cmd<T>(command: string, args?: Record<string, unknown>): Promise<
   try {
     return await bridge().invoke<T>(command, args)
   } catch (err) {
-    throw new IpcError(
-      typeof err === 'string' ? err : `Command "${command}" failed`,
-      { command, args }
-    )
+    throw new IpcError(remoteMessage(err, command), { command, args })
   }
 }
 

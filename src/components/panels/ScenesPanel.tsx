@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Copy, Trash2, Edit2 } from 'lucide-react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { useSceneStore, nextSceneName, type SceneItem } from '@/stores/sceneStore'
+import { useSceneStore, claimSceneName, isSceneNameTaken, type SceneItem } from '@/stores/sceneStore'
 import { useSourceStore } from '@/stores/sourceStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useTransitionStore, type TransitionType } from '@/stores/transitionStore'
@@ -48,7 +48,8 @@ export function ScenesPanel() {
   }
 
   async function handleAddScene() {
-    await createScene(nextSceneName(scenes.map((s) => s.name)))
+    const { collectionId, scenes: current } = useSceneStore.getState()
+    await createScene(claimSceneName(collectionId ?? '', current.map((s) => s.name)))
   }
 
   return (
@@ -103,6 +104,8 @@ export function ScenesPanel() {
         open={!!renameTarget}
         title="Rename Scene"
         current={renameTarget?.name ?? ''}
+        validate={(name) => isSceneNameTaken(useSceneStore.getState().scenes, name, renameTarget?.id)
+          ? `A scene named "${name}" already exists.` : null}
         onConfirm={(name) => renameTarget && useSceneStore.getState().renameScene(renameTarget.id, name)}
         onClose={() => setRenameTarget(null)}
       />

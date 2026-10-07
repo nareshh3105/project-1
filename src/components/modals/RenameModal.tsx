@@ -8,10 +8,12 @@ interface RenameModalProps {
   current: string
   confirmLabel?: string
   onConfirm: (name: string) => void
+  /** A reason the name cannot be used, or null if it can. Shown under the box; the dialog stays open. */
+  validate?: (name: string) => string | null
   onClose: () => void
 }
 
-export function RenameModal({ open, title, current, confirmLabel = 'Rename', onConfirm, onClose }: RenameModalProps) {
+export function RenameModal({ open, title, current, confirmLabel = 'Rename', onConfirm, validate, onClose }: RenameModalProps) {
   const [value, setValue] = useState(current)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -22,8 +24,11 @@ export function RenameModal({ open, title, current, confirmLabel = 'Rename', onC
     }
   }, [open, current])
 
+  const trimmed = value.trim()
+  const problem = trimmed && trimmed !== current ? validate?.(trimmed) ?? null : null
+
   function submit() {
-    const trimmed = value.trim()
+    if (problem) return
     if (trimmed && trimmed !== current) onConfirm(trimmed)
     onClose()
   }
@@ -55,7 +60,9 @@ export function RenameModal({ open, title, current, confirmLabel = 'Rename', onC
               'focus:outline-none focus:border-accent-start focus:shadow-glow',
               'transition-colors'
             )}
+            aria-invalid={!!problem}
           />
+          {problem && <p role="alert" className="-mt-2 text-caption text-red-400">{problem}</p>}
 
           <div className="flex justify-end gap-2">
             <button
@@ -66,7 +73,8 @@ export function RenameModal({ open, title, current, confirmLabel = 'Rename', onC
             </button>
             <button
               onClick={submit}
-              className="h-7 px-3 rounded-button text-caption font-medium text-white bg-accent-gradient hover:opacity-90 transition-opacity"
+              disabled={!!problem}
+              className="h-7 px-3 rounded-button text-caption font-medium text-white bg-accent-gradient hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {confirmLabel}
             </button>

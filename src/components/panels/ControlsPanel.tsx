@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { toErrorMessage } from '@/lib/errors'
 import { Radio, Circle, Camera, RotateCcw, Video, Settings, Square, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
@@ -48,7 +49,7 @@ export function ControlsPanel() {
         await startRecording()
       }
     } catch (e) {
-      setRecError(String(e))
+      setRecError(toErrorMessage(e))
     } finally {
       setRecLoading(false)
     }
@@ -65,7 +66,7 @@ export function ControlsPanel() {
         await startReplayBuffer()
       }
     } catch (e) {
-      setReplayError(String(e))
+      setReplayError(toErrorMessage(e))
     } finally {
       setReplayLoading(false)
     }
@@ -79,7 +80,7 @@ export function ControlsPanel() {
       setReplaySaved(path)
       later(() => setReplaySaved(null), 5000)
     } catch (e) {
-      setReplayError(String(e))
+      setReplayError(toErrorMessage(e))
     }
   }
 
@@ -93,7 +94,7 @@ export function ControlsPanel() {
         await startVirtualCamera()
       }
     } catch (e) {
-      setVcamError(String(e))
+      setVcamError(toErrorMessage(e))
     } finally {
       setVcamLoading(false)
     }
@@ -107,7 +108,7 @@ export function ControlsPanel() {
       setScreenshotMsg(path.split(/[/\\]/).pop() ?? 'Saved')
       later(() => setScreenshotMsg(null), 4000)
     } catch (e) {
-      setScreenshotErr(String(e))
+      setScreenshotErr(toErrorMessage(e))
       later(() => setScreenshotErr(null), 4000)
     }
   }
@@ -115,7 +116,7 @@ export function ControlsPanel() {
   function handleStreaming() {
     setStreamError(null)
     if (streaming.active) {
-      ipc.output.stopStreaming().catch((e) => setStreamError(String(e)))
+      ipc.output.stopStreaming().catch((e) => setStreamError(toErrorMessage(e)))
     } else {
       // Open stream settings modal — it handles start on confirm
       openModal('stream-settings')

@@ -3,6 +3,9 @@ import { useOutputStore } from '@/stores/outputStore'
 import { formatBitrate, formatDuration } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 
+/** `elapsed` in the output store counts seconds; formatDuration takes milliseconds. */
+const clock = (seconds: number) => formatDuration(seconds * 1000)
+
 export function StatusBar() {
   const stats = useUIStore((s) => s.stats)
   const { recording, streaming, replayBuffer, virtualCamera, ffmpegAvailable, struggling } = useOutputStore((s) => ({
@@ -26,14 +29,14 @@ export function StatusBar() {
       {/* Stream status */}
       <StatusPill
         label="STREAM"
-        value={isLive ? formatDuration(streaming.elapsed) : 'Offline'}
+        value={isLive ? clock(streaming.elapsed) : 'Offline'}
         color={isLive ? 'live' : 'muted'}
       />
 
       {/* Recording status */}
       <StatusPill
         label="REC"
-        value={isRec ? formatDuration(recording.elapsed) : 'Stopped'}
+        value={isRec ? clock(recording.elapsed) : 'Stopped'}
         color={isRec ? 'recording' : 'muted'}
       />
 
@@ -73,10 +76,10 @@ export function StatusBar() {
       <StatItem
         label="Duration"
         value={isRec
-          ? formatDuration(recording.elapsed)
+          ? clock(recording.elapsed)
           : isLive
-          ? formatDuration(streaming.elapsed)
-          : formatDuration(0)
+          ? clock(streaming.elapsed)
+          : clock(0)
         }
       />
     </footer>

@@ -33,6 +33,24 @@ function insertScene(collectionId: string, name: string, orderIndex: number) {
   return row
 }
 
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** The names of a collection's scenes, apart from one being renamed. */
+function namesIn(collectionId: string, exceptId?: string): string[] {
+  return (getDb()
+    .prepare(`SELECT name FROM scenes WHERE collection_id = ? AND id IS NOT ?`)
+    .all(collectionId, exceptId ?? null) as Array<{ name: string }>).map((r) => r.name)
+}
+
+/** `wanted`, or the first of "wanted 2", "wanted 3", ... that no scene in the collection has. */
+export function freeName(existing: readonly string[], wanted: string): string {
+  if (!existing.some((n) => sameName(n, wanted))) return wanted
+  for (let n = 2; ; n++) {
+    const candidate = `${wanted} ${n}`
+    if (!existing.some((x) => sameName(x, candidate))) return candidate
+  }
+}
+
 export function registerSceneCommands() {
   /**
    * Called once at startup. Creates the default collection and its first scene
@@ -74,13 +92,21 @@ export function registerSceneCommands() {
       )
       .get(collectionId as string) as { n: number }
 
-    return toScene(insertScene(collectionId as string, name as string, next.n))
+    return toScene(insertScene(collectionId as string, freeName(namesIn(collectionId as string), String(name).trim()), next.n))
   })
 
   command('rename_scene', ({ id, name }) => {
-    getDb()
-      .prepare(`UPDATE scenes SET name = ?, updated_at = ? WHERE id = ?`)
-      .run(name as string, now(), id as string)
+    const db = getDb()
+    const wanted = String(name ?? '').trim()
+    if (!wanted) throw new Error('A scene needs a name.')
+
+    const scene = db.prepare(`SELECT collection_id FROM scenes WHERE id = ?`).get(id as string) as { collection_id: string } | undefined
+    if (!scene) throw new Error('Scene not found')
+    if (namesIn(scene.collection_id, id as string).some((n) => sameName(n, wanted))) {
+      throw new Error(`A scene named "${wanted}" already exists in this collection.`)
+    }
+
+    db.prepare(`UPDATE scenes SET name = ?, updated_at = ? WHERE id = ?`).run(wanted, now(), id as string)
   })
 
   command('delete_scene', ({ id }) => {
@@ -116,7 +142,7 @@ export function registerSceneCommands() {
     return db.transaction(() => {
       const scene = insertScene(
         collectionId as string,
-        `${original.name} (copy)`,
+        freeName(namesIn(collectionId as string), `${original.name} (copy)`),
         next.n,
       )
 

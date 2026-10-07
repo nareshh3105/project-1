@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toErrorMessage } from '@/lib/errors'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Eye, EyeOff } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
@@ -43,7 +44,7 @@ export function StreamSettingsModal() {
       await startStreaming(url, streamKey.trim())
       closeModal()
     } catch (e) {
-      setError(String(e))
+      setError(toErrorMessage(e))
     } finally {
       setStarting(false)
     }

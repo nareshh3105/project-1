@@ -1,12 +1,11 @@
 import {
   Layers2,
   Maximize2,
-  Camera,
   BarChart2,
   Grid2X2,
   FolderOpen,
-  Settings,
 } from 'lucide-react'
+import { toErrorMessage } from '@/lib/errors'
 import { useState, useRef, useEffect } from 'react'
 import { useUIStore } from '@/stores/uiStore'
 import { ipc } from '@/ipc'
@@ -22,6 +21,10 @@ interface ToolbarButton {
 /** How long transient toolbar feedback stays on screen. */
 const TOAST_MS = 3500
 
+/**
+ * Screenshot and Settings are in the Controls panel; they are not repeated here.
+ * Having both put two buttons on screen for each.
+ */
 export function Toolbar() {
   const {
     studioMode, statsOverlayVisible, fullscreenPreview,
@@ -52,20 +55,11 @@ export function Toolbar() {
     dismiss.current = setTimeout(() => setToast(null), TOAST_MS)
   }
 
-  async function handleScreenshot() {
-    try {
-      const path = await ipc.screenshot.take()
-      flash(`Saved ${path.split(/[/\\]/).pop()}`)
-    } catch (e) {
-      flash(String(e), true)
-    }
-  }
-
   async function handleOpenRecordings() {
     try {
       await ipc.output.openRecordingsFolder()
     } catch (e) {
-      flash(String(e), true)
+      flash(toErrorMessage(e), true)
     }
   }
 
@@ -83,11 +77,6 @@ export function Toolbar() {
       active: fullscreenPreview,
     },
     {
-      icon:   <Camera size={16} />,
-      title:  'Screenshot',
-      action: handleScreenshot,
-    },
-    {
       icon:   <BarChart2 size={16} />,
       title:  'Stats',
       action: toggleStatsOverlay,
@@ -102,11 +91,6 @@ export function Toolbar() {
       icon:   <FolderOpen size={16} />,
       title:  'Open Recording Folder',
       action: handleOpenRecordings,
-    },
-    {
-      icon:   <Settings size={16} />,
-      title:  'Settings',
-      action: () => openModal('settings'),
     },
   ]
 
