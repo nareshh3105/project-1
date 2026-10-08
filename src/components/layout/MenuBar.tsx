@@ -169,7 +169,11 @@ export function MenuBar() {
     try {
       if (virtualCamera.active) await ipc.output.stopVirtualCamera()
       else                      await startVirtualCamera()
-    } catch { /* surfaced in ControlsPanel */ }
+    } catch (e) { reportFailure(virtualCamera.active ? 'stop the virtual camera' : 'start the virtual camera', e) }
+  }
+
+  async function removeVirtualCamera() {
+    try { await ipc.output.uninstallVirtualCamera() } catch (e) { reportFailure('remove the virtual camera', e) }
   }
 
   return (
@@ -290,6 +294,11 @@ export function MenuBar() {
             label={virtualCamera.active ? 'Stop Virtual Camera' : 'Start Virtual Camera'}
             disabled={noFfmpeg && !virtualCamera.active}
             onSelect={toggleVirtualCamera}
+          />
+          <Item
+            label="Remove Virtual Camera…"
+            disabled={virtualCamera.active}
+            onSelect={removeVirtualCamera}
           />
           <Sep />
           <Item label="Stream Settings…" onSelect={() => openModal('stream-settings')} />

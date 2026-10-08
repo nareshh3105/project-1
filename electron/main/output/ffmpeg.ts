@@ -1,8 +1,8 @@
 import { spawn, spawnSync, type ChildProcessByStdio } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 
-/** stdout is discarded, so it is null; stdin and stderr are pipes. */
-type FfmpegProcess = ChildProcessByStdio<Writable, null, Readable>
+/** stdout is discarded unless asked for (then it is a pipe); stdin and stderr are pipes. */
+type FfmpegProcess = ChildProcessByStdio<Writable, Readable | null, Readable>
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -196,15 +196,15 @@ const STDERR_LINES = 40
  * surfaced as a bare non-zero exit with nothing to act on. Keeping the last
  * few lines is what lets start/stop report why something did not work.
  */
-export function spawnFfmpeg(args: string[], options: { piped?: boolean } = {}): Session {
-  const child: FfmpegProcess = spawn(ffmpegBinary(), args, {
-    stdio: ['pipe', 'ignore', 'pipe'],
+export function spawnFfmpeg(args: string[], options: { piped?: boolean; stdout?: boolean } = {}): Session {
+  const child = spawn(ffmpegBinary(), args, {
+    stdio: ['pipe', options.stdout ? 'pipe' : 'ignore', 'pipe'],
     windowsHide: true,
   })
 
   const stderr: string[] = []
-  child.stderr.setEncoding('utf8')
-  child.stderr.on('data', (chunk: string) => {
+  child.stderr!.setEncoding('utf8')
+  child.stderr!.on('data', (chunk: string) => {
     for (const line of chunk.split(/\r?\n/)) {
       if (!line.trim()) continue
       stderr.push(line)
@@ -216,13 +216,14 @@ export function spawnFfmpeg(args: string[], options: { piped?: boolean } = {}): 
     // Writing to a pipe whose reader has died raises an 'error' on stdin. With
     // no listener that is an uncaught exception, which takes down the whole
     // application, so it is recorded alongside FFmpeg's own output instead.
-    child.stdin.on('error', (e: Error) => {
+    child.stdin!.on('error', (e: Error) => {
       stderr.push(`stdin: ${e.message}`)
       if (stderr.length > STDERR_LINES) stderr.shift()
     })
   }
 
-  return options.piped ? { child, stderr, piped: true } : { child, stderr }
+  const typed = child as unknown as FfmpegProcess
+  return options.piped ? { child: typed, stderr, piped: true } : { child: typed, stderr }
 }
 
 /**

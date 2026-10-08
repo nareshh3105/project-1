@@ -19,9 +19,12 @@ import { createTrackPipe, type TrackPipe } from '../output/trackPipes'
 import { OutputHealth } from '../output/health'
 import { getHost, hostEvents } from '../host/instance'
 import { log } from '../diagnostics/logger'
+import { dialog } from 'electron'
+import { ensureInstalled, startCamera, defaultInstallDeps } from '../vcam/camera'
+import { vcamFiles, vcamState, uninstallCamera } from '../vcam/install'
+import { VCAM_WIDTH, VCAM_HEIGHT, VCAM_FPS, VCAM_NAME } from '../vcam/frames'
 import type { HostEvent, OutputKind, SessionParams } from '../../../shared/host'
 
-const VIRTUAL_CAMERA_PORT = 12345
 const SEGMENT_SECONDS = 5
 
 /** How long to wait, once the host is sending, to see whether FFmpeg objected. */
@@ -59,6 +62,8 @@ interface OpenOptions {
   extra?: Record<string, unknown>
   /** Pipes carrying extra audio tracks, which FFmpeg's arguments already name. */
   pipes?: TrackPipe[]
+  /** Called with FFmpeg's standard output, for an output that reads it (the virtual camera). */
+  onStdout?: (chunk: Buffer) => void
 }
 
 /**
@@ -69,11 +74,12 @@ interface OpenOptions {
  * either half fails, both are torn down: a half-started output would show as
  * running in the interface while producing nothing.
  */
-async function openOutput({ kind, ffmpegArgs, params, extra = {}, pipes = [] }: OpenOptions): Promise<Session> {
+async function openOutput({ kind, ffmpegArgs, params, extra = {}, pipes = [], onStdout }: OpenOptions): Promise<Session> {
   if (closing.has(kind)) throw new Error(`The previous ${LABEL[kind]} is still finishing. Try again in a moment.`)
   requireFfmpeg()
 
-  const session = spawnFfmpeg(ffmpegArgs, { piped: true })
+  const session = spawnFfmpeg(ffmpegArgs, { piped: true, stdout: !!onStdout })
+  if (onStdout) session.child.stdout?.on('data', onStdout)
   registerSink(kind, session.child.stdin)
   pipes.forEach((pipe, i) => registerSink(`${kind}#${i + 2}`, pipe))
 
@@ -135,6 +141,7 @@ async function closeOutput(kind: OutputKind): Promise<Session | undefined> {
     await Promise.all(pipes.map((p) => p.end()))
     const clean = await finishPiped(session)
     if (!clean) log.warn(`ffmpeg had to be stopped for the ${kind} output`)
+    await (session.cleanup as (() => Promise<void>) | undefined)?.()
   } finally {
     closing.delete(kind)
   }
@@ -155,6 +162,7 @@ function watchForExit(kind: OutputKind, session: Session) {
     unregisterSink(kind)
     releasePipes(kind, (session.pipes as TrackPipe[] | undefined) ?? [])
     void getHost().request('closeSession', { kind }).catch(() => {})
+    void (session.cleanup as (() => Promise<void>) | undefined)?.()
 
     const why = detail(session)
     log.error(`${kind} output ended unexpectedly`, { code, ffmpeg: why })
@@ -364,18 +372,45 @@ export function registerOutputCommands() {
     if (isActive('virtualCamera')) throw new Error('Virtual camera is already active')
     requireFfmpeg()
 
-    const url = `udp://127.0.0.1:${VIRTUAL_CAMERA_PORT}`
+    // Installed once, with the person's say-so; Windows then asks for administrator approval.
+    const files = await ensureInstalled(defaultInstallDeps(async (message) => {
+      const { response } = await dialog.showMessageBox({
+        type: 'question', title: 'Virtual camera', message: 'Install the virtual camera?', detail: message,
+        buttons: ['Install', 'Cancel'], defaultId: 0, cancelId: 1, noLink: true,
+      })
+      return response === 0
+    }))
 
-    await openOutput({
-      kind: 'virtualCamera',
-      ffmpegArgs: virtualCameraArgs(url),
-      // No sound goes to a camera.
-      params: { ...normalizeParams(params), audio: false },
-      extra: { url },
-    })
+    const camera = await startCamera(files)
+    const label = `Choose "${VCAM_NAME}" in your app`
 
-    announce('virtualCamera', true, { url })
-    return url
+    try {
+      await openOutput({
+        kind: 'virtualCamera',
+        ffmpegArgs: virtualCameraArgs(VCAM_WIDTH, VCAM_HEIGHT, VCAM_FPS),
+        // The camera sends one fixed size and no sound.
+        params: { ...normalizeParams(params), audio: false, tracks: 1, width: VCAM_WIDTH, height: VCAM_HEIGHT, fps: VCAM_FPS },
+        extra: { url: label, cleanup: () => camera.stop() },
+        onStdout: camera.push,
+      })
+    } catch (err) {
+      await camera.stop()
+      throw err
+    }
+
+    announce('virtualCamera', true, { url: label })
+    return label
+  })
+
+  // Whether the camera is installed, for the interface to say so.
+  command('vcam_status', () => (vcamFiles() ? vcamState() : 'unavailable'))
+
+  command('vcam_uninstall', async () => {
+    const files = vcamFiles()
+    if (!files) throw new Error('This build of CodeBuilders does not include the virtual camera.')
+    if (isActive('virtualCamera')) throw new Error('Stop the virtual camera first.')
+    const result = await uninstallCamera(files)
+    if (!result.ok) throw new Error(result.cancelled ? 'The administrator approval was declined.' : result.message)
   })
 
   command('stop_virtual_camera', async () => {

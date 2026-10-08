@@ -3,6 +3,8 @@
 // webcam. This first version draws a moving test pattern; frames from the app
 // are added on top of it.
 
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
 #define WINVER 0x0A00
 #define _WIN32_WINNT 0x0A00
 #include <windows.h>

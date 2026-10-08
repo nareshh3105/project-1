@@ -107,9 +107,10 @@ that, and the newest file from `%APPDATA%\CodeBuilders\logs`.
   output device, and the file has one audio track.
 - Transitions play in Studio Mode (the Transition button). Clicking a scene in
   normal mode changes at once, as a cut.
-- The virtual camera is a video stream on `udp://127.0.0.1:12345` for other
-  programs that can open a network stream (OBS, VLC, FFmpeg). It does not
-  appear as a webcam in Zoom or Teams yet.
+- The virtual camera appears as a webcam called "CodeBuilders Virtual Camera"
+  (1280x720, 30 fps, no sound). The first time you start it, the app asks to
+  install it and Windows asks for administrator approval; it is installed once.
+  Remove it again with Tools, Remove Virtual Camera. See `docs/VIRTUAL_CAMERA.md`.
 - The interface is in English only.
 - Hotkey changes in Settings apply immediately and are not reverted by Cancel.
 - While recording, the whole of what you put on the canvas is captured. If a

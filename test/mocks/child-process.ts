@@ -26,6 +26,9 @@ export class FakeChild extends EventEmitter {
     setEncoding: vi.fn(),
   })
 
+  /** Only read by outputs that ask for it (the virtual camera). */
+  stdout = new EventEmitter()
+
   kill = vi.fn((signal?: string) => {
     this.exitCode = signal === 'SIGKILL' ? 137 : 0
     this.emit('exit', this.exitCode)

@@ -22,6 +22,35 @@ const host = vi.hoisted(() => ({
   events: null as unknown as import('node:events').EventEmitter,
 }))
 
+/** The camera's own pieces are tested on their own; here only how the output uses them. */
+const camera = vi.hoisted(() => ({
+  files: { dll: 'c.dll', host: 'h.exe', install: 'i.ps1', uninstall: 'u.ps1' } as unknown,
+  installed: true,
+  pushed: [] as Buffer[],
+  stops: 0,
+  startFails: null as Error | null,
+  ensureFails: null as Error | null,
+  asked: [] as string[],
+}))
+
+vi.mock('../../electron/main/vcam/camera', () => ({
+  defaultInstallDeps: (confirm: (m: string) => Promise<boolean>) => ({ confirm }),
+  ensureInstalled: async () => {
+    if (camera.ensureFails) throw camera.ensureFails
+    return camera.files
+  },
+  startCamera: async () => {
+    if (camera.startFails) throw camera.startFails
+    return { push: (c: Buffer) => { camera.pushed.push(c) }, stop: async () => { camera.stops++ } }
+  },
+}))
+
+vi.mock('../../electron/main/vcam/install', () => ({
+  vcamFiles: () => camera.files,
+  vcamState: () => (camera.installed ? 'ready' : 'missing'),
+  uninstallCamera: async () => ({ ok: true }),
+}))
+
 vi.mock('../../electron/main/host/instance', async () => {
   const { EventEmitter } = await import('node:events')
   host.events = new EventEmitter()
@@ -50,6 +79,11 @@ beforeEach(async () => {
   host.requests.length = 0
   host.log.length = 0
   host.behaviour = () => undefined
+  camera.pushed.length = 0
+  camera.stops = 0
+  camera.startFails = null
+  camera.ensureFails = null
+  camera.installed = true
   workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-out-'))
 
   // Starting an output waits out FFmpeg's startup check; doing that for real
@@ -614,45 +648,96 @@ describe('save_replay', () => {
 })
 
 describe('virtual camera', () => {
-  it('publishes an MPEG-TS stream over UDP', async () => {
+  const LABEL = 'Choose "CodeBuilders Virtual Camera" in your app'
+
+  it('decodes the host\'s picture to raw frames on standard output', async () => {
     await start('start_virtual_camera')
 
-    expect(cp.lastArgs()).toContain('mpegts')
-    expect(cp.lastArgs().at(-1)).toBe('udp://127.0.0.1:12345')
-  })
-
-  it('takes its picture from the host', async () => {
-    await start('start_virtual_camera')
+    expect(has(cp.lastArgs(), '-f', 'rawvideo', 'pipe:1')).toBe(true)
     expect(has(cp.lastArgs(), '-i', 'pipe:0')).toBe(true)
   })
 
-  it('asks the host for a session without sound', async () => {
-    await start('start_virtual_camera', { params: { audio: true } })
-    expect(hostCalls('openSession')[0].args.params.audio).toBe(false)
-  })
-
-  it('returns the URL other applications should consume', async () => {
-    const url = await start('start_virtual_camera')
-    expect(url).toBe('udp://127.0.0.1:12345')
-  })
-
-  it('announces the URL alongside the active flag', async () => {
+  it('hands what ffmpeg writes to the camera', async () => {
     await start('start_virtual_camera')
+    cp.spawned.at(-1)!.stdout.emit('data', Buffer.from('frame-bytes'))
 
-    expect(lastEvent('output:virtual-camera-status')).toEqual({
-      active: true,
-      url: 'udp://127.0.0.1:12345',
-    })
+    expect(camera.pushed).toEqual([Buffer.from('frame-bytes')])
   })
 
-  it('clears the URL when stopped', async () => {
+  it('asks the host for the size the camera sends, without sound', async () => {
+    await start('start_virtual_camera', { params: { audio: true, width: 1920, height: 1080, fps: 60, tracks: 3 } })
+
+    expect(hostCalls('openSession')[0].args.params).toMatchObject({ audio: false, tracks: 1, width: 1280, height: 720, fps: 30 })
+  })
+
+  it('says which camera to choose in the other app', async () => {
+    expect(await start('start_virtual_camera')).toBe(LABEL)
+    expect(lastEvent('output:virtual-camera-status')).toEqual({ active: true, url: LABEL })
+  })
+
+  it('clears the label when stopped, and stops the camera', async () => {
     await start('start_virtual_camera')
     await stop('stop_virtual_camera')
 
-    expect(lastEvent('output:virtual-camera-status')).toEqual({
-      active: false,
-      url: null,
-    })
+    expect(lastEvent('output:virtual-camera-status')).toEqual({ active: false, url: null })
+    expect(camera.stops).toBe(1)
+  })
+
+  it('stops the camera if ffmpeg dies on its own', async () => {
+    await start('start_virtual_camera')
+    cp.spawned.at(-1)!.exit(1)
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(camera.stops).toBe(1)
+    expect(lastEvent('output:virtual-camera-status')).toMatchObject({ active: false })
+  })
+
+  it('does not start when it is not installed and the person says no', async () => {
+    camera.ensureFails = new Error('The virtual camera was not installed.')
+
+    const outcome = invoke('start_virtual_camera', {}).catch((e) => e)
+
+    expect(String(await outcome)).toMatch(/not installed/)
+    expect(cp.spawned).toHaveLength(0)
+    expect(hostCalls('openSession')).toHaveLength(0)
+  })
+
+  it('does not leave the camera running when the output cannot start', async () => {
+    host.behaviour = (method) => { if (method === 'openSession') throw new Error('no encoder') }
+
+    const attempt = invoke('start_virtual_camera', {}).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(4000)
+
+    expect(String(await attempt)).toMatch(/no encoder/)
+    expect(camera.stops).toBe(1)
+  })
+
+  it('passes on a camera that will not start', async () => {
+    camera.startFails = new Error('Windows refused')
+    const outcome = invoke('start_virtual_camera', {}).catch((e) => e)
+
+    expect(String(await outcome)).toMatch(/Windows refused/)
+    expect(cp.spawned).toHaveLength(0)
+  })
+
+  it('refuses a second camera', async () => {
+    await start('start_virtual_camera')
+    await expect(invoke('start_virtual_camera', {})).rejects.toMatch(/already active/)
+  })
+
+  it('reports whether it is installed', async () => {
+    expect(await invoke('vcam_status')).toBe('ready')
+    camera.installed = false
+    expect(await invoke('vcam_status')).toBe('missing')
+  })
+
+  it('will not be uninstalled while it is running', async () => {
+    await start('start_virtual_camera')
+    await expect(invoke('vcam_uninstall')).rejects.toMatch(/Stop the virtual camera/)
+  })
+
+  it('can be uninstalled when it is not running', async () => {
+    await expect(invoke('vcam_uninstall')).resolves.toBeUndefined()
   })
 })
 

@@ -75,7 +75,20 @@ export function replayArgs(segmentDir: string, segmentSeconds: number, maxFiles:
   ]
 }
 
-/** Video only: consumers of the virtual camera do not take sound from it. */
-export function virtualCameraArgs(url: string): string[] {
-  return [...PIPE_INPUT, '-c:v', 'copy', '-an', '-f', 'mpegts', url]
+/**
+ * The virtual camera: the host's picture decoded to raw NV12 frames of the
+ * size the camera sends, written to standard output for the app to hand on.
+ * Video only: apps do not take sound from a camera.
+ */
+export function virtualCameraArgs(width = 1280, height = 720, fps = 30): string[] {
+  return [
+    '-hide_banner', '-loglevel', 'info',
+    // Nothing is held back waiting for more: a camera should show the present.
+    '-fflags', 'nobuffer', '-flags', 'low_delay',
+    '-i', 'pipe:0',
+    '-an',
+    '-vf', `scale=${width}:${height}:flags=bicubic,format=nv12`,
+    '-r', String(fps),
+    '-f', 'rawvideo', 'pipe:1',
+  ]
 }

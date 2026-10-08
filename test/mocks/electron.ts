@@ -33,6 +33,7 @@ export const shell = {
 export const dialog = {
   showSaveDialog: vi.fn(() => Promise.resolve({ canceled: true, filePath: undefined })),
   showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true, filePaths: [] })),
+  showMessageBox: vi.fn(() => Promise.resolve({ response: 0 })),
 }
 
 export const globalShortcut = {

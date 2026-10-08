@@ -217,6 +217,21 @@ function mediaCheck(file) {
 }
 
 /**
+ * What came out of the virtual camera: its size, and whether the picture is the
+ * app's (it varies, and is not the plain dark "waiting" frame the camera shows
+ * when it is being sent nothing).
+ */
+function vcamCheck(file) {
+  const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
+  const run = (a) => spawnSync(ffmpegExe, ['-hide_banner', ...a], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 })
+  const size = /Video: [^\n]*?, (\d+x\d+)/.exec(run(['-i', file]).stderr)
+  const stats = run(['-i', file, '-vf', 'scale=64:36,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'])
+  const ys = [...stats.stdout.matchAll(/YAVG=([0-9.]+)/g)].map((m) => Number(m[1]))
+  const mean = ys.reduce((x, y) => x + y, 0) / (ys.length || 1)
+  return { cameraFrames: ys.length, size: size ? size[1] : null, meanLuma: Number(mean.toFixed(1)), waitingFrame: Math.abs(mean - 24.6) < 1.5 }
+}
+
+/**
  * A recording with several audio tracks: how many streams the file has, how long
  * each is, how loud each is, and when the first beats of the test signal sound on
  * each (they must be the same on every track that carries the signal).
@@ -464,8 +479,11 @@ async function main() {
       await invoke('start_replay_buffer', { bufferSecs: 20, params })
     } else if (kind === 'vcam') {
       file = path.join(scratch, 'vcam.mkv')
-      const url = await invoke('start_virtual_camera', { params })
-      receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-i', url + '?fifo_size=5000000&overrun_nonfatal=1', '-c', 'copy', file], { stdio: 'ignore' })
+      const label = await invoke('start_virtual_camera', { params })
+      log('virtual camera:', label)
+      await sleep(2500)
+      // Read it the way an app does: as a camera, through Windows.
+      receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-f', 'dshow', '-i', 'video=CodeBuilders Virtual Camera (Windows Virtual Camera)', '-c:v', 'libx264', '-preset', 'ultrafast', file], { stdio: 'ignore' })
     }
     log(kind, 'started', file, `(${params.width}x${params.height}@${params.fps}, ${params.videoBitrate / 1e6} Mbps)`)
 
@@ -575,6 +593,7 @@ main()
     }
     if (overlay) console.log(JSON.stringify(overlayCheck(r.file, width, height)))
     if (mediaFile) console.log(JSON.stringify(mediaCheck(r.file)))
+    if (flag('kind', 'recording') === 'vcam') console.log(JSON.stringify(vcamCheck(r.file)))
     if (webPage) console.log(JSON.stringify(pageCheck(r.file, width)))
     if (trackCount > 1) console.log(JSON.stringify(tracksCheck(r.file), null, 1))
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))

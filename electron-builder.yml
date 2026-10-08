@@ -22,6 +22,11 @@ extraResources:
     filter:
       - ffmpeg.exe
       - LICENSE*
+  # The virtual camera: the DLL Windows loads, the program that creates the camera,
+  # and the scripts that install it. Built by native/vcam/build.cmd and kept in git,
+  # so building the app does not need a C++ compiler.
+  - from: resources/vcam
+    to: vcam
 
 # better-sqlite3 ships a compiled .node binding that cannot be bundled by the
 # renderer build, so it is unpacked from the asar and loaded from disk.

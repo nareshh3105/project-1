@@ -190,6 +190,9 @@ export const ipc = {
     openScreenshotsFolder: () => cmd<void>('open_screenshots_folder'),
     startVirtualCamera:  (params: OutputParams) => cmd<string>('start_virtual_camera', { params }),
     stopVirtualCamera:   () => cmd<void>('stop_virtual_camera'),
+    /** `ready`, `outdated`, `missing`, or `unavailable` (this build has no virtual camera). */
+    virtualCameraStatus: () => cmd<'ready' | 'outdated' | 'missing' | 'unavailable'>('vcam_status'),
+    uninstallVirtualCamera: () => cmd<void>('vcam_uninstall'),
   },
 
   browser: {

@@ -25,8 +25,9 @@ interface window ──(scene + mixer state)──▶ main process ──▶ out
   both. Nothing is captured while no output is running.
 - The **main process** starts FFmpeg waiting on its standard input, asks the host
   to start, and passes the host's bytes to FFmpeg. FFmpeg does not encode: it only
-  puts the stream into a file (`-c:v copy`), an RTMP stream, replay segments or a
-  UDP stream. Stopping closes FFmpeg's input, which is how it finishes a file.
+  puts the stream into a file (`-c:v copy`), an RTMP stream or replay segments. (The
+  virtual camera is the exception: FFmpeg decodes it to raw frames; see
+  `docs/VIRTUAL_CAMERA.md`.) Stopping closes FFmpeg's input, which is how it finishes a file.
 
 ## Why a separate window
 

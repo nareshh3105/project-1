@@ -18,11 +18,16 @@ describe('every host-fed output', () => {
     recording: recordingArgs('C:/v/out.mkv', 'mkv'),
     streaming: streamingArgs('rtmp://live.example/app/key'),
     replay: replayArgs('C:/tmp/replay', 5, 9),
-    virtualCamera: virtualCameraArgs('udp://127.0.0.1:1234'),
+    virtualCamera: virtualCameraArgs(),
   }
+  // The virtual camera has to turn the picture into raw frames, so it decodes; the others only package it.
+  const packaging = Object.entries(all).filter(([name]) => name !== 'virtualCamera')
 
   it.each(Object.entries(all))('%s reads the host\'s stream from stdin', (_name, args) => {
     expect(has(args, '-i', 'pipe:0')).toBe(true)
+  })
+
+  it.each(packaging)('%s starts with the common input arguments', (_name, args) => {
     expect(args.slice(0, PIPE_INPUT.length)).toEqual(PIPE_INPUT)
   })
 
@@ -34,7 +39,7 @@ describe('every host-fed output', () => {
     expect(args).not.toContain('dshow')
   })
 
-  it.each(Object.entries(all))('%s does not re-encode the picture', (_name, args) => {
+  it.each(packaging)('%s does not re-encode the picture', (_name, args) => {
     expect(args).not.toContain('libx264')
     expect(has(args, '-c:v', 'copy') || has(args, '-c', 'copy')).toBe(true)
   })
@@ -100,13 +105,26 @@ describe('replay buffer', () => {
 })
 
 describe('virtual camera', () => {
-  it('publishes MPEG-TS to the URL', () => {
-    const args = virtualCameraArgs('udp://127.0.0.1:1234')
-    expect(has(args, '-f', 'mpegts', 'udp://127.0.0.1:1234')).toBe(true)
+  it('writes raw NV12 frames to standard output', () => {
+    const args = virtualCameraArgs()
+    expect(has(args, '-f', 'rawvideo', 'pipe:1')).toBe(true)
+    expect(args.join(' ')).toContain('format=nv12')
+  })
+
+  it('scales to the size the camera sends', () => {
+    expect(virtualCameraArgs().join(' ')).toContain('scale=1280:720')
+    expect(virtualCameraArgs(640, 360, 15).join(' ')).toContain('scale=640:360')
+    expect(has(virtualCameraArgs(640, 360, 15), '-r', '15')).toBe(true)
+  })
+
+  it('holds nothing back, so the camera shows the present', () => {
+    const args = virtualCameraArgs()
+    expect(has(args, '-fflags', 'nobuffer')).toBe(true)
+    expect(has(args, '-flags', 'low_delay')).toBe(true)
   })
 
   it('carries no audio', () => {
-    expect(virtualCameraArgs('udp://x')).toContain('-an')
+    expect(virtualCameraArgs()).toContain('-an')
   })
 })
 
