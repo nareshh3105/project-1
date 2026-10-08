@@ -1,0 +1,4 @@
+LIBRARY CodeBuildersCamera
+EXPORTS
+  DllGetClassObject PRIVATE
+  DllCanUnloadNow PRIVATE

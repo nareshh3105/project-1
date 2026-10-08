@@ -60,3 +60,4 @@ coverage/
 # FFmpeg binary shipped with the installer; fetched by scripts/fetch-ffmpeg.ps1
 resources/ffmpeg/*
 !resources/ffmpeg/README.md
+native/vcam/build/
