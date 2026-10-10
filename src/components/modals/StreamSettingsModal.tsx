@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useOutputStore } from '@/stores/outputStore'
 import { startStreaming } from '@/lib/outputs'
 import { cn } from '@/lib/utils'
+import { STREAM_SERVICES, serviceById, serviceOf, type ServiceId } from '@/lib/streamServices'
 
 export function StreamSettingsModal() {
   const { modal, closeModal } = useUIStore((s) => ({
@@ -24,15 +25,26 @@ export function StreamSettingsModal() {
   const [showKey,      setShowKey]      = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [starting,     setStarting]     = useState(false)
+  // A saved address that is one of the known services shows as that service.
+  const [service,      setService]      = useState<ServiceId>(serviceOf(stream.rtmpUrl))
 
   // Sync inputs when modal opens
   useEffect(() => {
     if (open) {
       setRtmpUrl(stream.rtmpUrl)
       setStreamKey(stream.streamKey)
+      setService(serviceOf(stream.rtmpUrl))
       setError(null)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function chooseService(id: ServiceId) {
+    setService(id)
+    const chosen = serviceById(id)
+    // A known service fills in its address; Custom keeps whatever is there to be edited.
+    if (chosen.url) setRtmpUrl(chosen.url)
+    else if (serviceOf(rtmpUrl) !== 'custom') setRtmpUrl('')
+  }
 
   async function handleGoLive() {
     const url = rtmpUrl.trim()
@@ -75,19 +87,37 @@ export function StreamSettingsModal() {
           {/* Body */}
           <div className="px-5 py-5 flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="stream-rtmp-url" className="text-caption text-text-secondary font-medium">
-                RTMP URL
+              <label htmlFor="stream-service" className="text-caption text-text-secondary font-medium">
+                Service
               </label>
-              <input
-                id="stream-rtmp-url"
-                type="text"
-                placeholder="rtmp://live.twitch.tv/app"
-                value={rtmpUrl}
-                onChange={(e) => setRtmpUrl(e.target.value)}
-                className="h-8 px-3 rounded-input bg-bg-surface border border-bg-divider
-                           text-body text-text-primary focus:outline-none focus:border-accent-start"
-              />
+              <select
+                id="stream-service"
+                value={service}
+                onChange={(e) => chooseService(e.target.value as ServiceId)}
+                className="h-8 px-2 rounded-input bg-bg-surface border border-bg-divider
+                           text-body text-text-primary focus:outline-none focus:border-accent-start cursor-pointer"
+              >
+                {STREAM_SERVICES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+              <p className="text-[11px] text-text-muted leading-relaxed">{serviceById(service).keyHelp}</p>
             </div>
+
+            {service === 'custom' && (
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="stream-rtmp-url" className="text-caption text-text-secondary font-medium">
+                  RTMP URL
+                </label>
+                <input
+                  id="stream-rtmp-url"
+                  type="text"
+                  placeholder="rtmp://live.example.com/app"
+                  value={rtmpUrl}
+                  onChange={(e) => setRtmpUrl(e.target.value)}
+                  className="h-8 px-3 rounded-input bg-bg-surface border border-bg-divider
+                             text-body text-text-primary focus:outline-none focus:border-accent-start"
+                />
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="stream-key" className="text-caption text-text-secondary font-medium">
@@ -122,7 +152,7 @@ export function StreamSettingsModal() {
             {/* A real Dialog.Description: Radix wires aria-describedby from it,
                 so the dialog announces its purpose instead of warning. */}
             <Dialog.Description className="text-[11px] text-text-muted opacity-60 leading-relaxed">
-              Stream key is saved locally. ffmpeg must be installed and in PATH for streaming to work.
+              Your stream key is saved on this computer only. Anyone who has it can stream to your channel, so do not share it.
             </Dialog.Description>
 
             {error && (
