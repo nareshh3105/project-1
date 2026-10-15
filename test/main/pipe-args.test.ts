@@ -136,7 +136,7 @@ describe('normalizeParams', () => {
   })
 
   it('keeps valid values', () => {
-    const given = { width: 1280, height: 720, fps: 60, videoBitrate: 9_000_000, audioBitrate: 128_000, encoder: 'software', keyframeSeconds: 2, audio: false, tracks: 3 }
+    const given = { width: 1280, height: 720, fps: 60, videoBitrate: 9_000_000, audioBitrate: 128_000, encoder: 'software', keyframeSeconds: 2, audio: false, tracks: 3, constantBitrate: true }
     expect(normalizeParams(given)).toEqual(given)
   })
 
@@ -246,5 +246,19 @@ describe('recording with extra tracks', () => {
     expect(has(args, '-c:a', 'aac', '-b:a', '192k')).toBe(true)
     expect(args).toContain('+frag_keyframe+empty_moov+default_base_moof')
     expect(args.at(-1)).toBe('a.mp4')
+  })
+})
+
+describe('constantBitrate', () => {
+  it('is off unless asked for', () => {
+    expect(normalizeParams({}).constantBitrate).toBe(false)
+  })
+
+  it('is kept when asked for', () => {
+    expect(normalizeParams({ constantBitrate: true }).constantBitrate).toBe(true)
+  })
+
+  it.each(['yes', 1, null, {}])('ignores %j, which is not a yes or a no', (odd) => {
+    expect(normalizeParams({ constantBitrate: odd }).constantBitrate).toBe(false)
   })
 })

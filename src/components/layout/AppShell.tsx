@@ -38,6 +38,7 @@ import {
   onVirtualCameraStatus,
   onOutputError,
   onOutputHealth,
+  onOutputNotice,
 } from '@/ipc'
 
 export function AppShell() {
@@ -94,6 +95,7 @@ export function AppShell() {
     let unlistenVcam:   (() => void) | null = null
     let unlistenError:  (() => void) | null = null
     let unlistenHealth: (() => void) | null = null
+    let unlistenNotice: (() => void) | null = null
 
     onRecordingStatus((p) => setRecordingStatus(p.active, p.filePath))
       .then((u) => { unlistenRec = u })
@@ -115,6 +117,10 @@ export function AppShell() {
     onOutputError((p) => useNotifyStore.getState().notify('error', p.message))
       .then((u) => { unlistenError = u })
 
+    // Things worth knowing that are neither an end nor a failure, such as a stream reconnecting.
+    onOutputNotice((p) => useNotifyStore.getState().notify(p.level, p.message))
+      .then((u) => { unlistenNotice = u })
+
     // A computer that cannot keep up drops frames; say so, and what to try, once it is clear it is happening.
     onOutputHealth((p) => {
       useOutputStore.getState().setStruggling(p.kind, p.struggling)
@@ -129,6 +135,7 @@ export function AppShell() {
       unlistenVcam?.()
       unlistenError?.()
       unlistenHealth?.()
+      unlistenNotice?.()
     }
   }, [setRecordingStatus, setStreamingStatus, setStats, setReplayActive, setVirtualCameraStatus])
 

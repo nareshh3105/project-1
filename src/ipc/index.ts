@@ -379,6 +379,12 @@ export function onOutputHealth(cb: (p: OutputHealthPayload) => void): Promise<Un
 
 export interface OutputErrorPayload { kind: string; message: string }
 
+export interface OutputNoticePayload { kind: string; level: 'info' | 'error'; message: string }
+
+export function onOutputNotice(cb: (p: OutputNoticePayload) => void): Promise<UnlistenFn> {
+  return listen<OutputNoticePayload>(IPC_EVENTS.OUTPUT_NOTICE, (e) => cb(e.payload))
+}
+
 export function onOutputError(cb: (p: OutputErrorPayload) => void): Promise<UnlistenFn> {
   return listen<OutputErrorPayload>(IPC_EVENTS.OUTPUT_ERROR, (e) => cb(e.payload))
 }

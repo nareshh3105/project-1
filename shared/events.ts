@@ -17,6 +17,8 @@ export const IPC_EVENTS = {
   STREAM_STATUS:    'output:stream-status',
   REPLAY_STATUS:    'output:replay-status',
   VCAM_STATUS:      'output:virtual-camera-status',
+  /** Something the person should know about an output that is not an end or a failure (a stream reconnecting). */
+  OUTPUT_NOTICE:    'output:notice',
   /** An output started, or stopped, keeping up with its frame rate. */
   OUTPUT_HEALTH:    'output:health',
   STATS_UPDATE:     'stats:update',

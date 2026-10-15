@@ -83,6 +83,12 @@ export interface SessionParams {
    * microphone alone as track 2, 3 adds everything but the microphone as track 3.
    */
   tracks: number
+  /**
+   * Hold the video bitrate steady instead of letting it rise and fall with the
+   * picture. A stream wants this: a burst above the upload speed is what makes
+   * it stall, and streaming services ask for a constant bitrate.
+   */
+  constantBitrate: boolean
 }
 
 export type HostMethod = 'openSession' | 'closeSession' | 'ping'

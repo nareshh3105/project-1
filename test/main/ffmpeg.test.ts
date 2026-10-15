@@ -140,6 +140,21 @@ describe('assertStartedOk', () => {
     await expect(promise).rejects.toThrow(/exited immediately/)
   })
 
+  // The host takes a moment to start; ffmpeg can be gone before the check begins listening.
+  it('rejects at once when ffmpeg had already exited before the check began', async () => {
+    const session = ff.spawnFfmpeg([])
+    cp.spawned[0].emitStderr('Connection refused\n')
+    cp.spawned[0].exit(1)
+
+    await expect(ff.assertStartedOk(session, 5000)).rejects.toThrow(/exited immediately \(code 1\)[\s\S]*Connection refused/)
+  })
+
+  it('does not take a process that exited cleanly before the check for one that started', async () => {
+    const session = ff.spawnFfmpeg([])
+    cp.spawned[0].exit(0)
+    await expect(ff.assertStartedOk(session, 5000)).rejects.toThrow(/code 0/)
+  })
+
   it('includes the exit code', async () => {
     const session = ff.spawnFfmpeg([])
     const promise = ff.assertStartedOk(session, 5000)

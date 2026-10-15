@@ -79,6 +79,17 @@ describe('the warning', () => {
     expect(struggleMessage(kind, 0.2)).toContain(name)
   })
 
+  it('blames the internet connection as well as the computer for a stream, and says what to lower', () => {
+    const m = struggleMessage('streaming', 0.12)
+    expect(m).toContain('12%')
+    expect(m).toMatch(/upload speed/)
+    expect(m).toMatch(/Video Bitrate/)
+  })
+
+  it('does not bring the internet into it for a recording', () => {
+    expect(struggleMessage('recording', 0.12)).not.toMatch(/upload|internet/)
+  })
+
   it('never says 0%', () => {
     expect(struggleMessage('recording', 0.001)).toContain('1%')
   })

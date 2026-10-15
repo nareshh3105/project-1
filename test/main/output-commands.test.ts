@@ -424,14 +424,14 @@ describe('an output that ends by itself', () => {
   })
 
   // A stream dropping used to leave the interface showing "live" indefinitely.
-  it('reports a stream that drops', async () => {
+  it('tells the person why a stream dropped, and that it is reconnecting', async () => {
     await start('start_streaming', { rtmpUrl: 'rtmp://live.example/app', streamKey: 'k' })
     child().emitStderr('Connection reset by peer\n')
     child().exit(1)
     await vi.advanceTimersByTimeAsync(10)
 
-    expect(lastEvent('output:stream-status')).toEqual({ active: false })
-    expect((lastEvent('output:error') as { message: string }).message).toContain('Connection reset')
+    expect((lastEvent('output:notice') as { message: string }).message).toContain('Connection reset by peer')
+    expect(lastEvent('output:stream-status')).toEqual({ active: true })
   })
 
   it('does not report an error for a normal stop', async () => {
@@ -913,5 +913,159 @@ describe('a recording with several audio tracks', () => {
     expect(String(await settled)).toMatch(/no encoder/)
     expect(ingest.hasSink('recording#2')).toBe(false)
     expect(ingest.hasSink('recording#3')).toBe(false)
+  })
+})
+
+describe('a stream whose connection drops', () => {
+  const live = () => start('start_streaming', { rtmpUrl: 'rtmp://live.example/app', streamKey: 'key' })
+  const notices = () => events.filter((e) => e.name === 'output:notice').map((e) => (e.payload as { message: string }).message)
+  const statuses = () => events.filter((e) => e.name === 'output:stream-status').map((e) => (e.payload as { active: boolean }).active)
+  const errors = () => events.filter((e) => e.name === 'output:error').map((e) => (e.payload as { message: string }).message)
+  const streamSpawns = () => cp.spawned.length
+
+  /** Lets what is waiting on the fake clock, and what it starts, run. */
+  const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms)
+
+  it('is not ended: it says it is reconnecting and stays live', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+
+    expect(notices()).toEqual([expect.stringMatching(/lost its connection.*reconnect/i)])
+    expect(statuses()).toEqual([true])
+    expect(errors()).toEqual([])
+  })
+
+  it('starts the host again, from a clean session, after the first pause', async () => {
+    await live()
+    const first = streamSpawns()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(1500)
+    expect(streamSpawns()).toBe(first) // not yet
+
+    await tick(3000)
+    expect(streamSpawns()).toBe(first + 1)
+    expect(hostCalls('closeSession').length).toBeGreaterThanOrEqual(1)
+    expect(hostCalls('openSession')).toHaveLength(2)
+    // The old session is closed before the new one opens.
+    const order = host.log.filter((l) => l === 'host:closeSession' || l === 'host:openSession')
+    expect(order).toEqual(['host:openSession', 'host:closeSession', 'host:openSession'])
+  })
+
+  it('goes to the same address with the same key', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(5000)
+    expect(cp.lastArgs().at(-1)).toBe('rtmp://live.example/app/key')
+  })
+
+  it('says when it is back', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(5000)
+    expect(notices().at(-1)).toMatch(/is back/)
+    expect(statuses()).toEqual([true])
+  })
+
+  it('carries data to the new connection', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(5000)
+
+    expect(ingest.pushChunk('streaming', Buffer.from('after'))).toBe(true)
+    expect(cp.spawned.at(-1)!.stdin.write).toHaveBeenCalledWith(Buffer.from('after'))
+  })
+
+  it('does not send data anywhere while it is down', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+    expect(ingest.pushChunk('streaming', Buffer.from('lost'))).toBe(false)
+  })
+
+  it('keeps trying, with growing pauses, while the connection stays down', async () => {
+    await live()
+    host.behaviour = (method) => { if (method === 'openSession') queueMicrotask(() => cp.spawned.at(-1)!.exit(1)) }
+    cp.spawned.at(-1)!.exit(1)
+    const before = streamSpawns()
+
+    await tick(2500 + 100) // first try
+    expect(streamSpawns()).toBe(before + 1)
+    await tick(4000 + 3000) // second
+    expect(streamSpawns()).toBe(before + 2)
+    expect(statuses()).toEqual([true])
+  })
+
+  it('gives up after about two minutes and says why', async () => {
+    await live()
+    host.behaviour = (method) => { if (method === 'openSession') queueMicrotask(() => cp.spawned.at(-1)!.exit(1)) }
+    cp.spawned.at(-1)!.exit(1)
+
+    await tick(5 * 60 * 1000)
+
+    expect(statuses().at(-1)).toBe(false)
+    expect(errors()).toEqual([expect.stringMatching(/could not be reconnected and has stopped/)])
+    const spawnsAfter = streamSpawns()
+    await tick(60 * 1000)
+    expect(streamSpawns()).toBe(spawnsAfter) // and it really has stopped trying
+  })
+
+  it('can be stopped while it is reconnecting', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+    const spawns = streamSpawns()
+
+    await invoke('stop_streaming')
+    await tick(60 * 1000)
+
+    expect(statuses().at(-1)).toBe(false)
+    expect(streamSpawns()).toBe(spawns)
+    expect(errors()).toEqual([])
+  })
+
+  it('refuses a second stream while it is reconnecting', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+    await expect(invoke('start_streaming', { rtmpUrl: 'rtmp://x/y', streamKey: 'k' })).rejects.toMatch(/already active/)
+  })
+
+  it('can be started again after it has been stopped', async () => {
+    await live()
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+    await invoke('stop_streaming')
+
+    await expect(live()).resolves.toBeUndefined()
+  })
+
+  it('stays down if stopped by the person, as before', async () => {
+    await live()
+    await stop('stop_streaming')
+    const spawns = streamSpawns()
+    await tick(60 * 1000)
+    expect(streamSpawns()).toBe(spawns)
+    expect(notices()).toEqual([])
+  })
+
+  it('does not reconnect a recording that ends: that is still an error', async () => {
+    await start('start_recording', { outputPath: path.join(workDir, 'r.mkv') })
+    cp.spawned.at(-1)!.exit(1)
+    await tick(10)
+
+    expect(errors()).toEqual([expect.stringMatching(/recording stopped unexpectedly/)])
+    expect(notices()).toEqual([])
+  })
+
+  it('still fails at once if the very first connection is refused', async () => {
+    host.behaviour = (method) => { if (method === 'openSession') queueMicrotask(() => cp.spawned.at(-1)!.exit(1)) }
+    const attempt = invoke('start_streaming', { rtmpUrl: 'rtmp://live.example/app', streamKey: 'bad' }).catch((e) => e)
+    await tick(4000)
+
+    expect(String(await attempt)).toMatch(/exited immediately/)
+    expect(notices()).toEqual([])
+    await tick(60 * 1000)
+    expect(streamSpawns()).toBe(1)
   })
 })

@@ -115,6 +115,33 @@ describe('setting up', () => {
     })
   })
 
+  it('asks for a variable bitrate unless a constant one is wanted', async () => {
+    const s = await make()
+    expect(videoConfig?.bitrateMode).toBe('variable')
+    expect(s.stats().constantBitrate).toBe(false)
+  })
+
+  // A stream is limited by the upload speed: a burst above it is what makes it stall.
+  it('asks for a constant bitrate for a stream, and says it got one', async () => {
+    const s = await make({ constantBitrate: true })
+    expect(videoConfig?.bitrateMode).toBe('constant')
+    expect(s.stats().constantBitrate).toBe(true)
+  })
+
+  it('falls back to a variable bitrate if the encoder cannot hold a constant one', async () => {
+    supported = (c) => c.bitrateMode !== 'constant'
+    const s = await make({ constantBitrate: true })
+    expect(videoConfig?.bitrateMode).toBe('variable')
+    expect(s.stats().constantBitrate).toBe(false)
+  })
+
+  it('tries constant in software before giving it up in hardware', async () => {
+    supported = (c) => !(c.hardwareAcceleration === 'prefer-hardware' && c.bitrateMode === 'constant') && !(c.bitrateMode === 'variable' && c.hardwareAcceleration === 'prefer-software')
+    const s = await make({ constantBitrate: true })
+    expect(videoConfig).toMatchObject({ bitrateMode: 'constant', hardwareAcceleration: 'prefer-software' })
+    expect(s.stats().hardware).toBe(false)
+  })
+
   it('asks for Opus at the chosen bitrate', async () => {
     await make({ audioBitrate: 128_000 })
     expect(audioConfig).toMatchObject({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 })

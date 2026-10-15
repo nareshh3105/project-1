@@ -102,6 +102,8 @@ export interface SessionStats {
   silenceFrames: number
   trimmedFrames: number
   hardware: boolean
+  /** Whether the video bitrate is being held constant. */
+  constantBitrate: boolean
 }
 
 /** H.264 High profile; level 4.0 covers 1080p30, 4.2 covers 1080p60, 5.1 anything larger. */
@@ -131,6 +133,7 @@ export class EncoderSession {
    */
   private readonly extras: Array<{ encoder: AudioEncoderLike; muxer: MuxerLike; started: boolean }> = []
   private hardware = false
+  private constant = false
 
   private startedAtMs = 0
   private running = false
@@ -177,10 +180,15 @@ export class EncoderSession {
         : params.encoder === 'hardware' ? ['prefer-hardware']
           : ['prefer-hardware', 'prefer-software']
 
+    // Constant first when asked for; an encoder that cannot hold it still gets to encode.
+    const modes: Array<'constant' | 'variable'> = params.constantBitrate ? ['constant', 'variable'] : ['variable']
+
     let chosen: Record<string, unknown> | null = null
-    for (const hardwareAcceleration of order) {
-      const config = { ...base, hardwareAcceleration }
-      if (await deps.videoSupported(config)) { chosen = config; break }
+    search: for (const bitrateMode of modes) {
+      for (const hardwareAcceleration of order) {
+        const config = { ...base, bitrateMode, hardwareAcceleration }
+        if (await deps.videoSupported(config)) { chosen = config; break search }
+      }
     }
     if (!chosen) {
       throw new Error(
@@ -190,6 +198,7 @@ export class EncoderSession {
       )
     }
     this.hardware = chosen.hardwareAcceleration === 'prefer-hardware'
+    this.constant = chosen.bitrateMode === 'constant'
 
     this.muxer = deps.createMuxer({
       width: params.width,
@@ -351,6 +360,7 @@ export class EncoderSession {
       ...this.counters,
       encodeQueue: this.videoEncoder?.encodeQueueSize ?? 0,
       hardware: this.hardware,
+      constantBitrate: this.constant,
     }
   }
 

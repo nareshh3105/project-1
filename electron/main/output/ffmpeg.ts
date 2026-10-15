@@ -18,6 +18,7 @@ export const VIRTUAL_CAMERA_STATUS_EVENT = IPC_EVENTS.VCAM_STATUS
 export const STATS_UPDATE_EVENT = IPC_EVENTS.STATS_UPDATE
 export const OUTPUT_ERROR_EVENT = IPC_EVENTS.OUTPUT_ERROR
 export const OUTPUT_HEALTH_EVENT = IPC_EVENTS.OUTPUT_HEALTH
+export const OUTPUT_NOTICE_EVENT = IPC_EVENTS.OUTPUT_NOTICE
 
 export const FFMPEG_MISSING =
   'ffmpeg not found in PATH. Download ffmpeg from https://ffmpeg.org and add it to PATH.'
@@ -233,6 +234,14 @@ export function spawnFfmpeg(args: string[], options: { piped?: boolean; stdout?:
  */
 export function assertStartedOk(session: Session, waitMs = 700): Promise<void> {
   return new Promise((resolve, reject) => {
+    // It may have gone while the host was still starting, before this began to listen.
+    // Its exit event has passed; without this the output would count as started.
+    if (session.child.exitCode !== null) {
+      const detail = session.stderr.slice(-6).join('\n').trim()
+      reject(new Error(`ffmpeg exited immediately (code ${session.child.exitCode}).` + (detail ? `\n${detail}` : '')))
+      return
+    }
+
     const timer = setTimeout(() => {
       session.child.off('exit', onExit)
       resolve()

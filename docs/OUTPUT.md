@@ -125,3 +125,13 @@ On an i5-1135G7 laptop with system audio:
 
 Not yet covered: weaker machines, more than one display, and recordings longer than
 a few minutes at 1080p60.
+
+## Streaming that does not stutter or break
+
+- **Priority.** While an output runs, the output host and the graphics process that serve it are given high priority (`raiseOutputPriority`, `electron/main/host/window.ts`). With the interface window visible at normal priority, frames arrived late often enough to show as stutter: 33 to 79 late frames in 40 seconds, gaps up to 167 ms. With the priority raised: none, longest gap one frame (34 ms), at 30.0 fps over 40 and 90 seconds.
+- **Constant bitrate.** A stream asks the encoder for a constant bitrate (`SessionParams.constantBitrate`), so a burst above the upload speed does not stall it. An encoder that cannot hold one falls back to variable.
+- **Reconnecting.** If FFmpeg's connection is lost after a stream was live, the stream is not ended: the host's session is closed and a new connection is tried after 2, 4, 8 and then every 15 seconds, for about two minutes (`RECONNECT_DELAYS_MS`). The person is told it is reconnecting and when it is back; if it cannot, the stream ends with the reason. A first connection that fails still fails at once. Pressing stop while reconnecting cancels it.
+- **Startup check.** FFmpeg dying while the host was still starting used to be missed and the output counted as started.
+- **The warning for a stream** names the internet upload speed as a likely cause and says what to lower.
+
+Test: `node scripts/e2e/record.cjs 60 --kind=streaming --drop` streams to a local server, stops the server, brings it back and prints when the app reconnected.

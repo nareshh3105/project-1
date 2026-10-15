@@ -124,5 +124,7 @@ export function outputParams(
     audio: kind !== 'virtualCamera',
     // Only a recording is a file that can hold several tracks.
     tracks: kind === 'recording' ? recording.audioTracks ?? 1 : 1,
+    // A stream is limited by the upload speed, so its rate is held steady.
+    constantBitrate: kind === 'streaming',
   }
 }

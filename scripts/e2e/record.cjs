@@ -447,6 +447,8 @@ async function main() {
     params.videoBitrate = Math.round((width * height * fps * 0.097) / 100000) * 100000
 
     const kind = flag('kind', 'recording')
+    // The interface asks for a steady bitrate when it streams.
+    params.constantBitrate = kind === 'streaming'
     if (!['recording', 'streaming', 'replay', 'vcam'].includes(kind)) throw new Error(`Unknown --kind=${kind}`)
     const ffmpegExe = path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe')
     let receiver = null
@@ -519,8 +521,25 @@ async function main() {
     let warnedAt = 0
     let samples = 0
     let lastCpu = null
+    let dropped = false
     while (Date.now() - startedAt < seconds * 1000) {
       await sleep(5000)
+      // --drop: the server goes away for a while, as a lost connection would, then comes back.
+      if (args.includes('--drop') && kind === 'streaming' && !dropped && Date.now() - startedAt > 15000) {
+        dropped = true
+        receiver.kill()
+        log('the stream server was stopped')
+        await sleep(6000)
+        file = path.join(scratch, 'received-after.flv')
+        receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-listen', '1', '-i', 'rtmp://127.0.0.1:1935/live/e2e', '-c', 'copy', file], { stdio: 'ignore' })
+        log('the stream server is back; waiting for the app to reconnect')
+        const back = Date.now()
+        while (!fs.existsSync(file) || fs.statSync(file).size < 20000) {
+          if (Date.now() - back > 60000) { log('the app did NOT reconnect within a minute'); break }
+          await sleep(1000)
+        }
+        if (fs.existsSync(file) && fs.statSync(file).size >= 20000) log('reconnected after', ((Date.now() - back) / 1000).toFixed(1), 's')
+      }
       if (child.exitCode !== null) throw new Error('The app exited during the recording')
       if (samples % 3 === 1) {
         const now = cpuSeconds(scratch)
@@ -549,7 +568,7 @@ async function main() {
         const c = d.captures[0]
         const sess = d.sessions[0]
         log('host:', c ? `capture ${c.state} t=${c.time.toFixed(1)} ${c.width}x${c.height} rs=${c.readyState} ${c.error || ''}` : 'no capture',
-          sess ? `| compose=${sess.composeMs.toFixed(1)}ms submit=${sess.submitMs.toFixed(1)}ms worst=${sess.worstMs.toFixed(0)}ms in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware}` : '')
+          sess ? `| compose=${sess.composeMs.toFixed(1)}ms submit=${sess.submitMs.toFixed(1)}ms worst=${sess.worstMs.toFixed(0)}ms in=${sess.framesIn} dropped=${sess.framesDropped} audioBlocks=${sess.audioBlocks} silence=${sess.silenceFrames} trim=${sess.trimmedFrames} hw=${sess.hardware} cbr=${sess.constantBitrate}` : '')
       }
     }
 

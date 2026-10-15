@@ -19,6 +19,7 @@ export const DEFAULT_PARAMS: SessionParams = {
   keyframeSeconds: 2,
   audio: true,
   tracks: 1,
+  constantBitrate: false,
 }
 
 const LIMITS = {
@@ -59,6 +60,7 @@ export function normalizeParams(raw: unknown, base: SessionParams = DEFAULT_PARA
     encoder: ENCODERS.includes(r.encoder as EncoderPreference) ? (r.encoder as EncoderPreference) : base.encoder,
     keyframeSeconds: clamp(r.keyframeSeconds, base.keyframeSeconds, LIMITS.keyframe),
     audio: typeof r.audio === 'boolean' ? r.audio : base.audio,
+    constantBitrate: typeof r.constantBitrate === 'boolean' ? r.constantBitrate : base.constantBitrate,
     tracks: positive(r.tracks) ? Math.min(MAX_TRACKS, Math.max(1, Math.round(r.tracks))) : base.tracks,
   }
 }

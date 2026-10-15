@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { command, emit } from '../ipc'
 import {
   RECORDING_STATUS_EVENT, STREAMING_STATUS_EVENT,
-  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT, OUTPUT_HEALTH_EVENT,
+  REPLAY_STATUS_EVENT, VIRTUAL_CAMERA_STATUS_EVENT, OUTPUT_ERROR_EVENT, OUTPUT_HEALTH_EVENT, OUTPUT_NOTICE_EVENT,
   assertStartedOk, ensureParentDir, ffmpegAvailable, ffmpegBinary, finishPiped,
   getSession, isActive, requireFfmpeg, setRecordingFolder, setSession, spawnFfmpeg, takeSession,
   timestamp, uniquePath, videosDir, type Session,
@@ -64,6 +64,12 @@ interface OpenOptions {
   pipes?: TrackPipe[]
   /** Called with FFmpeg's standard output, for an output that reads it (the virtual camera). */
   onStdout?: (chunk: Buffer) => void
+  /**
+   * What to do if FFmpeg stops by itself once the output is running. Without it
+   * the output simply ends, with the reason shown. A stream passes one that
+   * tries to reconnect.
+   */
+  onLost?: (session: Session, code: number | null) => void
 }
 
 /**
@@ -74,7 +80,8 @@ interface OpenOptions {
  * either half fails, both are torn down: a half-started output would show as
  * running in the interface while producing nothing.
  */
-async function openOutput({ kind, ffmpegArgs, params, extra = {}, pipes = [], onStdout }: OpenOptions): Promise<Session> {
+async function openOutput(options: OpenOptions): Promise<Session> {
+  const { kind, ffmpegArgs, params, extra = {}, pipes = [], onStdout, onLost } = options
   if (closing.has(kind)) throw new Error(`The previous ${LABEL[kind]} is still finishing. Try again in a moment.`)
   requireFfmpeg()
 
@@ -100,7 +107,7 @@ async function openOutput({ kind, ffmpegArgs, params, extra = {}, pipes = [], on
 
   const live: Session = { ...session, ...extra, pipes }
   setSession(kind, live)
-  watchForExit(kind, live)
+  watchForExit(kind, live, onLost)
   return live
 }
 
@@ -153,9 +160,21 @@ async function closeOutput(kind: OutputKind): Promise<Session | undefined> {
  * disk) say so. This was never handled: the interface kept showing a stream as
  * live long after it had ended.
  */
-function watchForExit(kind: OutputKind, session: Session) {
+function watchForExit(kind: OutputKind, session: Session, onLost?: (session: Session, code: number | null) => void) {
   session.child.once('exit', (code) => {
     if (getSession(kind) !== session) return // a normal stop took it first
+
+    if (onLost) {
+      // The caller will try to bring it back; this one is finished with.
+      takeSession(kind)
+      outputHealth.reset(kind)
+      unregisterSink(kind)
+      releasePipes(kind, (session.pipes as TrackPipe[] | undefined) ?? [])
+      void (session.cleanup as (() => Promise<void>) | undefined)?.()
+      log.warn(`${kind} output lost`, { code, ffmpeg: detail(session) })
+      onLost(session, code)
+      return
+    }
 
     takeSession(kind)
     outputHealth.reset(kind)
@@ -198,7 +217,67 @@ hostEvents.on('event', (event: HostEvent) => {
   void stopOutput(kind)
 })
 
+/** Tells the interface something about an output that is not an end or a failure. */
+function notice(kind: OutputKind, level: 'info' | 'error', message: string) {
+  emit(OUTPUT_NOTICE_EVENT, { kind, level, message })
+}
+
+/** Streams that lost their connection and are being brought back, by kind. */
+const reconnecting = new Map<OutputKind, { cancel(): void }>()
+
+/**
+ * How long to wait before each try at reconnecting a stream: soon at first, in
+ * case it was a blip, then less often. Together about two minutes, after which
+ * the stream is ended and the reason shown.
+ */
+export const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 15000, 15000, 15000, 15000, 15000, 15000]
+
+/**
+ * Brings back an output whose connection was lost: closes what is left of the
+ * host's session, then opens a new one (a new connection needs a new start of the
+ * stream) at each step of RECONNECT_DELAYS_MS until one holds.
+ */
+function reconnect(kind: OutputKind, open: () => Promise<Session>, cause: string) {
+  let cancelled = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  reconnecting.set(kind, { cancel: () => { cancelled = true; if (timer) clearTimeout(timer) } })
+
+  notice(kind, 'info', `The ${LABEL[kind]} lost its connection (${cause}). Trying to reconnect…`)
+
+  const giveUp = (why: string) => {
+    reconnecting.delete(kind)
+    announce(kind, false)
+    emit(OUTPUT_ERROR_EVENT, { kind, message: `The ${LABEL[kind]} could not be reconnected and has stopped. ${why}`.trim() })
+  }
+
+  const attempt = async (n: number): Promise<void> => {
+    if (cancelled) return
+    try {
+      await open()
+      if (cancelled) { await closeOutput(kind); return }
+      reconnecting.delete(kind)
+      notice(kind, 'info', `The ${LABEL[kind]} is back.`)
+    } catch (err) {
+      if (cancelled) return
+      const why = err instanceof Error ? err.message : String(err)
+      if (n + 1 >= RECONNECT_DELAYS_MS.length) { giveUp(why); return }
+      timer = setTimeout(() => void attempt(n + 1), RECONNECT_DELAYS_MS[n + 1])
+    }
+  }
+
+  void (async () => {
+    // What the host still holds of the old connection has to go first.
+    try { await getHost().request('closeSession', { kind }) } catch { /* it may already be gone */ }
+    if (cancelled) return
+    log.warn(`${kind} reconnecting`, { cause })
+    timer = setTimeout(() => void attempt(0), RECONNECT_DELAYS_MS[0])
+  })()
+}
+
 async function stopOutput(kind: OutputKind) {
+  // A stream being reconnected is stopped by giving up on it.
+  const waiting = reconnecting.get(kind)
+  if (waiting) { waiting.cancel(); reconnecting.delete(kind) }
   await closeOutput(kind)
   announce(kind, false, kind === 'recording' ? { filePath: null } : kind === 'virtualCamera' ? { url: null } : {})
 }
@@ -256,7 +335,7 @@ export function registerOutputCommands() {
   // ── Streaming ────────────────────────────────────────────────────────────
 
   command('start_streaming', async ({ rtmpUrl, streamKey, params }) => {
-    if (isActive('streaming')) throw new Error('Streaming is already active')
+    if (isActive('streaming') || reconnecting.has('streaming')) throw new Error('Streaming is already active')
     requireFfmpeg()
 
     const url = String(rtmpUrl ?? '').trim()
@@ -266,7 +345,14 @@ export function registerOutputCommands() {
     const target = key ? `${url.replace(/\/+$/, '')}/${key}` : url
 
     const p = normalizeParams(params)
-    await openOutput({ kind: 'streaming', ffmpegArgs: streamingArgs(target, p.audioBitrate), params: p })
+    const open = (): Promise<Session> => openOutput({
+      kind: 'streaming',
+      ffmpegArgs: streamingArgs(target, p.audioBitrate),
+      params: p,
+      // Once live, a lost connection is retried rather than ending the stream.
+      onLost: (session, code) => reconnect('streaming', open, session.stderr.at(-1)?.trim() || `ffmpeg exit ${code}`),
+    })
+    await open()
 
     announce('streaming', true)
   })
