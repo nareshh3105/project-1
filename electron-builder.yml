@@ -27,6 +27,11 @@ extraResources:
   # so building the app does not need a C++ compiler.
   - from: resources/vcam
     to: vcam
+  # The Google client for YouTube sign-in, when one has been set up (not in git).
+  - from: resources
+    to: .
+    filter:
+      - youtube-oauth.json
 
 # better-sqlite3 ships a compiled .node binding that cannot be bundled by the
 # renderer build, so it is unpacked from the asar and loaded from disk.

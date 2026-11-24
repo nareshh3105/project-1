@@ -7,6 +7,7 @@ import { useOutputStore } from '@/stores/outputStore'
 import { startStreaming } from '@/lib/outputs'
 import { cn } from '@/lib/utils'
 import { STREAM_SERVICES, serviceById, serviceOf, type ServiceId } from '@/lib/streamServices'
+import { ipc, type YoutubeStatus } from '@/ipc'
 
 export function StreamSettingsModal() {
   const { modal, closeModal } = useUIStore((s) => ({
@@ -27,6 +28,13 @@ export function StreamSettingsModal() {
   const [starting,     setStarting]     = useState(false)
   // A saved address that is one of the known services shows as that service.
   const [service,      setService]      = useState<ServiceId>(serviceOf(stream.rtmpUrl))
+  const [youtube,      setYoutube]      = useState<YoutubeStatus>({ state: 'unavailable' })
+  const [title,        setTitle]        = useState('')
+  const [privacy,      setPrivacy]      = useState<'public' | 'unlisted' | 'private'>('unlisted')
+  const [signingIn,    setSigningIn]    = useState(false)
+  const [watchUrl,     setWatchUrl]     = useState<string | null>(null)
+  // Signed in to YouTube: the broadcast is made for the person, no key needed.
+  const viaAccount = service === 'youtube' && youtube.state === 'signed-in'
 
   // Sync inputs when modal opens
   useEffect(() => {
@@ -35,6 +43,8 @@ export function StreamSettingsModal() {
       setStreamKey(stream.streamKey)
       setService(serviceOf(stream.rtmpUrl))
       setError(null)
+      setWatchUrl(null)
+      ipc.youtube.status().then((st) => setYoutube(st?.state ? st : { state: 'unavailable' })).catch(() => setYoutube({ state: 'unavailable' }))
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -46,7 +56,35 @@ export function StreamSettingsModal() {
     else if (serviceOf(rtmpUrl) !== 'custom') setRtmpUrl('')
   }
 
+  async function signIn() {
+    setError(null)
+    setSigningIn(true)
+    try { const st = await ipc.youtube.signIn(); if (st?.state) setYoutube(st) } catch (e) { setError(toErrorMessage(e)) } finally { setSigningIn(false) }
+  }
+
+  async function signOut() {
+    setError(null)
+    try { await ipc.youtube.signOut(); setYoutube({ state: 'signed-out' }) } catch (e) { setError(toErrorMessage(e)) }
+  }
+
+  async function goLiveOnYoutube() {
+    setError(null)
+    setStarting(true)
+    try {
+      const b = await ipc.youtube.createBroadcast(title, privacy)
+      // The address is remembered so YouTube stays chosen; the key is the broadcast's own, used once and not saved.
+      setStreamSettings(b.rtmpUrl, stream.streamKey)
+      await startStreaming(b.rtmpUrl, b.streamKey)
+      setWatchUrl(b.watchUrl)
+    } catch (e) {
+      setError(toErrorMessage(e))
+    } finally {
+      setStarting(false)
+    }
+  }
+
   async function handleGoLive() {
+    if (viaAccount) { await goLiveOnYoutube(); return }
     const url = rtmpUrl.trim()
     if (!url) { setError('RTMP URL is required'); return }
     setError(null)
@@ -119,6 +157,60 @@ export function StreamSettingsModal() {
               </div>
             )}
 
+            {service === 'youtube' && youtube.state === 'signed-out' && (
+              <div className="flex flex-col gap-1.5 rounded-input border border-bg-divider p-3">
+                <button
+                  type="button"
+                  onClick={signIn}
+                  disabled={signingIn}
+                  className="h-8 rounded-button text-caption font-semibold text-white bg-accent-gradient hover:opacity-90 disabled:opacity-50"
+                >
+                  {signingIn ? 'Finish signing in in your browser…' : 'Sign in with Google'}
+                </button>
+                <p className="text-[11px] text-text-muted">Or paste a stream key below.</p>
+              </div>
+            )}
+
+            {viaAccount && youtube.state === 'signed-in' && (
+              <div className="flex flex-col gap-3 rounded-input border border-bg-divider p-3">
+                <div className="flex items-center justify-between text-caption">
+                  <span className="text-text-secondary">Signed in as <b className="text-text-primary">{youtube.channel}</b></span>
+                  <button type="button" onClick={signOut} className="text-text-muted hover:text-text-primary underline">Sign out</button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="yt-title" className="text-caption text-text-secondary font-medium">Title</label>
+                  <input
+                    id="yt-title"
+                    type="text"
+                    maxLength={100}
+                    placeholder="Live with CodeBuilders"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="h-8 px-3 rounded-input bg-bg-surface border border-bg-divider text-body text-text-primary focus:outline-none focus:border-accent-start"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="yt-privacy" className="text-caption text-text-secondary font-medium">Who can watch</label>
+                  <select
+                    id="yt-privacy"
+                    value={privacy}
+                    onChange={(e) => setPrivacy(e.target.value as typeof privacy)}
+                    className="h-8 px-2 rounded-input bg-bg-surface border border-bg-divider text-body text-text-primary cursor-pointer"
+                  >
+                    <option value="private">Private (only you)</option>
+                    <option value="unlisted">Unlisted (anyone with the link)</option>
+                    <option value="public">Public</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-text-muted">Go Live creates the broadcast on your channel and starts it as soon as the video arrives. Stopping the stream ends it.</p>
+              </div>
+            )}
+
+            {watchUrl && (
+              <p className="text-caption text-state-success break-all">You are live: {watchUrl}</p>
+            )}
+
+            {!viaAccount && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="stream-key" className="text-caption text-text-secondary font-medium">
                 Stream Key
@@ -148,6 +240,8 @@ export function StreamSettingsModal() {
                 </button>
               </div>
             </div>
+
+            )}
 
             {/* A real Dialog.Description: Radix wires aria-describedby from it,
                 so the dialog announces its purpose instead of warning. */}

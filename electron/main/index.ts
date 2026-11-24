@@ -50,7 +50,7 @@ function createWindow() {
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // required for the preload to import 'electron'
+      sandbox: false, // required for the preload to load the electron module (worded so the bundler's import scan does not take it for an import)
       webSecurity: true,
     },
   })

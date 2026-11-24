@@ -37,6 +37,11 @@ function bridge(): Bridge {
   return api
 }
 
+export type YoutubeStatus =
+  | { state: 'unavailable' }
+  | { state: 'signed-out' }
+  | { state: 'signed-in'; channel: string }
+
 // ── Typed invoke wrapper ──────────────────────────────────────────────────
 
 async function cmd<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -225,6 +230,15 @@ export const ipc = {
     setAlwaysOnTop: (alwaysOnTop: boolean) =>
       cmd<void>('window_set_always_on_top', { alwaysOnTop }),
     close:          () => cmd<void>('window_close'),
+  },
+
+  youtube: {
+    status:          () => cmd<YoutubeStatus>('youtube_status'),
+    signIn:          () => cmd<YoutubeStatus>('youtube_sign_in'),
+    signOut:         () => cmd<void>('youtube_sign_out'),
+    /** A new broadcast on the signed-in channel, and where to send the video for it. */
+    createBroadcast: (title: string, privacy: 'public' | 'unlisted' | 'private') =>
+      cmd<{ broadcastId: string; rtmpUrl: string; streamKey: string; watchUrl: string }>('youtube_create_broadcast', { title, privacy }),
   },
 
   file: {

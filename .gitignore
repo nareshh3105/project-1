@@ -61,3 +61,6 @@ coverage/
 resources/ffmpeg/*
 !resources/ffmpeg/README.md
 native/vcam/build/
+
+# Google OAuth client for YouTube sign-in: keep it out of the public repository.
+resources/youtube-oauth.json

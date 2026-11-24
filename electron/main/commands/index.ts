@@ -15,6 +15,7 @@ import { registerSourceCommands } from './sources'
 import { registerStatsCommands } from './stats'
 import { registerUpdaterCommands } from './updater'
 import { registerWindowCommands } from './window'
+import { registerYoutubeCommands } from './youtube'
 import { registeredCommands } from '../ipc'
 
 export function registerCommands() {
@@ -35,6 +36,7 @@ export function registerCommands() {
   registerStatsCommands()
   registerUpdaterCommands()
   registerWindowCommands()
+  registerYoutubeCommands()
 
   console.info(`[ipc] ${registeredCommands().length} commands registered`)
 }

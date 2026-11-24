@@ -80,7 +80,14 @@ export const webContents = {
   fromId: vi.fn(() => undefined),
 }
 
+/** Stands in for Windows' encryption of saved secrets: reversible, and plainly not the original. */
+export const safeStorage = {
+  isEncryptionAvailable: vi.fn(() => true),
+  encryptString: vi.fn((t: string) => Buffer.from(`enc:${Buffer.from(t).toString('base64')}`)),
+  decryptString: vi.fn((b: Buffer) => Buffer.from(b.toString().replace(/^enc:/, ''), 'base64').toString()),
+}
+
 export default {
   app, shell, dialog, globalShortcut, ipcMain, BrowserWindow, Menu, screen,
-  desktopCapturer, protocol, net, webContents,
+  desktopCapturer, protocol, net, webContents, safeStorage,
 }
