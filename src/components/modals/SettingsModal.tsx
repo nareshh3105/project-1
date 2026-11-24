@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useId } from 'react'
+import { QUALITY_HEIGHTS, QUALITY_FPS, sizeFor, type OutputQuality } from '@/lib/outputQuality'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -136,6 +137,60 @@ export function FolderChoice({ value, onChange }: { value: string; onChange: (fo
       </div>
       {problem && <span role="alert" className="text-caption text-red-400">{problem}</span>}
     </div>
+  )
+}
+
+const BITRATES = [2500, 4000, 6000, 8000, 12000, 20000, 35000]
+
+/** Size, frame rate and (for a stream) bitrate for one output, each defaulting to the Video tab. */
+function QualityRows({
+  quality, video, withBitrate = false, onChange,
+}: {
+  quality: OutputQuality
+  video: VideoSettings
+  withBitrate?: boolean
+  onChange: (q: OutputQuality) => void
+}) {
+  const base = video.outputResolution
+  return (
+    <>
+      <Row label="Resolution">
+        <Sel
+          value={String(quality.height)}
+          onChange={(v) => onChange({ ...quality, height: Number(v) })}
+          options={[
+            { value: '0', label: `Same as Video tab (${base.width}x${base.height})` },
+            ...QUALITY_HEIGHTS.filter((h) => h !== base.height).map((h) => {
+              const s = sizeFor(h, base)
+              return { value: String(h), label: `${s.width}x${s.height} (${h}p)` }
+            }),
+          ]}
+        />
+      </Row>
+      <Row label="Frame Rate">
+        <Sel
+          value={String(quality.fps)}
+          onChange={(v) => onChange({ ...quality, fps: Number(v) })}
+          options={[
+            { value: '0', label: `Same as Video tab (${video.fps} fps)` },
+            ...QUALITY_FPS.filter((f) => f !== video.fps).map((f) => ({ value: String(f), label: `${f} fps` })),
+          ]}
+        />
+      </Row>
+      {withBitrate && (
+        <Row label="Video Bitrate">
+          <Sel
+            value={String(quality.videoBitrateKbps)}
+            onChange={(v) => onChange({ ...quality, videoBitrateKbps: Number(v) })}
+            options={[
+              { value: '-1', label: 'Same as above' },
+              { value: '0', label: 'Automatic (suits the resolution)' },
+              ...BITRATES.map((k) => ({ value: String(k), label: `${(k / 1000).toFixed(1)} Mbps` })),
+            ]}
+          />
+        </Row>
+      )}
+    </>
   )
 }
 
@@ -408,18 +463,35 @@ function OutputTab({
           ]}
         />
       </Row>
-      <Row label="Video Bitrate">
+      <Row label="Video Bitrate" hint="For recordings, and for streams set to use it">
         <Sel
           value={String(draft.videoBitrateKbps)}
           onChange={(v) => set({ videoBitrateKbps: Number(v) })}
           options={[
             { value: '0', label: 'Automatic (suits the resolution)' },
-            ...[2500, 4000, 6000, 8000, 12000, 20000, 35000].map((k) => ({
-              value: String(k), label: `${(k / 1000).toFixed(1)} Mbps`,
-            })),
+            ...BITRATES.map((k) => ({ value: String(k), label: `${(k / 1000).toFixed(1)} Mbps` })),
           ]}
         />
       </Row>
+
+      <SectionHeader title="Recording quality" />
+      <QualityRows
+        quality={draft.recordQuality}
+        video={video}
+        onChange={(q) => set({ recordQuality: q })}
+      />
+
+      <SectionHeader title="Streaming quality" />
+      <QualityRows
+        quality={draft.streamQuality}
+        video={video}
+        withBitrate
+        onChange={(q) => set({ streamQuality: q })}
+      />
+      <p className="text-caption text-text-muted mb-3">
+        A stream has to fit your upload speed: about 4 Mbps for 720p, 6 Mbps for 1080p. The recording
+        can be made bigger at the same time, for editing later.
+      </p>
       <Row label="Audio Bitrate">
         <Sel
           value={String(draft.audioBitrateKbps)}

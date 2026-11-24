@@ -1,4 +1,5 @@
 import type { HostSnapshot, SessionParams, OutputKind, SnapshotFilter, SnapshotSource } from '../../shared/host'
+import { sizeFor } from '@/lib/outputQuality'
 import type { SourceFilter } from '@/stores/filterStore'
 import type { SourceItem } from '@/stores/sourceStore'
 import type { AudioChannel } from '@/stores/audioStore'
@@ -108,16 +109,23 @@ export function outputParams(
   kind: OutputKind,
 ): SessionParams {
   const { video, recording } = settings
-  const { width, height } = video.outputResolution
-  const fps = video.fps
+
+  // A recording and a stream may each have their own size and rate; anything else follows the Video tab.
+  const quality = kind === 'recording' ? recording.recordQuality
+    : kind === 'streaming' ? recording.streamQuality
+      : undefined
+  const { width, height } = sizeFor(quality?.height ?? 0, video.outputResolution)
+  const fps = quality?.fps || video.fps
+
+  // The stream's own bitrate if it has one; otherwise the recording's; 0 means one to suit the size.
+  const streamKbps = kind === 'streaming' ? recording.streamQuality?.videoBitrateKbps ?? -1 : -1
+  const kbps = streamKbps >= 0 ? streamKbps : recording.videoBitrateKbps
 
   return {
     width,
     height,
     fps,
-    videoBitrate: recording.videoBitrateKbps > 0
-      ? recording.videoBitrateKbps * 1000
-      : suggestedVideoBitrate(width, height, fps),
+    videoBitrate: kbps > 0 ? kbps * 1000 : suggestedVideoBitrate(width, height, fps),
     audioBitrate: recording.audioBitrateKbps * 1000,
     encoder: recording.encoder,
     keyframeSeconds: 2,

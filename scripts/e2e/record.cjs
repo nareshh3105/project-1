@@ -471,6 +471,19 @@ async function main() {
       } else {
         file = await invoke('start_recording', { outputPath: outFile, format: 'mkv', params })
       }
+      // --stream-too=1280x720@30: stream at the same time, at a size of its own, to a local server.
+      const also = flag('stream-too', '')
+      if (also) {
+        const [size, rate] = also.split('@')
+        const [sw, sh] = size.split('x').map(Number)
+        const sp = { ...params, width: sw, height: sh, fps: Number(rate || fps), constantBitrate: true }
+        sp.videoBitrate = Math.round((sw * sh * sp.fps * 0.097) / 100000) * 100000
+        globalThis.streamFile = path.join(scratch, 'stream.flv')
+        receiver = spawn(ffmpegExe, ['-hide_banner', '-y', '-listen', '1', '-i', 'rtmp://127.0.0.1:1935/live/e2e', '-c', 'copy', globalThis.streamFile], { stdio: 'ignore' })
+        await sleep(1500)
+        await invoke('start_streaming', { rtmpUrl: 'rtmp://127.0.0.1:1935/live', streamKey: 'e2e', params: sp })
+        log('also streaming at', also)
+      }
     } else if (kind === 'streaming') {
       // A local RTMP server to stream to: FFmpeg listening, writing what arrives to a file.
       file = path.join(scratch, 'received.flv')
@@ -578,7 +591,7 @@ async function main() {
       log('warning shown to the user:', warned || warnedAt > 0)
       log('status bar:', String(bar).slice(0, 200))
     }
-    if (kind === 'recording') await invoke('stop_recording')
+    if (kind === 'recording') { await invoke('stop_recording'); if (flag('stream-too', '')) await invoke('stop_streaming') }
     else if (kind === 'streaming') await invoke('stop_streaming')
     else if (kind === 'vcam') await invoke('stop_virtual_camera')
     else if (kind === 'replay') {
@@ -614,6 +627,14 @@ main()
     if (mediaFile) console.log(JSON.stringify(mediaCheck(r.file)))
     if (flag('kind', 'recording') === 'vcam') console.log(JSON.stringify(vcamCheck(r.file)))
     if (webPage) console.log(JSON.stringify(pageCheck(r.file, width)))
+    if (globalThis.streamFile) {
+      const probe = spawnSync(path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe'), ['-hide_banner', '-i', globalThis.streamFile], { encoding: 'utf8' }).stderr
+      const rec = spawnSync(path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe'), ['-hide_banner', '-i', r.file], { encoding: 'utf8' }).stderr
+      const v = (t) => (/Video: .*/.exec(t) || [''])[0].replace(/\s+/g, ' ').slice(0, 140)
+      console.log('RECORDING:', v(rec))
+      console.log('STREAM:   ', v(probe))
+      console.log('STREAM ANALYSIS:', spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), globalThis.streamFile, flag('stream-too', '').split('@')[1] || String(fps)], { encoding: 'utf8' }).stdout.replace(/\s+/g, ' ').slice(0, 260))
+    }
     if (trackCount > 1) console.log(JSON.stringify(tracksCheck(r.file), null, 1))
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))

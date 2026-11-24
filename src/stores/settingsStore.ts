@@ -4,6 +4,7 @@ import { readPersisted, writePersisted, isRecord } from '@/lib/persist'
 import type { GeneralSettings, VideoSettings } from '@/types/settings'
 import type { AudioSettings } from '@/types/audio'
 import { STANDARD_RESOLUTIONS, FRAME_RATES } from '@/types/common'
+import { SAME_AS_VIDEO, parseQuality, type OutputQuality } from '@/lib/outputQuality'
 
 const STORAGE_KEY = 'cb:settings'
 
@@ -16,6 +17,10 @@ export interface RecordingConfig {
   /** Audio tracks in a recording: 1 is the mix; 2 adds the microphone alone; 3 adds everything but the microphone. */
   audioTracks:  1 | 2 | 3
   encoder:      'auto' | 'hardware' | 'software'
+  /** The recording's own size and frame rate (its bitrate is videoBitrateKbps above). */
+  recordQuality: OutputQuality
+  /** The stream's own size, frame rate and bitrate. */
+  streamQuality: OutputQuality
 }
 
 export const DEFAULT_GENERAL: GeneralSettings = {
@@ -48,6 +53,8 @@ export const DEFAULT_RECORDING: RecordingConfig = {
   audioBitrateKbps: 160,
   audioTracks:  1,
   encoder:      'auto',
+  recordQuality: SAME_AS_VIDEO,
+  streamQuality: SAME_AS_VIDEO,
 }
 
 export const DEFAULT_AUDIO: AudioSettings = {
@@ -110,7 +117,13 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     general:   { ...DEFAULT_GENERAL,   ...(persisted.general   ?? {}) },
     video:     { ...DEFAULT_VIDEO,     ...(persisted.video     ?? {}) },
     audio:     { ...DEFAULT_AUDIO,     ...(persisted.audio     ?? {}) },
-    recording: { ...DEFAULT_RECORDING, ...(persisted.recording ?? {}) },
+    recording: {
+      ...DEFAULT_RECORDING,
+      ...(persisted.recording ?? {}),
+      // Checked one by one: a stored choice from another version must not break an output.
+      recordQuality: parseQuality(persisted.recording?.recordQuality),
+      streamQuality: parseQuality(persisted.recording?.streamQuality),
+    },
 
     updateGeneral: (patch) => set((s) => {
       Object.assign(s.general, patch)
