@@ -1,4 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { useUIStore } from '@/stores/uiStore'
+import { isActive } from '../../../shared/audioFilters'
 import { useAudioStore, rememberInput, rememberedInputs, type AudioChannel } from '@/stores/audioStore'
 import {
   AudioEngine, requestMicrophone, requestDesktopAudio, type ChannelId,
@@ -231,10 +233,12 @@ interface ChannelStripProps {
   onVolume: (id: string, v: number) => void
   onMute: (id: string, muted: boolean) => void
   onNS: (id: string, enabled: boolean) => void
+  onFilters: (id: string) => void
 }
 
-function ChannelStrip({ channel, connected, onVolume, onMute, onNS }: ChannelStripProps) {
+function ChannelStrip({ channel, connected, onVolume, onMute, onNS, onFilters }: ChannelStripProps) {
   const { id, name, volume, muted, noiseSuppression, levels } = channel
+  const filtered = isActive(channel.filters)
   const { peakL, peakR, rmsL, rmsR } = levels
 
   const holdL = usePeakHold(peakL)
@@ -310,6 +314,13 @@ function ChannelStrip({ channel, connected, onVolume, onMute, onNS }: ChannelStr
               ? `Noise suppression on for ${name}`
               : `Noise suppression off for ${name}`
           }
+          activeColor={COLOR.accent.start}
+        />
+        <Toggle
+          on={filtered}
+          onClick={() => onFilters(id)}
+          label="FX"
+          title={filtered ? `Audio filters on for ${name}: change them` : `Add audio filters to ${name}`}
           activeColor={COLOR.accent.start}
         />
       </div>
@@ -506,6 +517,7 @@ export function AudioMixerPanel() {
             onVolume={handleVolume}
             onMute={handleMute}
             onNS={handleNS}
+            onFilters={(channelId) => useUIStore.getState().openModal('audio-filters', { channelId })}
           />
         ))}
       </div>

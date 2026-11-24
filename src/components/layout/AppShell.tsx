@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { AudioFiltersModal } from '@/components/modals/AudioFiltersModal'
 import { MenuBar }       from './MenuBar'
 import { Toolbar }       from './Toolbar'
 import { NoticeHost }    from './NoticeHost'
@@ -163,6 +164,7 @@ export function AppShell() {
       {/* Modal layer */}
       <SettingsModal />
       <StreamSettingsModal />
+      <AudioFiltersModal />
       <FiltersModal />
       <SceneCollectionModal />
       <ProfileModal />

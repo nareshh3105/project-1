@@ -8,6 +8,7 @@ export type ModalType =
   | 'settings'
   | 'stream-settings'
   | 'filters'
+  | 'audio-filters'
   | 'source-properties'
   | 'scene-collection'
   | 'profile-manager'

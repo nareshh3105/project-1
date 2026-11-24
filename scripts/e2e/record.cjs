@@ -415,6 +415,26 @@ async function main() {
       if (!clicked) throw new Error('No Desktop button in the mixer')
       await waitFor(() => ui.eval(`!!document.querySelector('[title="Receiving audio"]')`), 'system audio to connect', 15000)
       log('system audio connected')
+      // --desktop-gain=-12: set a gain filter on Desktop through the FX window, as a person would.
+      const desktopGain = flag('desktop-gain', '')
+      if (desktopGain) {
+        const done = await ui.eval(`(async () => {
+          const fx = [...document.querySelectorAll('button')].find((b) => (b.title || '').includes('audio filters') && (b.title || '').includes('Desktop'))
+          if (!fx) return 'no FX button'
+          fx.click()
+          await new Promise((r) => setTimeout(r, 400))
+          const slider = document.querySelector('input[aria-label="Gain"]')
+          if (!slider) return 'no Gain slider'
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(slider, '${desktopGain}')
+          slider.dispatchEvent(new Event('input', { bubbles: true }))
+          slider.dispatchEvent(new Event('change', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          const shown = slider.closest('label').textContent
+          ;[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Done')?.click()
+          return shown
+        })()`)
+        log('desktop gain filter:', done)
+      }
       if (args.includes('--mic')) {
         const mic = await ui.eval(`(() => {
           const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Mic')
@@ -639,6 +659,10 @@ main()
     if (transitionType) console.log(JSON.stringify(transitionCheck(r.file, width, height, transitionAt)))
     if (filtersTest) console.log(JSON.stringify(filtersCheck(r.file, width)))
     if (arrange || args.includes('--check')) console.log(JSON.stringify(arrangeCheck(r.file)))
+    if (args.includes('--loudness')) {
+      const v = spawnSync(path.join(root, 'resources', 'ffmpeg', 'ffmpeg.exe'), ['-hide_banner', '-i', r.file, '-map', '0:a:0', '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' }).stderr
+      console.log('LOUDNESS:', (/max_volume: (-?[0-9.]+) dB/.exec(v) || [])[1], 'dB max,', (/mean_volume: (-?[0-9.]+) dB/.exec(v) || [])[1], 'dB mean')
+    }
     const analyze = spawnSync('node', [path.join(root, 'spike', 'pipeline', 'analyze.cjs'), r.file, String(fps)], { encoding: 'utf8' })
     console.log(analyze.stdout || analyze.stderr)
     // The recording is of the real screen and may show private things; it is

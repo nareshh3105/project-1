@@ -1,4 +1,5 @@
 import { DirectMixer, type InputHandle } from './directMixer'
+import type { AudioFilters } from '../../shared/audioFilters'
 import { Mixer } from './mixer'
 import type { AudioBlock, AudioRig } from './hostApp'
 import type { RawChunk } from './audioInput'
@@ -82,6 +83,7 @@ function readInto(handle: InputHandle, stream: MediaStream) {
 
   return {
     setGain: (gain: number) => handle.setGain(gain),
+    setFilters: (filters: AudioFilters) => handle.setFilters(filters),
     detach: () => {
       stopped = true
       void reader?.cancel().catch(() => {})

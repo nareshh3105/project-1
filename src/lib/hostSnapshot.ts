@@ -75,6 +75,7 @@ export function buildSnapshot({ sources, base, channels, connected, devices = {}
       noiseSuppression: c.noiseSuppression,
       connected: connected.includes(c.id),
       deviceId: devices[c.id] ?? '',
+      filters: c.filters,
     })),
   }
 }

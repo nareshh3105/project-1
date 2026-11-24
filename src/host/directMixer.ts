@@ -1,3 +1,4 @@
+import { FilterChain, type AudioFilters } from '../../shared/audioFilters'
 import { InputBuffer, OUTPUT_RATE, type RawChunk } from './audioInput'
 
 /**
@@ -83,11 +84,13 @@ interface Input {
   buffer: InputBuffer
   gain: number
   group: InputGroup
+  filters: FilterChain
 }
 
 export interface InputHandle {
   push(chunk: RawChunk, arrivalMs: number): void
   setGain(gain: number): void
+  setFilters(filters: AudioFilters): void
   remove(): void
 }
 
@@ -108,7 +111,7 @@ export class DirectMixer {
   ) {}
 
   addInput(id: string, inputRate: number = OUTPUT_RATE, group: InputGroup = 'other'): InputHandle {
-    const input: Input = { buffer: new InputBuffer(inputRate), gain: 1, group }
+    const input: Input = { buffer: new InputBuffer(inputRate), gain: 1, group, filters: new FilterChain(OUTPUT_RATE) }
     this.inputs.set(id, input)
 
     return {
@@ -119,6 +122,7 @@ export class DirectMixer {
         input.buffer.push(chunk)
       },
       setGain: (gain) => { input.gain = Number.isFinite(gain) ? Math.min(4, Math.max(0, gain)) : 0 },
+      setFilters: (filters) => input.filters.set(filters),
       remove: () => {
         if (this.inputs.get(id) !== input) return
         this.inputs.delete(id)
@@ -222,6 +226,8 @@ export class DirectMixer {
     for (const input of this.inputs.values()) {
       if (input.gain === 0) continue
       const part = input.buffer.read(start, BLOCK_FRAMES)
+      // Before the fader, as on a mixing desk: the gate hears the microphone, not the fader.
+      input.filters.process(part.left, part.right)
       const into = sums[input.group]
       for (let i = 0; i < BLOCK_FRAMES; i++) {
         into.left[i] += part.left[i] * input.gain

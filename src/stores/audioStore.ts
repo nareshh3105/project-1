@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { parseFilters, type AudioFilters } from '../../shared/audioFilters'
 import { immer } from 'zustand/middleware/immer'
 import { readPersisted, writePersisted, isRecord } from '@/lib/persist'
 
@@ -15,6 +16,8 @@ export interface AudioChannel {
   volume:           number   // 0.0 – 1.0
   muted:            boolean
   noiseSuppression: boolean
+  /** Gain, noise gate and compressor on what this input sends to recordings and streams. */
+  filters:          AudioFilters
   levels:           ChannelLevels
 }
 
@@ -35,7 +38,7 @@ function silentLevels(): ChannelLevels {
 
 const MIXER_KEY = 'cb:mixer'
 
-interface RememberedChannel { volume?: unknown; muted?: unknown; noiseSuppression?: unknown }
+interface RememberedChannel { volume?: unknown; muted?: unknown; noiseSuppression?: unknown; filters?: unknown }
 interface Remembered { channels: Record<string, RememberedChannel>; inputs: string[] }
 
 const isRemembered = (v: unknown): v is Remembered =>
@@ -51,6 +54,7 @@ function makeChannel(id: string, name: string, saved: RememberedChannel = {}): A
     id, name, volume,
     muted: saved.muted === true,
     noiseSuppression: saved.noiseSuppression === true,
+    filters: parseFilters(saved.filters),
     levels: silentLevels(),
   }
 }
@@ -72,7 +76,7 @@ function saveChannels(channels: AudioChannel[]): void {
   writePersisted(MIXER_KEY, {
     ...saved,
     channels: Object.fromEntries(
-      channels.map((c) => [c.id, { volume: c.volume, muted: c.muted, noiseSuppression: c.noiseSuppression }]),
+      channels.map((c) => [c.id, { volume: c.volume, muted: c.muted, noiseSuppression: c.noiseSuppression, filters: c.filters }]),
     ),
   })
 }
@@ -91,6 +95,7 @@ interface AudioActions {
   setVolume:           (id: string, volume: number) => void
   setMuted:            (id: string, muted: boolean) => void
   setNoiseSuppression: (id: string, enabled: boolean) => void
+  setFilters:          (id: string, filters: AudioFilters) => void
   updateLevels:        (id: string, levels: ChannelLevels) => void
   setAllLevels:        (levels: Record<string, ChannelLevels>) => void
   setConnected:        (id: string, connected: boolean) => void
@@ -123,6 +128,13 @@ export const useAudioStore = create<AudioState & AudioActions>()(
       set((s) => {
         const ch = s.channels.find((c) => c.id === id)
         if (ch) ch.noiseSuppression = enabled
+        saveChannels(s.channels)
+      }),
+
+    setFilters: (id, filters) =>
+      set((s) => {
+        const ch = s.channels.find((c) => c.id === id)
+        if (ch) ch.filters = parseFilters(filters)
         saveChannels(s.channels)
       }),
 

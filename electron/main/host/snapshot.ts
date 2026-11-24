@@ -1,3 +1,4 @@
+import { parseFilters } from '../../../shared/audioFilters'
 import {
   EMPTY_SNAPSHOT,
   type HostSnapshot, type SnapshotChannel, type SnapshotFilter, type SnapshotSource, type SnapshotTransform,
@@ -164,6 +165,7 @@ function channelOf(raw: unknown): SnapshotChannel | null {
     noiseSuppression: raw.noiseSuppression === true,
     connected: raw.connected === true,
     deviceId: typeof raw.deviceId === 'string' ? raw.deviceId.slice(0, 512) : '',
+    filters: parseFilters(raw.filters),
   }
 }
 

@@ -1,3 +1,4 @@
+import { parseFilters, type AudioFilters } from '../../shared/audioFilters'
 import type { SnapshotChannel } from '../../shared/host'
 
 /**
@@ -15,6 +16,8 @@ import type { SnapshotChannel } from '../../shared/host'
 /** What an attached input offers the mix. */
 export interface InputControl {
   setGain(gain: number): void
+  /** Gain, gate and compressor run on this input before it is mixed. */
+  setFilters?(filters: AudioFilters): void
   /** Stops feeding the mix. */
   detach(): void
 }
@@ -144,6 +147,7 @@ export class Mixer {
 
     const volume = Number.isFinite(want.volume) ? Math.min(1, Math.max(0, want.volume)) : 0
     input.control.setGain(want.muted ? 0 : volume)
+    input.control.setFilters?.(parseFilters(want.filters))
   }
 
   private release(id: string): void {

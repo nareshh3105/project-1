@@ -1,3 +1,4 @@
+import type { AudioFilters } from './audioFilters'
 /**
  * The conversation between the main process, the interface window and the
  * output host window.
@@ -158,6 +159,8 @@ export interface SnapshotChannel {
   connected: boolean
   /** The device chosen for this channel; empty for the system default. */
   deviceId: string
+  /** Gain, noise gate and compressor, applied to what is recorded and streamed. */
+  filters?: AudioFilters
 }
 
 /** A scene change in progress: the new scene is `sources`, the one it replaces is `from`. */
