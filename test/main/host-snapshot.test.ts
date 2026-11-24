@@ -1,3 +1,4 @@
+import { DEFAULT_FILTERS } from '../../shared/audioFilters'
 import { describe, it, expect } from 'vitest'
 import { sanitizeSnapshot } from '../../electron/main/host/snapshot'
 import { EMPTY_SNAPSHOT } from '../../shared/host'
@@ -15,7 +16,7 @@ const goodSource = {
   filters: [],
 }
 
-const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true, deviceId: '' }
+const goodChannel = { id: 'mic', volume: 0.5, muted: true, noiseSuppression: true, connected: true, deviceId: '', filters: { ...DEFAULT_FILTERS, gainDb: 3 } }
 
 describe('the whole snapshot', () => {
   it.each([null, undefined, 42, 'x', [], true])('falls back to empty for %s', (bad) => {
